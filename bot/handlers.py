@@ -324,8 +324,12 @@ async def staff_debtors(m: Message, db):
 
 @router.message(F.text == "📋 Qarzdorlarni ko'rish", TEACHER)
 async def teacher_debtors(m: Message, db):
-    mk = await group_picker(db, "dg", m.from_user.id)
-    await m.answer("Guruhni tanlang:", reply_markup=mk) if mk else await m.answer("Sizda guruh yo'q.")
+    groups = await D.fetchall(db, "SELECT id FROM groups WHERE teacher_id=? ORDER BY name",
+                              (m.from_user.id,))
+    if not groups:
+        return await m.answer("Sizda guruh yo'q.")
+    for g in groups:
+        await m.answer(await debtors_text(db, g["id"]))
 
 
 @router.callback_query(F.data.startswith("dg:"))
