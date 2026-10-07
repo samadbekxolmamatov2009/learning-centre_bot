@@ -1,7 +1,11 @@
-import aiosqlite
+import asyncio
+import base64
 from datetime import date
 
-from .config import DB_PATH, DIRECTOR_IDS
+import aiohttp
+import aiosqlite
+
+from .config import DB_PATH, DIRECTOR_IDS, TURSO_URL, TURSO_TOKEN
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users(
@@ -23,37 +27,173 @@ CREATE TABLE IF NOT EXISTS payments(
     student_id INTEGER NOT NULL REFERENCES students(id),
     group_id INTEGER NOT NULL, amount INTEGER NOT NULL,
     month TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS idx_payments_student_month ON payments(student_id, month);
+CREATE INDEX IF NOT EXISTS idx_payments_group_month ON payments(group_id, month);
 CREATE TABLE IF NOT EXISTS attendance(
     id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER NOT NULL,
     day TEXT NOT NULL, student_id INTEGER NOT NULL, present INTEGER NOT NULL,
     UNIQUE(group_id, day, student_id));
+CREATE TABLE IF NOT EXISTS notices(key TEXT PRIMARY KEY);
 """
+
+
+class Database:
+    """Ikki backend uchun umumiy interfeys: lokal SQLite yoki Turso (libSQL, HTTP)."""
+
+    async def execute(self, sql, args=()):
+        await self.batch([(sql, args)])
+
+    async def fetchall(self, sql, args=()) -> list:
+        raise NotImplementedError
+
+    async def fetchone(self, sql, args=()):
+        rows = await self.fetchall(sql, args)
+        return rows[0] if rows else None
+
+    async def batch(self, stmts):
+        """Bir nechta so'rovni bitta tranzaksiyada bajaradi (xato bo'lsa hammasi bekor)."""
+        raise NotImplementedError
+
+    async def commit(self):  # eski chaqiruvlar bilan moslik; har so'rov o'zi saqlanadi
+        pass
+
+    async def init_schema(self):
+        stmts = [x.strip() for x in SCHEMA.split(";") if x.strip()]
+        await self.batch([(x, ()) for x in stmts])
+
+    async def close(self):
+        pass
+
+
+class SqliteDB(Database):
+    def __init__(self, conn):
+        self.conn = conn
+        self.lock = asyncio.Lock()
+
+    @classmethod
+    async def open(cls, path):
+        conn = await aiosqlite.connect(path)
+        conn.row_factory = aiosqlite.Row
+        return cls(conn)
+
+    async def fetchall(self, sql, args=()):
+        async with self.conn.execute(sql, tuple(args)) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+    async def batch(self, stmts):
+        async with self.lock:
+            try:
+                for sql, args in stmts:
+                    await self.conn.execute(sql, tuple(args))
+                await self.conn.commit()
+            except Exception:
+                await self.conn.rollback()
+                raise
+
+    async def close(self):
+        await self.conn.close()
+
+
+def _enc(v):
+    if v is None:
+        return {"type": "null"}
+    if isinstance(v, bool):
+        return {"type": "integer", "value": str(int(v))}
+    if isinstance(v, int):
+        return {"type": "integer", "value": str(v)}
+    if isinstance(v, float):
+        return {"type": "float", "value": v}
+    if isinstance(v, bytes):
+        return {"type": "blob", "base64": base64.b64encode(v).decode()}
+    return {"type": "text", "value": str(v)}
+
+
+def _dec(c):
+    t = c["type"]
+    if t == "null":
+        return None
+    if t == "integer":
+        return int(c["value"])
+    if t == "float":
+        return float(c["value"])
+    if t == "blob":
+        return base64.b64decode(c["base64"])
+    return c["value"]
+
+
+class TursoDB(Database):
+    """Turso HTTP API (/v2/pipeline) - qo'shimcha kutubxona kerak emas."""
+
+    def __init__(self, url, token):
+        url = url.strip().rstrip("/")
+        if url.startswith("libsql://"):
+            url = "https://" + url[len("libsql://"):]
+        self.endpoint = url + "/v2/pipeline"
+        self.headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
+
+    async def _pipeline(self, requests):
+        body = {"requests": requests + [{"type": "close"}]}
+        last = None
+        for attempt in range(3):
+            try:
+                async with self.session.post(self.endpoint, json=body, headers=self.headers) as r:
+                    if r.status >= 500:
+                        raise aiohttp.ClientError(f"Turso HTTP {r.status}")
+                    data = await r.json(content_type=None)
+                    if r.status != 200:
+                        raise RuntimeError(f"Turso HTTP {r.status}: {data}")
+                break
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                last = e
+                await asyncio.sleep(1 + attempt)
+        else:
+            raise RuntimeError(f"Turso bilan aloqa yo'q: {last}")
+        results = data["results"]
+        for res in results:
+            if res["type"] == "error":
+                raise RuntimeError(f"Turso xatosi: {res['error'].get('message')}")
+        return results
+
+    @staticmethod
+    def _stmt(sql, args):
+        return {"type": "execute", "stmt": {"sql": sql, "args": [_enc(a) for a in args]}}
+
+    async def fetchall(self, sql, args=()):
+        res = await self._pipeline([self._stmt(sql, args)])
+        result = res[0]["response"]["result"]
+        cols = [c["name"] for c in result["cols"]]
+        return [dict(zip(cols, (_dec(c) for c in row))) for row in result["rows"]]
+
+    async def batch(self, stmts):
+        reqs = [self._stmt("BEGIN", ())] + [self._stmt(s, a) for s, a in stmts] + \
+               [self._stmt("COMMIT", ())]
+        await self._pipeline(reqs)  # xatoda stream yopiladi -> tranzaksiya bekor
+
+    async def close(self):
+        await self.session.close()
 
 
 def current_month() -> str:
     return date.today().strftime("%Y-%m")
 
 
-async def connect():
-    db = await aiosqlite.connect(DB_PATH)
-    db.row_factory = aiosqlite.Row
-    await db.executescript(SCHEMA)
+async def connect() -> Database:
+    db = TursoDB(TURSO_URL, TURSO_TOKEN) if TURSO_URL else await SqliteDB.open(DB_PATH)
+    await db.init_schema()
     for d in DIRECTOR_IDS:
         await db.execute(
             "INSERT INTO users(tg_id, full_name, role) VALUES(?,?,'director') "
             "ON CONFLICT(tg_id) DO UPDATE SET role='director'", (d, "Direktor"))
-    await db.commit()
     return db
 
 
 async def fetchall(db, sql, args=()):
-    async with db.execute(sql, args) as cur:
-        return await cur.fetchall()
+    return await db.fetchall(sql, args)
 
 
 async def fetchone(db, sql, args=()):
-    async with db.execute(sql, args) as cur:
-        return await cur.fetchone()
+    return await db.fetchone(sql, args)
 
 
 async def get_role(db, tg_id):
