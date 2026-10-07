@@ -68,7 +68,7 @@ MENU_DIRECTOR = kb([["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "�
                     ["🗑 O'qituvchini o'chirish", "🔁 Guruh o'qituvchisini almashtirish"],
                     ["🔀 O'quvchini ko'chirish", "↩️ To'lovni bekor qilish"],
                     ["📅 Hisobot", "📞 Telefonni o'zgartirish"],
-                    ["🔎 Qidirish", "📥 Excel"], ["📈 Statistika"]])
+                    ["🔎 Qidirish", "📥 Excel"], ["📈 Statistika", "🗑 Adminni o'chirish"]])
 MENU_TEACHER = kb([["✅ Davomat", "➕ O'quvchi"],
                    ["💰 Oylikni ko'rish", "📋 Qarzdorlarni ko'rish"],
                    ["🗑 O'quvchini o'chirish", "📞 Telefonni o'zgartirish"],
