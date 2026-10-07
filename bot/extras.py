@@ -4,12 +4,15 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from aiogram import Router, F, Bot
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from . import db as D
 from .config import TZ_OFFSET, REMINDER_HOUR
-from .handlers import (STAFF, group_picker, confirm_kb, money, months_markup, debtors_text)
+from .handlers import (STAFF, ANYONE, group_picker, confirm_kb, money, months_markup, debtors_text,
+                       can_access_group, normalize_phone)
 
 router = Router()
 log = logging.getLogger(__name__)
@@ -66,6 +69,57 @@ async def mv_do(c: CallbackQuery, db):
                      (g["id"], s["id"], D.current_month()))])
     await c.message.edit_text(f"✅ {s['last_name']} {s['first_name']} {g['name']} guruhiga ko'chirildi.")
     await c.answer()
+
+
+# ---------------- Telefon raqamini kiritish / o'zgartirish ----------------
+class EditPhone(StatesGroup):
+    value = State()
+
+
+@router.message(F.text == "📞 Telefonni o'zgartirish", ANYONE)
+async def ph_start(m: Message, db):
+    uid = m.from_user.id
+    mk = await group_picker(db, "pg2", uid if await D.get_role(db, uid) == "teacher" else None)
+    await m.answer("Qaysi guruh?", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
+
+
+@router.callback_query(F.data.startswith("pg2:"))
+async def ph_group(c: CallbackQuery, db):
+    gid = int(c.data[4:])
+    if not await can_access_group(db, c.from_user.id, gid):
+        return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
+    studs = await D.group_students(db, gid)
+    b = InlineKeyboardBuilder()
+    for s in studs:
+        phone = s["phone"] or "(raqam yo'q)"
+        b.button(text=f"{s['last_name']} {s['first_name']} {phone}", callback_data=f"ph:{s['id']}")
+    b.adjust(1)
+    await c.message.answer("Qaysi o'quvchi?" if studs else "Guruhda o'quvchi yo'q.",
+                           reply_markup=b.as_markup() if studs else None)
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("ph:"))
+async def ph_student(c: CallbackQuery, db, state: FSMContext):
+    sid = int(c.data[3:])
+    s = await db.fetchone("SELECT * FROM students WHERE id=?", (sid,))
+    if not s or not await can_access_group(db, c.from_user.id, s["group_id"]):
+        return await c.answer("Ruxsat yo'q yoki topilmadi", show_alert=True)
+    await state.set_state(EditPhone.value)
+    await state.update_data(student_id=sid)
+    await c.message.answer(f"{s['last_name']} {s['first_name']} uchun yangi telefon raqam (masalan 90 123 45 67):")
+    await c.answer()
+
+
+@router.message(EditPhone.value)
+async def ph_save(m: Message, db, state: FSMContext):
+    phone = normalize_phone(m.text or "")
+    if phone is None:
+        return await m.answer("Raqam noto'g'ri. Masalan: 90 123 45 67")
+    sid = (await state.get_data())["student_id"]
+    await db.execute("UPDATE students SET phone=? WHERE id=?", (phone, sid))
+    await state.clear()
+    await m.answer(f"✅ Saqlandi: {phone or 'raqamsiz'}")
 
 
 # ---------------- To'lovni bekor qilish ----------------

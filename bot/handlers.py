@@ -32,6 +32,23 @@ TEACHER = Role("teacher")
 ANYONE = Role("admin", "director", "teacher")
 
 
+def normalize_phone(text: str):
+    """'+998901234567' ko'rinishiga keltiradi. '-' yoki bo'sh => ''. Noto'g'ri bo'lsa None."""
+    t = text.strip()
+    if t in ("-", ""):
+        return ""
+    digits = "".join(ch for ch in t if ch.isdigit())
+    if len(digits) == 9:
+        digits = "998" + digits
+    if len(digits) == 12 and digits.startswith("998"):
+        return "+" + digits
+    return None
+
+
+def with_phone(s) -> str:
+    return f" 📞 {s['phone']}" if s.get("phone") else ""
+
+
 def kb(rows):
     return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=t) for t in r] for r in rows],
                                resize_keyboard=True)
@@ -41,17 +58,18 @@ MENU_ADMIN = kb([["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "📋 Q
                  ["📊 Guruh hisobi", "🗑 O'quvchini o'chirish"],
                  ["🗑 Guruhni o'chirish", "🗑 O'qituvchini o'chirish"],
                  ["🔁 Guruh o'qituvchisini almashtirish", "🔀 O'quvchini ko'chirish"],
-                 ["↩️ To'lovni bekor qilish", "📅 Hisobot"]])
+                 ["↩️ To'lovni bekor qilish", "📅 Hisobot"],
+                 ["📞 Telefonni o'zgartirish"]])
 MENU_DIRECTOR = kb([["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
                     ["📊 Guruh hisobi", "👨‍🏫 O'qituvchi qo'shish"],
                     ["🛡 Admin qo'shish", "💰 Oyliklar"],
                     ["🗑 O'quvchini o'chirish", "🗑 Guruhni o'chirish"],
                     ["🗑 O'qituvchini o'chirish", "🔁 Guruh o'qituvchisini almashtirish"],
                     ["🔀 O'quvchini ko'chirish", "↩️ To'lovni bekor qilish"],
-                    ["📅 Hisobot"]])
+                    ["📅 Hisobot", "📞 Telefonni o'zgartirish"]])
 MENU_TEACHER = kb([["✅ Davomat", "➕ O'quvchi"],
                    ["💰 Oylikni ko'rish", "📋 Qarzdorlarni ko'rish"],
-                   ["🗑 O'quvchini o'chirish"]])
+                   ["🗑 O'quvchini o'chirish", "📞 Telefonni o'zgartirish"]])
 
 
 MENU_TEXTS = {b.text for m in (MENU_ADMIN, MENU_DIRECTOR, MENU_TEACHER)
@@ -399,7 +417,7 @@ async def g_teacher(c: CallbackQuery, db, state: FSMContext):
 
 # ---------------- Admin/Director: o'quvchi ----------------
 class AddStudent(StatesGroup):
-    first = State(); last = State(); grade = State(); group = State()
+    first = State(); last = State(); grade = State(); phone = State(); group = State()
 
 
 @router.message(F.text == "➕ O'quvchi", ANYONE)
@@ -423,8 +441,19 @@ async def s_last(m: Message, state: FSMContext):
 
 
 @router.message(AddStudent.grade)
-async def s_grade(m: Message, db, state: FSMContext):
+async def s_grade(m: Message, state: FSMContext):
     await state.update_data(grade=m.text.strip())
+    await state.set_state(AddStudent.phone)
+    await m.answer("Telefon raqami (masalan 90 123 45 67 yoki +998901234567).\n"
+                   "Bilmasangiz - yuboring:")
+
+
+@router.message(AddStudent.phone)
+async def s_phone(m: Message, db, state: FSMContext):
+    phone = normalize_phone(m.text or "")
+    if phone is None:
+        return await m.answer("Raqam noto'g'ri. Masalan: 90 123 45 67 (yoki - yuboring).")
+    await state.update_data(phone=phone)
     uid = m.from_user.id
     mk = await group_picker(db, "sg", uid if await D.get_role(db, uid) == "teacher" else None)
     if not mk:
@@ -439,8 +468,8 @@ async def s_group(c: CallbackQuery, db, state: FSMContext):
     d = await state.get_data()
     if not await can_access_group(db, c.from_user.id, int(c.data[3:])):
         return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
-    await db.execute("INSERT INTO students(first_name,last_name,grade,group_id) VALUES(?,?,?,?)",
-                     (d["first"], d["last"], d["grade"], int(c.data[3:])))
+    await db.execute("INSERT INTO students(first_name,last_name,grade,phone,group_id) VALUES(?,?,?,?,?)",
+                     (d["first"], d["last"], d["grade"], d.get("phone", ""), int(c.data[3:])))
     await db.commit()
     await state.clear()
     await c.message.answer(f"✅ {d['first']} {d['last']} qo'shildi.")
@@ -503,7 +532,7 @@ async def debtors_text(db, group_id):
     head = f"📋 {g['name']} - qarzdorlar ({D.current_month()}):\n"
     if not ds:
         return head + "Qarzdor yo'q 🎉"
-    return head + "\n".join(f"{i}. {s['last_name']} {s['first_name']} ({s['grade']}-sinf)"
+    return head + "\n".join(f"{i}. {s['last_name']} {s['first_name']} ({s['grade']}-sinf){with_phone(s)}"
                             for i, s in enumerate(ds, 1))
 
 
@@ -639,21 +668,26 @@ async def att_done(c: CallbackQuery, db, state: FSMContext, bot: Bot):
     today = date.today().isoformat()
     g = await D.fetchone(db, "SELECT * FROM groups WHERE id=?", (gid,))
     teacher = await D.fetchone(db, "SELECT full_name FROM users WHERE tg_id=?", (c.from_user.id,))
-    rows, stmts = [], []
+    rows, stmts, absent_lines = [], [], []
     for s in await D.group_students(db, gid):
         present = s["id"] not in absent
         stmts.append(("INSERT INTO attendance(group_id,day,student_id,present) VALUES(?,?,?,?) "
                       "ON CONFLICT(group_id,day,student_id) DO UPDATE SET present=excluded.present",
                       (gid, today, s["id"], int(present))))
-        rows.append((f"{s['last_name']} {s['first_name']}", s["grade"], present))
+        rows.append((f"{s['last_name']} {s['first_name']}", s["grade"], s.get("phone") or "", present))
+        if not present:
+            absent_lines.append(f"• {s['last_name']} {s['first_name']}{with_phone(s)}")
     if stmts:
         await db.batch(stmts)
+    caption = f"📋 {g['name']} davomati ({teacher['full_name']}), kelmagan: {len(absent)}"
+    if absent_lines:
+        caption = (caption + "\n" + "\n".join(absent_lines))[:1000]
     pdf = attendance_pdf(g["name"], teacher["full_name"], f"{date.today():%d.%m.%Y}", rows)
     for a in await D.fetchall(db, "SELECT tg_id FROM users WHERE role IN ('admin','director')"):
         try:
             await bot.send_document(
                 a["tg_id"], BufferedInputFile(pdf, f"davomat_{g['name']}_{today}.pdf"),
-                caption=f"📋 {g['name']} davomati ({teacher['full_name']}), kelmagan: {len(absent)}")
+                caption=caption)
         except Exception:
             pass
     await state.clear()
