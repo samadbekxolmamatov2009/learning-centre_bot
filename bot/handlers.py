@@ -54,6 +54,19 @@ MENU_TEACHER = kb([["✅ Davomat", "➕ O'quvchi"],
                    ["🗑 O'quvchini o'chirish"]])
 
 
+MENU_TEXTS = {b.text for m in (MENU_ADMIN, MENU_DIRECTOR, MENU_TEACHER)
+              for row in m.keyboard for b in row}
+
+
+@router.message.outer_middleware()
+async def menu_resets_state(handler, event: Message, data):
+    """Kutilayotgan savol vaqtida menyu tugmasi bosilsa, holatni tozalaydi
+    (aks holda tugma matni ism/guruh nomi sifatida saqlanib qoladi)."""
+    if event.text in MENU_TEXTS and data.get("state"):
+        await data["state"].clear()
+    return await handler(event, data)
+
+
 async def menu_for(db, uid):
     return {"director": MENU_DIRECTOR, "admin": MENU_ADMIN,
             "teacher": MENU_TEACHER}.get(await D.get_role(db, uid))
