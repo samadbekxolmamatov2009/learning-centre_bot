@@ -29,6 +29,7 @@ class Role(Filter):
 STAFF = Role("admin", "director")
 DIRECTOR = Role("director")
 TEACHER = Role("teacher")
+ANYONE = Role("admin", "director", "teacher")
 
 
 def kb(rows):
@@ -37,11 +38,17 @@ def kb(rows):
 
 
 MENU_ADMIN = kb([["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
-                 ["📊 Guruh hisobi"]])
+                 ["📊 Guruh hisobi", "🗑 O'quvchini o'chirish"],
+                 ["🗑 Guruhni o'chirish", "🗑 O'qituvchini o'chirish"],
+                 ["🔁 Guruh o'qituvchisini almashtirish"]])
 MENU_DIRECTOR = kb([["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
                     ["📊 Guruh hisobi", "👨‍🏫 O'qituvchi qo'shish"],
-                    ["🛡 Admin qo'shish", "💰 Oyliklar"]])
-MENU_TEACHER = kb([["✅ Davomat"], ["💰 Oylikni ko'rish", "📋 Qarzdorlarni ko'rish"]])
+                    ["🛡 Admin qo'shish", "💰 Oyliklar"],
+                    ["🗑 O'quvchini o'chirish", "🗑 Guruhni o'chirish"],
+                    ["🗑 O'qituvchini o'chirish", "🔁 Guruh o'qituvchisini almashtirish"]])
+MENU_TEACHER = kb([["✅ Davomat", "➕ O'quvchi"],
+                   ["💰 Oylikni ko'rish", "📋 Qarzdorlarni ko'rish"],
+                   ["🗑 O'quvchini o'chirish"]])
 
 
 async def menu_for(db, uid):
@@ -74,6 +81,173 @@ async def group_picker(db, prefix, teacher_id=None):
         b.button(text=g["name"], callback_data=f"{prefix}:{g['id']}")
     b.adjust(2)
     return b.as_markup() if groups else None
+
+
+async def can_access_group(db, uid, gid) -> bool:
+    """Admin/direktor - hamma guruh, o'qituvchi - faqat o'zining guruhi."""
+    role = await D.get_role(db, uid)
+    g = await D.fetchone(db, "SELECT teacher_id FROM groups WHERE id=?", (gid,))
+    if not g or role is None:
+        return False
+    return role in ("admin", "director") or g["teacher_id"] == uid
+
+
+def confirm_kb(yes, no="x:no"):
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Ha, o'chirish", callback_data=yes),
+        InlineKeyboardButton(text="❌ Yo'q", callback_data=no)]])
+
+
+@router.callback_query(F.data == "x:no")
+async def x_no(c: CallbackQuery):
+    await c.message.edit_text("Bekor qilindi.")
+    await c.answer()
+
+
+# ---------------- O'chirish: o'quvchi (hamma), guruh va o'qituvchi (admin/direktor) ----------------
+@router.message(F.text == "🗑 O'quvchini o'chirish", ANYONE)
+async def xs_start(m: Message, db):
+    uid = m.from_user.id
+    mk = await group_picker(db, "xg", uid if await D.get_role(db, uid) == "teacher" else None)
+    await m.answer("Qaysi guruhdan?", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
+
+
+@router.callback_query(F.data.startswith("xg:"))
+async def xs_group(c: CallbackQuery, db):
+    gid = int(c.data[3:])
+    if not await can_access_group(db, c.from_user.id, gid):
+        return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
+    studs = await D.group_students(db, gid)
+    b = InlineKeyboardBuilder()
+    for s in studs:
+        b.button(text=f"{s['last_name']} {s['first_name']} ({s['grade']})", callback_data=f"xs:{s['id']}")
+    b.adjust(1)
+    await c.message.answer("O'chiriladigan o'quvchini tanlang:" if studs else "Guruhda o'quvchi yo'q.",
+                           reply_markup=b.as_markup() if studs else None)
+    await c.answer()
+
+
+async def _student_if_allowed(db, uid, sid):
+    s = await D.fetchone(db, "SELECT * FROM students WHERE id=?", (sid,))
+    return s if s and await can_access_group(db, uid, s["group_id"]) else None
+
+
+@router.callback_query(F.data.startswith("xs:"))
+async def xs_ask(c: CallbackQuery, db):
+    s = await _student_if_allowed(db, c.from_user.id, int(c.data[3:]))
+    if not s:
+        return await c.answer("Ruxsat yo'q yoki topilmadi", show_alert=True)
+    await c.message.answer(f"{s['last_name']} {s['first_name']} o'chirilsinmi?",
+                           reply_markup=confirm_kb(f"xsy:{s['id']}"))
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("xsy:"))
+async def xs_do(c: CallbackQuery, db):
+    s = await _student_if_allowed(db, c.from_user.id, int(c.data[4:]))
+    if not s:
+        return await c.answer("Ruxsat yo'q yoki topilmadi", show_alert=True)
+    await db.execute("DELETE FROM students WHERE id=?", (s["id"],))
+    await db.commit()
+    await c.message.edit_text(f"🗑 {s['last_name']} {s['first_name']} o'chirildi.")
+    await c.answer()
+
+
+@router.message(F.text == "🗑 Guruhni o'chirish", STAFF)
+async def xgr_start(m: Message, db):
+    mk = await group_picker(db, "xgr")
+    await m.answer("Qaysi guruh o'chirilsin?", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
+
+
+@router.callback_query(F.data.startswith("xgr:"), STAFF)
+async def xgr_ask(c: CallbackQuery, db):
+    g = await D.fetchone(db, "SELECT * FROM groups WHERE id=?", (int(c.data[4:]),))
+    if not g:
+        return await c.answer("Topilmadi", show_alert=True)
+    n = (await D.fetchone(db, "SELECT COUNT(*) n FROM students WHERE group_id=?", (g["id"],)))["n"]
+    await c.message.answer(f"⚠️ {g['name']} guruhi va undagi {n} ta o'quvchi o'chiriladi. Davom etasizmi?",
+                           reply_markup=confirm_kb(f"xgry:{g['id']}"))
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("xgry:"), STAFF)
+async def xgr_do(c: CallbackQuery, db):
+    gid = int(c.data[5:])
+    g = await D.fetchone(db, "SELECT name FROM groups WHERE id=?", (gid,))
+    if not g:
+        return await c.answer("Topilmadi", show_alert=True)
+    await db.execute("DELETE FROM students WHERE group_id=?", (gid,))
+    await db.execute("DELETE FROM groups WHERE id=?", (gid,))
+    await db.commit()
+    await c.message.edit_text(f"🗑 Guruh {g['name']} o'chirildi.")
+    await c.answer()
+
+
+@router.message(F.text == "🗑 O'qituvchini o'chirish", STAFF)
+async def xt_start(m: Message, db):
+    ts = await D.fetchall(db, "SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id")
+    if not ts:
+        return await m.answer("O'qituvchilar yo'q.")
+    b = InlineKeyboardBuilder()
+    for t in ts:
+        b.button(text=t["full_name"], callback_data=f"xt:{t['tg_id']}")
+    b.adjust(1)
+    await m.answer("Qaysi o'qituvchi o'chirilsin?", reply_markup=b.as_markup())
+
+
+@router.callback_query(F.data.startswith("xt:"), STAFF)
+async def xt_ask(c: CallbackQuery, db):
+    t = await D.fetchone(db, "SELECT * FROM users WHERE tg_id=? AND role='teacher'", (int(c.data[3:]),))
+    if not t:
+        return await c.answer("Topilmadi", show_alert=True)
+    gs = await D.fetchall(db, "SELECT name FROM groups WHERE teacher_id=?", (t["tg_id"],))
+    note = (f"\nGuruhlari ({', '.join(g['name'] for g in gs)}) o'qituvchisiz qoladi."
+            if gs else "")
+    await c.message.answer(f"⚠️ {t['full_name']} o'chirilsinmi?{note}",
+                           reply_markup=confirm_kb(f"xty:{t['tg_id']}"))
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("xty:"), STAFF)
+async def xt_do(c: CallbackQuery, db):
+    tid = int(c.data[4:])
+    t = await D.fetchone(db, "SELECT full_name FROM users WHERE tg_id=? AND role='teacher'", (tid,))
+    if not t:
+        return await c.answer("Topilmadi", show_alert=True)
+    await db.execute("UPDATE groups SET teacher_id=NULL WHERE teacher_id=?", (tid,))
+    await db.execute("DELETE FROM teachers WHERE tg_id=?", (tid,))
+    await db.execute("DELETE FROM users WHERE tg_id=?", (tid,))
+    await db.commit()
+    await c.message.edit_text(f"🗑 {t['full_name']} o'chirildi. Guruhlariga yangi o'qituvchi biriktiring.")
+    await c.answer()
+
+
+@router.message(F.text == "🔁 Guruh o'qituvchisini almashtirish", STAFF)
+async def rg_start(m: Message, db):
+    mk = await group_picker(db, "rg")
+    await m.answer("Qaysi guruh?", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
+
+
+@router.callback_query(F.data.startswith("rg:"), STAFF)
+async def rg_group(c: CallbackQuery, db):
+    ts = await D.fetchall(db, "SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id")
+    if not ts:
+        return await c.answer("O'qituvchilar yo'q", show_alert=True)
+    b = InlineKeyboardBuilder()
+    for t in ts:
+        b.button(text=t["full_name"], callback_data=f"rt:{c.data[3:]}:{t['tg_id']}")
+    b.adjust(1)
+    await c.message.answer("Yangi o'qituvchi:", reply_markup=b.as_markup())
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("rt:"), STAFF)
+async def rg_teacher(c: CallbackQuery, db):
+    _, gid, tid = c.data.split(":")
+    await db.execute("UPDATE groups SET teacher_id=? WHERE id=?", (int(tid), int(gid)))
+    await db.commit()
+    await c.message.edit_text("✅ Guruh o'qituvchisi almashtirildi.")
+    await c.answer()
 
 
 # ---------------- Director: o'qituvchi / admin qo'shish ----------------
@@ -214,7 +388,7 @@ class AddStudent(StatesGroup):
     first = State(); last = State(); grade = State(); group = State()
 
 
-@router.message(F.text == "➕ O'quvchi", STAFF)
+@router.message(F.text == "➕ O'quvchi", ANYONE)
 async def s_add(m: Message, state: FSMContext):
     await state.set_state(AddStudent.first)
     await m.answer("O'quvchi ismi:")
@@ -237,7 +411,8 @@ async def s_last(m: Message, state: FSMContext):
 @router.message(AddStudent.grade)
 async def s_grade(m: Message, db, state: FSMContext):
     await state.update_data(grade=m.text.strip())
-    mk = await group_picker(db, "sg")
+    uid = m.from_user.id
+    mk = await group_picker(db, "sg", uid if await D.get_role(db, uid) == "teacher" else None)
     if not mk:
         await state.clear()
         return await m.answer("Avval guruh yarating.")
@@ -248,6 +423,8 @@ async def s_grade(m: Message, db, state: FSMContext):
 @router.callback_query(AddStudent.group, F.data.startswith("sg:"))
 async def s_group(c: CallbackQuery, db, state: FSMContext):
     d = await state.get_data()
+    if not await can_access_group(db, c.from_user.id, int(c.data[3:])):
+        return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
     await db.execute("INSERT INTO students(first_name,last_name,grade,group_id) VALUES(?,?,?,?)",
                      (d["first"], d["last"], d["grade"], int(c.data[3:])))
     await db.commit()
