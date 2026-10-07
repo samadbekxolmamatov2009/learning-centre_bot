@@ -417,3 +417,36 @@ async def stats(m: Message, db):
         out.append(f"• {g['name']}: {money(await D.group_income(db, g['id'], cur))} | "
                    f"o'quvchi {len(studs)}, qarzdor {debt} | davomat {_pct(ga['p'], ga['n'])}")
     await m.answer("\n".join(out))
+
+
+# ---------------- Adminni o'chirish (faqat direktor) ----------------
+@router.message(F.text == "🗑 Adminni o'chirish", DIRECTOR)
+async def xa_start(m: Message, db):
+    admins = await db.fetchall("SELECT tg_id, full_name FROM users WHERE role='admin' ORDER BY full_name")
+    if not admins:
+        return await m.answer("Adminlar yo'q.")
+    b = InlineKeyboardBuilder()
+    for a in admins:
+        b.button(text=f"{a['full_name']} ({a['tg_id']})", callback_data=f"xa:{a['tg_id']}")
+    b.adjust(1)
+    await m.answer("Qaysi admin o'chirilsin?", reply_markup=b.as_markup())
+
+
+@router.callback_query(F.data.startswith("xa:"), DIRECTOR)
+async def xa_ask(c: CallbackQuery, db):
+    a = await db.fetchone("SELECT * FROM users WHERE tg_id=? AND role='admin'", (int(c.data[3:]),))
+    if not a:
+        return await c.answer("Topilmadi", show_alert=True)
+    await c.message.answer(f"⚠️ Admin {a['full_name']} o'chirilsinmi? Botdan foydalanish huquqi olinadi.",
+                           reply_markup=confirm_kb(f"xay:{a['tg_id']}"))
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("xay:"), DIRECTOR)
+async def xa_do(c: CallbackQuery, db):
+    a = await db.fetchone("SELECT * FROM users WHERE tg_id=? AND role='admin'", (int(c.data[4:]),))
+    if not a:
+        return await c.answer("Topilmadi", show_alert=True)
+    await db.execute("DELETE FROM users WHERE tg_id=? AND role='admin'", (a["tg_id"],))
+    await c.message.edit_text(f"🗑 Admin {a['full_name']} o'chirildi.")
+    await c.answer()
