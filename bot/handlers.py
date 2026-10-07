@@ -40,12 +40,15 @@ def kb(rows):
 MENU_ADMIN = kb([["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
                  ["📊 Guruh hisobi", "🗑 O'quvchini o'chirish"],
                  ["🗑 Guruhni o'chirish", "🗑 O'qituvchini o'chirish"],
-                 ["🔁 Guruh o'qituvchisini almashtirish"]])
+                 ["🔁 Guruh o'qituvchisini almashtirish", "🔀 O'quvchini ko'chirish"],
+                 ["↩️ To'lovni bekor qilish", "📅 Hisobot"]])
 MENU_DIRECTOR = kb([["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
                     ["📊 Guruh hisobi", "👨‍🏫 O'qituvchi qo'shish"],
                     ["🛡 Admin qo'shish", "💰 Oyliklar"],
                     ["🗑 O'quvchini o'chirish", "🗑 Guruhni o'chirish"],
-                    ["🗑 O'qituvchini o'chirish", "🔁 Guruh o'qituvchisini almashtirish"]])
+                    ["🗑 O'qituvchini o'chirish", "🔁 Guruh o'qituvchisini almashtirish"],
+                    ["🔀 O'quvchini ko'chirish", "↩️ To'lovni bekor qilish"],
+                    ["📅 Hisobot"]])
 MENU_TEACHER = kb([["✅ Davomat", "➕ O'quvchi"],
                    ["💰 Oylikni ko'rish", "📋 Qarzdorlarni ko'rish"],
                    ["🗑 O'quvchini o'chirish"]])
@@ -176,9 +179,8 @@ async def xgr_do(c: CallbackQuery, db):
     g = await D.fetchone(db, "SELECT name FROM groups WHERE id=?", (gid,))
     if not g:
         return await c.answer("Topilmadi", show_alert=True)
-    await db.execute("DELETE FROM students WHERE group_id=?", (gid,))
-    await db.execute("DELETE FROM groups WHERE id=?", (gid,))
-    await db.commit()
+    await db.batch([("DELETE FROM students WHERE group_id=?", (gid,)),
+                    ("DELETE FROM groups WHERE id=?", (gid,))])
     await c.message.edit_text(f"🗑 Guruh {g['name']} o'chirildi.")
     await c.answer()
 
@@ -214,10 +216,9 @@ async def xt_do(c: CallbackQuery, db):
     t = await D.fetchone(db, "SELECT full_name FROM users WHERE tg_id=? AND role='teacher'", (tid,))
     if not t:
         return await c.answer("Topilmadi", show_alert=True)
-    await db.execute("UPDATE groups SET teacher_id=NULL WHERE teacher_id=?", (tid,))
-    await db.execute("DELETE FROM teachers WHERE tg_id=?", (tid,))
-    await db.execute("DELETE FROM users WHERE tg_id=?", (tid,))
-    await db.commit()
+    await db.batch([("UPDATE groups SET teacher_id=NULL WHERE teacher_id=?", (tid,)),
+                    ("DELETE FROM teachers WHERE tg_id=?", (tid,)),
+                    ("DELETE FROM users WHERE tg_id=?", (tid,))])
     await c.message.edit_text(f"🗑 {t['full_name']} o'chirildi. Guruhlariga yangi o'qituvchi biriktiring.")
     await c.answer()
 
@@ -297,13 +298,13 @@ async def t_value(m: Message, db, state: FSMContext):
     except Exception:
         return await m.answer("Musbat son kiriting.")
     d = await state.get_data()
-    await db.execute("INSERT INTO users(tg_id,full_name,role) VALUES(?,?,'teacher') "
-                     "ON CONFLICT(tg_id) DO UPDATE SET full_name=excluded.full_name, role='teacher'",
-                     (d["tg_id"], d["name"]))
-    await db.execute("INSERT INTO teachers(tg_id,pay_type,pay_value) VALUES(?,?,?) "
-                     "ON CONFLICT(tg_id) DO UPDATE SET pay_type=excluded.pay_type, pay_value=excluded.pay_value",
-                     (d["tg_id"], d["pay_type"], v))
-    await db.commit()
+    await db.batch([
+        ("INSERT INTO users(tg_id,full_name,role) VALUES(?,?,'teacher') "
+         "ON CONFLICT(tg_id) DO UPDATE SET full_name=excluded.full_name, role='teacher'",
+         (d["tg_id"], d["name"])),
+        ("INSERT INTO teachers(tg_id,pay_type,pay_value) VALUES(?,?,?) "
+         "ON CONFLICT(tg_id) DO UPDATE SET pay_type=excluded.pay_type, pay_value=excluded.pay_value",
+         (d["tg_id"], d["pay_type"], v))])
     await state.clear()
     await m.answer(f"✅ O'qituvchi {d['name']} qo'shildi.", reply_markup=MENU_DIRECTOR)
 
@@ -531,16 +532,46 @@ async def staff_income(m: Message, db):
 
 
 # ---------------- O'qituvchi: oylik ----------------
-@router.message(F.text == "💰 Oylikni ko'rish", TEACHER)
-async def my_salary(m: Message, db):
-    res = await D.teacher_salary(db, m.from_user.id)
-    pt, pv, rows, total = res
+def prev_months(n=6):
+    y, m = date.today().year, date.today().month
+    out = []
+    for _ in range(n):
+        out.append(f"{y}-{m:02d}")
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    return out
+
+
+def months_markup(prefix):
+    b = InlineKeyboardBuilder()
+    for mo in prev_months():
+        b.button(text=mo, callback_data=f"{prefix}:{mo}")
+    b.adjust(3)
+    return b.as_markup()
+
+
+async def salary_text(db, tid, month):
+    pt, pv, rows, total = await D.teacher_salary(db, tid, month)
     how = f"{pv:g}% (to'lovdan)" if pt == "percent" else f"{money(pv)} / to'lagan o'quvchi"
-    out = [f"💰 Oylik ({D.current_month()})", f"Tizim: {how}", ""]
+    out = [f"💰 Oylik ({month})", f"Tizim: {how}", ""]
     for name, income, cnt in rows:
         out.append(f"• {name}: tushum {money(income)}, to'laganlar {cnt} ta")
     out += ["", f"Jami oylik: {money(total)}"]
-    await m.answer("\n".join(out))
+    return "\n".join(out)
+
+
+@router.message(F.text == "💰 Oylikni ko'rish", TEACHER)
+async def my_salary(m: Message, db):
+    await m.answer(await salary_text(db, m.from_user.id, D.current_month()) +
+                   "\n\nBoshqa oy:", reply_markup=months_markup("ms"))
+
+
+@router.callback_query(F.data.startswith("ms:"), TEACHER)
+async def my_salary_month(c: CallbackQuery, db):
+    await c.message.edit_text(await salary_text(db, c.from_user.id, c.data[3:]) +
+                              "\n\nBoshqa oy:", reply_markup=months_markup("ms"))
+    await c.answer()
 
 
 # ---------------- O'qituvchi: davomat ----------------
@@ -595,14 +626,15 @@ async def att_done(c: CallbackQuery, db, state: FSMContext, bot: Bot):
     today = date.today().isoformat()
     g = await D.fetchone(db, "SELECT * FROM groups WHERE id=?", (gid,))
     teacher = await D.fetchone(db, "SELECT full_name FROM users WHERE tg_id=?", (c.from_user.id,))
-    rows = []
+    rows, stmts = [], []
     for s in await D.group_students(db, gid):
         present = s["id"] not in absent
-        await db.execute("INSERT INTO attendance(group_id,day,student_id,present) VALUES(?,?,?,?) "
-                         "ON CONFLICT(group_id,day,student_id) DO UPDATE SET present=excluded.present",
-                         (gid, today, s["id"], int(present)))
+        stmts.append(("INSERT INTO attendance(group_id,day,student_id,present) VALUES(?,?,?,?) "
+                      "ON CONFLICT(group_id,day,student_id) DO UPDATE SET present=excluded.present",
+                      (gid, today, s["id"], int(present))))
         rows.append((f"{s['last_name']} {s['first_name']}", s["grade"], present))
-    await db.commit()
+    if stmts:
+        await db.batch(stmts)
     pdf = attendance_pdf(g["name"], teacher["full_name"], f"{date.today():%d.%m.%Y}", rows)
     for a in await D.fetchall(db, "SELECT tg_id FROM users WHERE role IN ('admin','director')"):
         try:

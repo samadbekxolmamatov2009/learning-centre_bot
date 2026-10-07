@@ -6,6 +6,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from . import config, db as D
 from .handlers import router
+from .extras import router as extras_router, scheduler
 
 
 async def main():
@@ -13,7 +14,14 @@ async def main():
     db = await D.connect()
     dp = Dispatcher(storage=MemoryStorage(), db=db)
     dp.include_router(router)
-    await dp.start_polling(Bot(config.BOT_TOKEN))
+    dp.include_router(extras_router)
+    bot = Bot(config.BOT_TOKEN)
+    task = asyncio.create_task(scheduler(bot, db))
+    try:
+        await dp.start_polling(bot)
+    finally:
+        task.cancel()
+        await db.close()
 
 
 if __name__ == "__main__":
