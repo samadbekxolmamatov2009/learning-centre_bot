@@ -59,17 +59,20 @@ MENU_ADMIN = kb([["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "📋 Q
                  ["🗑 Guruhni o'chirish", "🗑 O'qituvchini o'chirish"],
                  ["🔁 Guruh o'qituvchisini almashtirish", "🔀 O'quvchini ko'chirish"],
                  ["↩️ To'lovni bekor qilish", "📅 Hisobot"],
-                 ["📞 Telefonni o'zgartirish"]])
+                 ["📞 Telefonni o'zgartirish", "🔎 Qidirish"],
+                 ["📥 Excel"]])
 MENU_DIRECTOR = kb([["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
                     ["📊 Guruh hisobi", "👨‍🏫 O'qituvchi qo'shish"],
                     ["🛡 Admin qo'shish", "💰 Oyliklar"],
                     ["🗑 O'quvchini o'chirish", "🗑 Guruhni o'chirish"],
                     ["🗑 O'qituvchini o'chirish", "🔁 Guruh o'qituvchisini almashtirish"],
                     ["🔀 O'quvchini ko'chirish", "↩️ To'lovni bekor qilish"],
-                    ["📅 Hisobot", "📞 Telefonni o'zgartirish"]])
+                    ["📅 Hisobot", "📞 Telefonni o'zgartirish"],
+                    ["🔎 Qidirish", "📥 Excel"], ["📈 Statistika"]])
 MENU_TEACHER = kb([["✅ Davomat", "➕ O'quvchi"],
                    ["💰 Oylikni ko'rish", "📋 Qarzdorlarni ko'rish"],
-                   ["🗑 O'quvchini o'chirish", "📞 Telefonni o'zgartirish"]])
+                   ["🗑 O'quvchini o'chirish", "📞 Telefonni o'zgartirish"],
+                   ["🔎 Qidirish"]])
 
 
 MENU_TEXTS = {b.text for m in (MENU_ADMIN, MENU_DIRECTOR, MENU_TEACHER)

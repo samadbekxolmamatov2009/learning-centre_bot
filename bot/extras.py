@@ -1,17 +1,21 @@
 import asyncio
 import calendar
+import io
 import logging
 from datetime import datetime, timedelta, timezone
 
 from aiogram import Router, F, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, BufferedInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+from openpyxl import Workbook
+from openpyxl.styles import Font
 
 from . import db as D
 from .config import TZ_OFFSET, REMINDER_HOUR
-from .handlers import (STAFF, ANYONE, group_picker, confirm_kb, money, months_markup, debtors_text,
+from .handlers import (STAFF, ANYONE, DIRECTOR, prev_months, with_phone, group_picker, confirm_kb, money, months_markup, debtors_text,
                        can_access_group, normalize_phone)
 
 router = Router()
@@ -251,3 +255,165 @@ async def scheduler(bot: Bot, db):
         except Exception:
             log.exception("Oy oxiri xabarida xato")
         await asyncio.sleep(1800)
+
+
+# ---------------- Qidirish (ism / familiya / telefon) ----------------
+class Search(StatesGroup):
+    query = State()
+
+
+@router.message(F.text == "🔎 Qidirish", ANYONE)
+async def sr_start(m: Message, state: FSMContext):
+    await state.set_state(Search.query)
+    await m.answer("Ism, familiya yoki telefon raqamning bir qismini yozing:")
+
+
+@router.message(Search.query)
+async def sr_do(m: Message, db, state: FSMContext):
+    q = (m.text or "").strip().casefold()
+    if len(q) < 2:
+        return await m.answer("Kamida 2 ta belgi yozing.")
+    uid = m.from_user.id
+    sql = ("SELECT s.*, g.name AS gname FROM students s JOIN groups g ON g.id=s.group_id")
+    args = ()
+    if await D.get_role(db, uid) == "teacher":
+        sql += " WHERE g.teacher_id=?"
+        args = (uid,)
+    paid_ids = {r["student_id"] for r in await db.fetchall(
+        "SELECT DISTINCT student_id FROM payments WHERE month=?", (D.current_month(),))}
+    q_digits = "".join(ch for ch in q if ch.isdigit())
+    found = []
+    for s in await db.fetchall(sql, args):
+        names = f"{s['first_name']} {s['last_name']} {s['last_name']} {s['first_name']}".casefold()
+        if q in names or (len(q_digits) >= 3 and q_digits in "".join(ch for ch in s["phone"] if ch.isdigit())):
+            found.append(s)
+    await state.clear()
+    if not found:
+        return await m.answer("Hech narsa topilmadi.")
+    lines = [f"🔎 Topildi: {len(found)} ta" + (" (dastlabki 20 tasi)" if len(found) > 20 else "")]
+    for s in found[:20]:
+        mark = "✅" if s["id"] in paid_ids else "❌ qarzdor"
+        lines.append(f"• {s['last_name']} {s['first_name']} | {s['grade']}-sinf | {s['gname']} | "
+                     f"{mark}{with_phone(s)}")
+    await m.answer("\n".join(lines))
+
+
+# ---------------- Excel eksport ----------------
+@router.message(F.text == "📥 Excel", STAFF)
+async def xl_start(m: Message):
+    kb_ = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📋 Qarzdorlar (joriy oy)", callback_data="xl:debt")],
+        [InlineKeyboardButton(text="👥 Barcha o'quvchilar", callback_data="xl:stud")],
+        [InlineKeyboardButton(text="📅 Oylik hisobot", callback_data="xl:rep")]])
+    await m.answer("Qaysi ma'lumotni yuklab olasiz?", reply_markup=kb_)
+
+
+def _sheet(wb, title, header, rows, first=False):
+    ws = wb.active if first else wb.create_sheet()
+    ws.title = title
+    ws.append(header)
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for r in rows:
+        ws.append(r)
+    for col in ws.columns:
+        ws.column_dimensions[col[0].column_letter].width = min(
+            40, max(len(str(c.value or "")) for c in col) + 2)
+    return ws
+
+
+async def _students_rows(db, month, only_debtors):
+    rows = []
+    for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
+        for s in await D.group_students(db, g["id"], month):
+            if only_debtors and s["paid"]:
+                continue
+            rows.append([g["name"], s["last_name"], s["first_name"], s["grade"], s["phone"],
+                         "To'lagan" if s["paid"] else "Qarzdor", s["paid_sum"]])
+    return rows
+
+
+async def _send_xlsx(c: CallbackQuery, wb, name):
+    buf = io.BytesIO()
+    wb.save(buf)
+    await c.message.answer_document(BufferedInputFile(buf.getvalue(), name))
+    await c.answer()
+
+
+STUD_HEAD = ["Guruh", "Familiya", "Ism", "Sinf", "Telefon", "Holat", "To'langan summa"]
+
+
+@router.callback_query(F.data.in_({"xl:debt", "xl:stud"}), STAFF)
+async def xl_students(c: CallbackQuery, db):
+    mo = D.current_month()
+    debt = c.data == "xl:debt"
+    wb = Workbook()
+    _sheet(wb, "Qarzdorlar" if debt else "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, debt), True)
+    await _send_xlsx(c, wb, f"{'qarzdorlar' if debt else 'oquvchilar'}_{mo}.xlsx")
+
+
+@router.callback_query(F.data == "xl:rep", STAFF)
+async def xl_rep_months(c: CallbackQuery):
+    await c.message.answer("Qaysi oy?", reply_markup=months_markup("xr"))
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("xr:"), STAFF)
+async def xl_report(c: CallbackQuery, db):
+    mo = c.data[3:]
+    wb = Workbook()
+    grows = []
+    for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
+        studs = await D.group_students(db, g["id"], mo)
+        paid = sum(1 for s in studs if s["paid"])
+        grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, len(studs) - paid])
+    _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Qarzdorlar"], grows, True)
+    trows = []
+    for t in await db.fetchall("SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
+                               "ORDER BY u.full_name"):
+        pt, pv, _, total = await D.teacher_salary(db, t["tg_id"], mo)
+        trows.append([t["full_name"], "Foiz" if pt == "percent" else "O'quvchi boshiga", pv, round(total)])
+    _sheet(wb, "Oyliklar", ["O'qituvchi", "Turi", "Qiymat", "Oylik"], trows)
+    _sheet(wb, "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, False))
+    await _send_xlsx(c, wb, f"hisobot_{mo}.xlsx")
+
+
+# ---------------- Direktor statistikasi ----------------
+def _pct(a, b):
+    return f"{a * 100 / b:.0f}%" if b else "-"
+
+
+@router.message(F.text == "📈 Statistika", DIRECTOR)
+async def stats(m: Message, db):
+    cur, prev = prev_months(2)
+    income = {mo: (await db.fetchone("SELECT COALESCE(SUM(amount),0) t FROM payments WHERE month=?", (mo,)))["t"]
+              for mo in (cur, prev)}
+    n_students = (await db.fetchone("SELECT COUNT(*) n FROM students"))["n"]
+    n_paid = (await db.fetchone(
+        "SELECT COUNT(DISTINCT p.student_id) n FROM payments p JOIN students s ON s.id=p.student_id "
+        "WHERE p.month=?", (cur,)))["n"]
+    salaries = 0
+    for t in await db.fetchall("SELECT tg_id FROM teachers"):
+        salaries += (await D.teacher_salary(db, t["tg_id"], cur))[3]
+    diff = income[cur] - income[prev]
+    out = [f"📈 Statistika ({cur})", "",
+           f"💵 Tushum: {money(income[cur])}",
+           f"   O'tgan oy ({prev}): {money(income[prev])} ({'+' if diff >= 0 else '-'}{money(abs(diff))})",
+           f"👨‍🏫 O'qituvchilar oyligi: {money(salaries)}",
+           f"🏦 Qolgan (tushum - oylik): {money(income[cur] - salaries)}", "",
+           f"👥 O'quvchilar: {n_students} ta",
+           f"✅ To'laganlar: {n_paid} ({_pct(n_paid, n_students)})",
+           f"❌ Qarzdorlar: {n_students - n_paid} ({_pct(n_students - n_paid, n_students)})", ""]
+    att = await db.fetchone("SELECT COALESCE(SUM(present),0) p, COUNT(*) n FROM attendance WHERE day LIKE ?",
+                            (cur + "-%",))
+    out.append(f"📋 Davomat (shu oy): kelish {_pct(att['p'], att['n'])}" if att["n"]
+               else "📋 Davomat: shu oy hali olinmagan")
+    out += ["", "Guruhlar:"]
+    for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
+        studs = await D.group_students(db, g["id"], cur)
+        debt = sum(1 for s in studs if not s["paid"])
+        ga = await db.fetchone("SELECT COALESCE(SUM(present),0) p, COUNT(*) n FROM attendance "
+                               "WHERE group_id=? AND day LIKE ?", (g["id"], cur + "-%"))
+        out.append(f"• {g['name']}: {money(await D.group_income(db, g['id'], cur))} | "
+                   f"o'quvchi {len(studs)}, qarzdor {debt} | davomat {_pct(ga['p'], ga['n'])}")
+    await m.answer("\n".join(out))
