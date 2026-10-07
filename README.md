@@ -20,6 +20,10 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 ## Imkoniyatlar
 - **Direktor**: o'qituvchi (foiz / o'quvchi boshiga) va admin qo'shish, oyliklar, admin funksiyalari.
 - **Admin**: guruh, o'quvchi qo'shish; to'lov kiritish va bekor qilish; o'quvchini ko'chirish; guruh/o'qituvchi/o'quvchini o'chirish; guruh o'qituvchisini almashtirish; qarzdorlar; oylik hisobot (o'tgan oylar ham).
+- O'quvchining telefon raqami saqlanadi: qarzdorlar ro'yxati, davomat xabari va PDF'da ko'rinadi; "📞 Telefonni o'zgartirish" tugmasi bor.
 - **O'qituvchi**: o'z guruhiga o'quvchi qo'shish/o'chirish, davomat (PDF adminga), oylik (o'tgan oylar ham), barcha guruhlari qarzdorlari.
 - Oy oxirgi kuni (Toshkent vaqti bilan 09:00) admin va direktorga qarzdorlar ro'yxati avtomatik yuboriladi.
 - To'lov summasi qanday bo'lishidan qat'i nazar, shu oy uchun o'quvchi qarzdor emas; yangi oyda qayta qarzdor.
+- **Qidirish** (hamma): ism/familiya/telefon bo'yicha; o'qituvchi faqat o'z guruhlarida qidiradi.
+- **Excel** (admin, direktor): qarzdorlar, barcha o'quvchilar, oylik hisobot (.xlsx).
+- **Statistika** (direktor): tushum, oylik, o'quvchilar, qarzdorlik va davomat foizi.

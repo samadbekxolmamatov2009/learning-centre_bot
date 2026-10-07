@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS groups(
     teacher_id INTEGER REFERENCES teachers(tg_id));
 CREATE TABLE IF NOT EXISTS students(
     id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL, grade TEXT NOT NULL,
+    last_name TEXT NOT NULL, grade TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '',
     group_id INTEGER NOT NULL REFERENCES groups(id));
 CREATE TABLE IF NOT EXISTS payments(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,6 +60,9 @@ class Database:
     async def init_schema(self):
         stmts = [x.strip() for x in SCHEMA.split(";") if x.strip()]
         await self.batch([(x, ()) for x in stmts])
+        cols = [r["name"] for r in await self.fetchall("PRAGMA table_info(students)")]
+        if "phone" not in cols:  # eski bazani yangilash
+            await self.execute("ALTER TABLE students ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
 
     async def close(self):
         pass
