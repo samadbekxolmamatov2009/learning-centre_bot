@@ -15,7 +15,7 @@ from openpyxl.styles import Font
 
 from . import db as D
 from .config import TZ_OFFSET, REMINDER_HOUR
-from .handlers import (STAFF, ANYONE, DIRECTOR, prev_months, with_phone, group_picker, confirm_kb, money, months_markup, debtors_text,
+from .handlers import (Role, STAFF, ANYONE, DIRECTOR, prev_months, with_phone, group_picker, confirm_kb, money, months_markup, debtors_text,
                        can_access_group, normalize_phone)
 
 router = Router()
@@ -449,4 +449,93 @@ async def xa_do(c: CallbackQuery, db):
         return await c.answer("Topilmadi", show_alert=True)
     await db.execute("DELETE FROM users WHERE tg_id=? AND role='admin'", (a["tg_id"],))
     await c.message.edit_text(f"🗑 Admin {a['full_name']} o'chirildi.")
+    await c.answer()
+
+
+# ---------------- Guruhlar (o'qituvchi -> guruhlar -> o'quvchilar) ----------------
+TEACHER_ONLY = Role("teacher")
+
+
+async def _groups_markup(db, teacher_id, back=False):
+    """teacher_id=0 - o'qituvchisiz guruhlar."""
+    if teacher_id:
+        groups = await db.fetchall("SELECT * FROM groups WHERE teacher_id=? ORDER BY name", (teacher_id,))
+    else:
+        groups = await db.fetchall("SELECT * FROM groups WHERE teacher_id IS NULL ORDER BY name")
+    counts = {r["group_id"]: r["n"] for r in await db.fetchall(
+        "SELECT group_id, COUNT(*) n FROM students GROUP BY group_id")}
+    b = InlineKeyboardBuilder()
+    for g in groups:
+        b.button(text=f"{g['name']} ({counts.get(g['id'], 0)} ta)", callback_data=f"gl:g:{g['id']}")
+    b.adjust(2)
+    if back:
+        b.row(InlineKeyboardButton(text="⬅️ O'qituvchilar", callback_data="gl:back"))
+    return (b.as_markup() if groups else None), bool(groups)
+
+
+@router.message(F.text == "📚 Guruhlarim", TEACHER_ONLY)
+async def my_groups(m: Message, db):
+    mk, ok = await _groups_markup(db, m.from_user.id)
+    await m.answer("Guruhingizni tanlang:", reply_markup=mk) if ok else await m.answer("Sizda guruh yo'q.")
+
+
+async def _teachers_markup(db):
+    teachers = await db.fetchall(
+        "SELECT u.tg_id, u.full_name, (SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id) n "
+        "FROM users u JOIN teachers t ON t.tg_id=u.tg_id ORDER BY u.full_name")
+    b = InlineKeyboardBuilder()
+    for t in teachers:
+        b.button(text=f"{t['full_name']} ({t['n']})", callback_data=f"gl:t:{t['tg_id']}")
+    b.adjust(1)
+    orphan = (await db.fetchone("SELECT COUNT(*) n FROM groups WHERE teacher_id IS NULL"))["n"]
+    if orphan:
+        b.button(text=f"⚠️ O'qituvchisiz guruhlar ({orphan})", callback_data="gl:t:0")
+    b.adjust(1)
+    return b.as_markup() if (teachers or orphan) else None
+
+
+@router.message(F.text == "📚 Guruhlar", STAFF)
+async def all_groups(m: Message, db):
+    mk = await _teachers_markup(db)
+    await m.answer("O'qituvchini tanlang:", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
+
+
+@router.callback_query(F.data == "gl:back", STAFF)
+async def gl_back(c: CallbackQuery, db):
+    mk = await _teachers_markup(db)
+    await c.message.edit_text("O'qituvchini tanlang:", reply_markup=mk)
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("gl:t:"), STAFF)
+async def gl_teacher(c: CallbackQuery, db):
+    tid = int(c.data[5:])
+    mk, ok = await _groups_markup(db, tid, back=True)
+    if tid:
+        t = await db.fetchone("SELECT full_name FROM users WHERE tg_id=?", (tid,))
+        title = f"👨‍🏫 {t['full_name']} guruhlari:" if t else "Guruhlar:"
+    else:
+        title = "O'qituvchisiz guruhlar:"
+    await c.message.edit_text(title if ok else title + "\nGuruh yo'q.", reply_markup=mk or InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="⬅️ O'qituvchilar", callback_data="gl:back")]]))
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("gl:g:"))
+async def gl_group(c: CallbackQuery, db):
+    gid = int(c.data[5:])
+    if not await can_access_group(db, c.from_user.id, gid):
+        return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
+    g = await db.fetchone("SELECT g.name, u.full_name tname FROM groups g "
+                          "LEFT JOIN users u ON u.tg_id=g.teacher_id WHERE g.id=?", (gid,))
+    studs = await D.group_students(db, gid)
+    paid = sum(1 for s in studs if s["paid"])
+    tname = g["tname"] or "o'qituvchisiz"
+    head = [f"📚 {g['name']} | {tname}",
+            f"O'quvchilar: {len(studs)} | to'lagan: {paid} | qarzdor: {len(studs) - paid}", ""]
+    lines = [f"{i}. {'✅' if s['paid'] else '❌'} {s['last_name']} {s['first_name']} "
+             f"({s['grade']}-sinf){with_phone(s)}" for i, s in enumerate(studs, 1)]
+    text = "\n".join(head + (lines or ["Guruhda o'quvchi yo'q."]))
+    for i in range(0, len(text), 4000):
+        await c.message.answer(text[i:i + 4000])
     await c.answer()
