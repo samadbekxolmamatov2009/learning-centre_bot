@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS students(
     group_id INTEGER NOT NULL REFERENCES groups(id));
 CREATE TABLE IF NOT EXISTS payments(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id INTEGER NOT NULL REFERENCES students(id),
+    student_id INTEGER NOT NULL,
     group_id INTEGER NOT NULL, amount INTEGER NOT NULL,
     month TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS idx_payments_student_month ON payments(student_id, month);
@@ -61,6 +61,20 @@ class Database:
         stmts = [x.strip() for x in SCHEMA.split(";") if x.strip()]
         await self.batch([(x, ()) for x in stmts])
         cols = [r["name"] for r in await self.fetchall("PRAGMA table_info(students)")]
+        # To'lovlar o'quvchi o'chirilgandan keyin ham saqlanadi (tushum/oylik hisobi uchun),
+        # shuning uchun payments.student_id da FOREIGN KEY bo'lmasligi kerak.
+        if await self.fetchall("PRAGMA foreign_key_list(payments)"):
+            await self.batch([
+                ("DROP TABLE IF EXISTS payments_new", ()),
+                ("CREATE TABLE payments_new(id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                 "student_id INTEGER NOT NULL, group_id INTEGER NOT NULL, amount INTEGER NOT NULL, "
+                 "month TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)", ()),
+                ("INSERT INTO payments_new(id,student_id,group_id,amount,month,created_at) "
+                 "SELECT id,student_id,group_id,amount,month,created_at FROM payments", ()),
+                ("DROP TABLE payments", ()),
+                ("ALTER TABLE payments_new RENAME TO payments", ()),
+                ("CREATE INDEX IF NOT EXISTS idx_payments_student_month ON payments(student_id, month)", ()),
+                ("CREATE INDEX IF NOT EXISTS idx_payments_group_month ON payments(group_id, month)", ())])
         if "phone" not in cols:  # eski bazani yangilash
             await self.execute("ALTER TABLE students ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
 
@@ -77,6 +91,7 @@ class SqliteDB(Database):
     async def open(cls, path):
         conn = await aiosqlite.connect(path)
         conn.row_factory = aiosqlite.Row
+        await conn.execute("PRAGMA foreign_keys=ON")  # Turso kabi
         return cls(conn)
 
     async def fetchall(self, sql, args=()):
