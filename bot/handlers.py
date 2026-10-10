@@ -321,7 +321,8 @@ async def t_type(m: Message, state: FSMContext):
     pt = "percent" if m.text.startswith("Foiz") else "per_student"
     await state.update_data(pay_type=pt)
     await state.set_state(AddTeacher.value)
-    await m.answer("Foiz (masalan 40):" if pt == "percent" else "Bir o'quvchi uchun summa (so'm):")
+    await m.answer("Foiz (masalan 40):" if pt == "percent" else "Bir o'quvchi uchun summa (so'm).\nMasalan 200000: o'quvchi 400000 gacha to'lasa "
+        "o'qituvchi to'lovning 40% ini oladi, undan ko'p to'lasa 200000.")
 
 
 @router.message(AddTeacher.value)
@@ -598,7 +599,9 @@ def months_markup(prefix):
 
 async def salary_text(db, tid, month):
     pt, pv, rows, total = await D.teacher_salary(db, tid, month)
-    how = f"{pv:g}% (to'lovdan)" if pt == "percent" else f"{money(pv)} / to'lagan o'quvchi"
+    how = (f"{pv:g}% (to'lovdan)" if pt == "percent" else
+           f"{money(pv)} / o'quvchi ({money(pv * D.LOW_PAY_MULT)} gacha to'lasa - "
+           f"to'lovning {D.LOW_PAY_PERCENT}%)")
     out = [f"💰 Oylik ({month})", f"Tizim: {how}", ""]
     for name, income, cnt in rows:
         out.append(f"• {name}: tushum {money(income)}, to'laganlar {cnt} ta")
