@@ -18,7 +18,7 @@ turso db tokens create markaz     # -> TURSO_AUTH_TOKEN
 Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan keyin o'chib ketadi.
 
 ## Imkoniyatlar
-- **Direktor**: o'qituvchi (foiz / o'quvchi boshiga) va admin qo'shish, oyliklar, admin funksiyalari.
+- **Direktor**: o'qituvchi (foiz / o'quvchi boshiga: stavkaning 2 baravarigacha to'lagan o'quvchidan to'lovning 40%, undan ko'pidan stavka) va admin qo'shish, oyliklar, admin funksiyalari.
 - **Admin**: guruh, o'quvchi qo'shish; to'lov kiritish va bekor qilish; o'quvchini ko'chirish; guruh/o'qituvchi/o'quvchini o'chirish; guruh o'qituvchisini almashtirish; qarzdorlar; oylik hisobot (o'tgan oylar ham).
 - O'quvchining telefon raqami saqlanadi: qarzdorlar ro'yxati, davomat xabari va PDF'da ko'rinadi; "📞 Telefonni o'zgartirish" tugmasi bor.
 - **O'qituvchi**: o'z guruhiga o'quvchi qo'shish/o'chirish, davomat (PDF adminga), oylik (o'tgan oylar ham), barcha guruhlari qarzdorlari.

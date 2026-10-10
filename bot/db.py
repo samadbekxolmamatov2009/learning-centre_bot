@@ -238,6 +238,21 @@ async def group_income(db, group_id, month=None):
     return row["t"]
 
 
+# "O'quvchi boshiga" oylik qoidasi: o'quvchi to'lovi stavkaning LOW_PAY_MULT baravaridan
+# oshmasa (masalan stavka 200 000 bo'lsa 400 000 gacha) o'qituvchi shu to'lovning
+# LOW_PAY_PERCENT foizini oladi, undan ko'p to'lasa - stavkaning o'zini.
+LOW_PAY_MULT = 2
+LOW_PAY_PERCENT = 40
+
+
+def per_student_pay(rate: float, paid_sum: float) -> float:
+    if paid_sum <= 0:
+        return 0.0
+    if paid_sum <= rate * LOW_PAY_MULT:
+        return paid_sum * LOW_PAY_PERCENT / 100
+    return float(rate)
+
+
 async def teacher_salary(db, teacher_id, month=None):
     """Return (pay_type, pay_value, [(group, income, paid_count)], salary)."""
     month = month or current_month()
@@ -247,8 +262,10 @@ async def teacher_salary(db, teacher_id, month=None):
     rows, total = [], 0.0
     for g in await fetchall(db, "SELECT * FROM groups WHERE teacher_id=?", (teacher_id,)):
         income = await group_income(db, g["id"], month)
-        paid_cnt = sum(1 for s in await group_students(db, g["id"], month) if s["paid"])
-        rows.append((g["name"], income, paid_cnt))
-        total += income * t["pay_value"] / 100 if t["pay_type"] == "percent" \
-            else paid_cnt * t["pay_value"]
+        studs = await group_students(db, g["id"], month)
+        rows.append((g["name"], income, sum(1 for s in studs if s["paid"])))
+        if t["pay_type"] == "percent":
+            total += income * t["pay_value"] / 100
+        else:
+            total += sum(per_student_pay(t["pay_value"], s["paid_sum"]) for s in studs)
     return t["pay_type"], t["pay_value"], rows, total
