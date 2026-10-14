@@ -27,3 +27,4 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - **Qidirish** (hamma): ism/familiya/telefon bo'yicha; o'qituvchi faqat o'z guruhlarida qidiradi.
 - **Excel** (admin, direktor): qarzdorlar, barcha o'quvchilar, oylik hisobot (.xlsx).
 - **Statistika** (direktor): tushum, oylik, o'quvchilar, qarzdorlik va davomat foizi.
+- **Reyestr o'quvchilari** (kam ta'minlangan oila, davlat to'laydi): o'quvchi qo'shishda admin/direktor "🏛 Reyestr" ni tanlab, bitta dars narxini kiritadi. Davomatda kelgan har bir dars uchun shu narx (dars paytidagi stavka) o'qituvchi oyligiga **100%** qo'shiladi, foiz yoki "o'quvchi boshiga" qoidasi qo'llanmaydi. Reyestr o'quvchisi qarzdor hisoblanmaydi. "🏛 Reyestr belgilash" tugmasi bilan mavjud o'quvchini reyestrga o'tkazish yoki narxni o'zgartirish mumkin (narx faqat keyingi darslarga ta'sir qiladi).

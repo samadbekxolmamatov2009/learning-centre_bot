@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS groups(
 CREATE TABLE IF NOT EXISTS students(
     id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT NOT NULL,
     last_name TEXT NOT NULL, grade TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '',
+    is_registry INTEGER NOT NULL DEFAULT 0, reg_rate INTEGER NOT NULL DEFAULT 0,
     group_id INTEGER NOT NULL REFERENCES groups(id));
 CREATE TABLE IF NOT EXISTS payments(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,6 +33,7 @@ CREATE INDEX IF NOT EXISTS idx_payments_group_month ON payments(group_id, month)
 CREATE TABLE IF NOT EXISTS attendance(
     id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER NOT NULL,
     day TEXT NOT NULL, student_id INTEGER NOT NULL, present INTEGER NOT NULL,
+    rate INTEGER NOT NULL DEFAULT 0,
     UNIQUE(group_id, day, student_id));
 CREATE TABLE IF NOT EXISTS notices(key TEXT PRIMARY KEY);
 """
@@ -75,6 +77,12 @@ class Database:
                 ("ALTER TABLE payments_new RENAME TO payments", ()),
                 ("CREATE INDEX IF NOT EXISTS idx_payments_student_month ON payments(student_id, month)", ()),
                 ("CREATE INDEX IF NOT EXISTS idx_payments_group_month ON payments(group_id, month)", ())])
+        for col, ddl in (("is_registry", "INTEGER NOT NULL DEFAULT 0"), ("reg_rate", "INTEGER NOT NULL DEFAULT 0")):
+            if col not in cols:
+                await self.execute(f"ALTER TABLE students ADD COLUMN {col} {ddl}")
+        acols = [r["name"] for r in await self.fetchall("PRAGMA table_info(attendance)")]
+        if "rate" not in acols:
+            await self.execute("ALTER TABLE attendance ADD COLUMN rate INTEGER NOT NULL DEFAULT 0")
         if "phone" not in cols:  # eski bazani yangilash
             await self.execute("ALTER TABLE students ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
 
@@ -220,11 +228,12 @@ async def get_role(db, tg_id):
 
 
 async def group_students(db, group_id, month=None):
-    """Guruh o'quvchilari; paid = shu oyda to'lov kiritilganmi (summasi qanday bo'lishidan qat'iy nazar)."""
+    """Guruh o'quvchilari; paid = shu oyda to'lov kiritilganmi (summasi qanday bo'lishidan qat'iy nazar).
+    Reyestr o'quvchilari (davlat to'laydi) hech qachon qarzdor emas, shuning uchun paid=1."""
     month = month or current_month()
     return await fetchall(db, """
         SELECT s.*, COALESCE(SUM(p.amount),0) AS paid_sum,
-               COUNT(p.id) > 0 AS paid
+               (COUNT(p.id) > 0 OR s.is_registry = 1) AS paid
         FROM students s LEFT JOIN payments p
              ON p.student_id=s.id AND p.month=?
         WHERE s.group_id=? GROUP BY s.id ORDER BY s.last_name, s.first_name
@@ -253,6 +262,25 @@ def per_student_pay(rate: float, paid_sum: float) -> float:
     return float(rate)
 
 
+async def registry_rows(db, teacher_id, month=None):
+    """Reyestr o'quvchilari: [(guruh, kelgan darslar soni, summa)]. Summa har bir dars paytidagi
+    stavka bo'yicha (attendance.rate) hisoblanadi, o'qituvchiga 100% beriladi."""
+    month = month or current_month()
+    rows = await fetchall(db, """
+        SELECT g.name AS name, COUNT(*) AS lessons, COALESCE(SUM(a.rate),0) AS total
+        FROM attendance a JOIN groups g ON g.id=a.group_id
+        WHERE g.teacher_id=? AND a.present=1 AND a.rate>0 AND a.day LIKE ?
+        GROUP BY g.id ORDER BY g.name""", (teacher_id, month + "-%"))
+    return [(r["name"], r["lessons"], r["total"]) for r in rows]
+
+
+async def registry_total(db, month=None):
+    month = month or current_month()
+    row = await fetchone(db, "SELECT COALESCE(SUM(rate),0) t FROM attendance "
+                             "WHERE present=1 AND day LIKE ?", (month + "-%",))
+    return row["t"]
+
+
 async def teacher_salary(db, teacher_id, month=None):
     """Return (pay_type, pay_value, [(group, income, paid_count)], salary)."""
     month = month or current_month()
@@ -263,9 +291,10 @@ async def teacher_salary(db, teacher_id, month=None):
     for g in await fetchall(db, "SELECT * FROM groups WHERE teacher_id=?", (teacher_id,)):
         income = await group_income(db, g["id"], month)
         studs = await group_students(db, g["id"], month)
-        rows.append((g["name"], income, sum(1 for s in studs if s["paid"])))
+        rows.append((g["name"], income, sum(1 for s in studs if s["paid"] and not s["is_registry"])))
         if t["pay_type"] == "percent":
             total += income * t["pay_value"] / 100
         else:
             total += sum(per_student_pay(t["pay_value"], s["paid_sum"]) for s in studs)
+    total += sum(r[2] for r in await registry_rows(db, teacher_id, month))  # reyestr: 100%
     return t["pay_type"], t["pay_value"], rows, total

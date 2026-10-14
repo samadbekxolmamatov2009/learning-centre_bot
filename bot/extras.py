@@ -192,11 +192,17 @@ async def report_text(db, month):
     total = 0
     for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
         studs = await D.group_students(db, g["id"], month)
-        paid = sum(1 for s in studs if s["paid"])
+        reg = sum(1 for s in studs if s["is_registry"])
+        paid = sum(1 for s in studs if s["paid"]) - reg
         income = await D.group_income(db, g["id"], month)
         total += income
-        out.append(f"• {g['name']}: {money(income)} | to'lagan {paid}, qarzdor {len(studs) - paid}")
-    out += [f"Jami tushum: {money(total)}", "", "O'qituvchilar oyligi:"]
+        out.append(f"• {g['name']}: {money(income)} | to'lagan {paid}, "
+                   + (f"reyestr {reg}, " if reg else "") + f"qarzdor {len(studs) - paid - reg}")
+    reg_total = await D.registry_total(db, month)
+    out.append(f"Jami tushum: {money(total)}")
+    if reg_total:
+        out.append(f"🏛 Reyestr (davlat to'lovi, o'qituvchilarga to'liq): {money(reg_total)}")
+    out += ["", "O'qituvchilar oyligi:"]
     paid_out = 0
     for t in await db.fetchall("SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
                                "ORDER BY u.full_name"):
@@ -281,6 +287,7 @@ async def sr_do(m: Message, db, state: FSMContext):
         args = (uid,)
     paid_ids = {r["student_id"] for r in await db.fetchall(
         "SELECT DISTINCT student_id FROM payments WHERE month=?", (D.current_month(),))}
+    paid_ids |= {s["id"] for s in await db.fetchall("SELECT id FROM students WHERE is_registry=1")}
     q_digits = "".join(ch for ch in q if ch.isdigit())
     found = []
     for s in await db.fetchall(sql, args):
@@ -292,7 +299,7 @@ async def sr_do(m: Message, db, state: FSMContext):
         return await m.answer("Hech narsa topilmadi.")
     lines = [f"🔎 Topildi: {len(found)} ta" + (" (dastlabki 20 tasi)" if len(found) > 20 else "")]
     for s in found[:20]:
-        mark = "✅" if s["id"] in paid_ids else "❌ qarzdor"
+        mark = "🏛 reyestr" if s["is_registry"] else ("✅" if s["id"] in paid_ids else "❌ qarzdor")
         lines.append(f"• {s['last_name']} {s['first_name']} | {s['grade']}-sinf | {s['gname']} | "
                      f"{mark}{with_phone(s)}")
     await m.answer("\n".join(lines))
@@ -329,7 +336,8 @@ async def _students_rows(db, month, only_debtors):
             if only_debtors and s["paid"]:
                 continue
             rows.append([g["name"], s["last_name"], s["first_name"], s["grade"], s["phone"],
-                         "To'lagan" if s["paid"] else "Qarzdor", s["paid_sum"]])
+                         "Reyestr" if s["is_registry"] else ("To'lagan" if s["paid"] else "Qarzdor"),
+                         s["paid_sum"]])
     return rows
 
 
@@ -365,9 +373,10 @@ async def xl_report(c: CallbackQuery, db):
     grows = []
     for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
         studs = await D.group_students(db, g["id"], mo)
-        paid = sum(1 for s in studs if s["paid"])
-        grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, len(studs) - paid])
-    _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Qarzdorlar"], grows, True)
+        reg = sum(1 for s in studs if s["is_registry"])
+        paid = sum(1 for s in studs if s["paid"]) - reg
+        grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, len(studs) - paid - reg])
+    _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Reyestr", "Qarzdorlar"], grows, True)
     trows = []
     for t in await db.fetchall("SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
                                "ORDER BY u.full_name"):
@@ -389,9 +398,11 @@ async def stats(m: Message, db):
     income = {mo: (await db.fetchone("SELECT COALESCE(SUM(amount),0) t FROM payments WHERE month=?", (mo,)))["t"]
               for mo in (cur, prev)}
     n_students = (await db.fetchone("SELECT COUNT(*) n FROM students"))["n"]
+    n_reg = (await db.fetchone("SELECT COUNT(*) n FROM students WHERE is_registry=1"))["n"]
     n_paid = (await db.fetchone(
-        "SELECT COUNT(DISTINCT p.student_id) n FROM payments p JOIN students s ON s.id=p.student_id "
-        "WHERE p.month=?", (cur,)))["n"]
+        "SELECT COUNT(DISTINCT s.id) n FROM students s LEFT JOIN payments p "
+        "ON p.student_id=s.id AND p.month=? WHERE p.id IS NOT NULL OR s.is_registry=1", (cur,)))["n"]
+    reg_total = await D.registry_total(db, cur)
     salaries = 0
     for t in await db.fetchall("SELECT tg_id FROM teachers"):
         salaries += (await D.teacher_salary(db, t["tg_id"], cur))[3]
@@ -400,8 +411,9 @@ async def stats(m: Message, db):
            f"💵 Tushum: {money(income[cur])}",
            f"   O'tgan oy ({prev}): {money(income[prev])} ({'+' if diff >= 0 else '-'}{money(abs(diff))})",
            f"👨‍🏫 O'qituvchilar oyligi: {money(salaries)}",
-           f"🏦 Qolgan (tushum - oylik): {money(income[cur] - salaries)}", "",
-           f"👥 O'quvchilar: {n_students} ta",
+           *([f"🏛 Reyestr (davlat to'lovi): {money(reg_total)}"] if reg_total else []),
+           f"🏦 Qolgan (tushum + reyestr - oylik): {money(income[cur] + reg_total - salaries)}", "",
+           f"👥 O'quvchilar: {n_students} ta" + (f" (shundan reyestr: {n_reg})" if n_reg else ""),
            f"✅ To'laganlar: {n_paid} ({_pct(n_paid, n_students)})",
            f"❌ Qarzdorlar: {n_students - n_paid} ({_pct(n_students - n_paid, n_students)})", ""]
     att = await db.fetchone("SELECT COALESCE(SUM(present),0) p, COUNT(*) n FROM attendance WHERE day LIKE ?",
@@ -533,9 +545,75 @@ async def gl_group(c: CallbackQuery, db):
     tname = g["tname"] or "o'qituvchisiz"
     head = [f"📚 {g['name']} | {tname}",
             f"O'quvchilar: {len(studs)} | to'lagan: {paid} | qarzdor: {len(studs) - paid}", ""]
-    lines = [f"{i}. {'✅' if s['paid'] else '❌'} {s['last_name']} {s['first_name']} "
+    lines = [f"{i}. {'🏛' if s['is_registry'] else ('✅' if s['paid'] else '❌')} {s['last_name']} {s['first_name']} "
              f"({s['grade']}-sinf){with_phone(s)}" for i, s in enumerate(studs, 1)]
     text = "\n".join(head + (lines or ["Guruhda o'quvchi yo'q."]))
     for i in range(0, len(text), 4000):
         await c.message.answer(text[i:i + 4000])
     await c.answer()
+
+
+# ---------------- Reyestr belgilash / dars narxini o'zgartirish (admin, direktor) ----------------
+class RegSet(StatesGroup):
+    rate = State()
+
+
+@router.message(F.text == "🏛 Reyestr belgilash", STAFF)
+async def rx_start(m: Message, db):
+    mk = await group_picker(db, "rxg")
+    await m.answer("Qaysi guruh?", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
+
+
+@router.callback_query(F.data.startswith("rxg:"), STAFF)
+async def rx_group(c: CallbackQuery, db):
+    studs = await D.group_students(db, int(c.data[4:]))
+    b = InlineKeyboardBuilder()
+    for s in studs:
+        tag = f"🏛 {s['reg_rate']}" if s["is_registry"] else "oddiy"
+        b.button(text=f"{s['last_name']} {s['first_name']} ({tag})", callback_data=f"rxs:{s['id']}")
+    b.adjust(1)
+    await c.message.answer("Qaysi o'quvchi?" if studs else "Guruhda o'quvchi yo'q.",
+                           reply_markup=b.as_markup() if studs else None)
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("rxs:"), STAFF)
+async def rx_student(c: CallbackQuery, db):
+    s = await db.fetchone("SELECT * FROM students WHERE id=?", (int(c.data[4:]),))
+    if not s:
+        return await c.answer("Topilmadi", show_alert=True)
+    row = [InlineKeyboardButton(text="🏛 Reyestr / narxni o'zgartirish", callback_data=f"rxa:y:{s['id']}")]
+    if s["is_registry"]:
+        row.append(InlineKeyboardButton(text="Oddiy qilish", callback_data=f"rxa:n:{s['id']}"))
+    state_txt = f"reyestr, dars narxi {money(s['reg_rate'])}" if s["is_registry"] else "oddiy"
+    await c.message.answer(f"{s['last_name']} {s['first_name']}: hozir {state_txt}.\n"
+                           "Narx o'zgarsa, faqat keyingi darslarga ta'sir qiladi.",
+                           reply_markup=InlineKeyboardMarkup(inline_keyboard=[[r] for r in row]))
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("rxa:"), STAFF)
+async def rx_action(c: CallbackQuery, db, state: FSMContext):
+    _, act, sid = c.data.split(":")
+    sid = int(sid)
+    if act == "n":
+        await db.execute("UPDATE students SET is_registry=0, reg_rate=0 WHERE id=?", (sid,))
+        await c.message.edit_text("✅ Oddiy o'quvchi qilindi. Oldingi darslar uchun hisob o'zgarmaydi.")
+        return await c.answer()
+    await state.set_state(RegSet.rate)
+    await state.update_data(student_id=sid)
+    await c.message.answer("Bitta darsi uchun summa (so'm), masalan 8000:")
+    await c.answer()
+
+
+@router.message(RegSet.rate)
+async def rx_rate(m: Message, db, state: FSMContext):
+    try:
+        rate = int((m.text or "").replace(" ", ""))
+        assert rate > 0
+    except Exception:
+        return await m.answer("Musbat butun son kiriting, masalan 8000.")
+    sid = (await state.get_data())["student_id"]
+    await db.execute("UPDATE students SET is_registry=1, reg_rate=? WHERE id=?", (rate, sid))
+    await state.clear()
+    await m.answer(f"✅ Reyestr, dars narxi {money(rate)}. Keyingi davomatlardan boshlab hisoblanadi.")

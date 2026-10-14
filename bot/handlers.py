@@ -60,7 +60,7 @@ MENU_ADMIN = kb([["📚 Guruhlar"], ["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov
                  ["🔁 Guruh o'qituvchisini almashtirish", "🔀 O'quvchini ko'chirish"],
                  ["↩️ To'lovni bekor qilish", "📅 Hisobot"],
                  ["📞 Telefonni o'zgartirish", "🔎 Qidirish"],
-                 ["📥 Excel"]])
+                 ["📥 Excel", "🏛 Reyestr belgilash"]])
 MENU_DIRECTOR = kb([["📚 Guruhlar"], ["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
                     ["📊 Guruh hisobi", "👨‍🏫 O'qituvchi qo'shish"],
                     ["🛡 Admin qo'shish", "💰 Oyliklar"],
@@ -68,7 +68,8 @@ MENU_DIRECTOR = kb([["📚 Guruhlar"], ["➕ O'quvchi", "➕ Guruh"], ["💵 To'
                     ["🗑 O'qituvchini o'chirish", "🔁 Guruh o'qituvchisini almashtirish"],
                     ["🔀 O'quvchini ko'chirish", "↩️ To'lovni bekor qilish"],
                     ["📅 Hisobot", "📞 Telefonni o'zgartirish"],
-                    ["🔎 Qidirish", "📥 Excel"], ["📈 Statistika", "🗑 Adminni o'chirish"]])
+                    ["🔎 Qidirish", "📥 Excel"], ["📈 Statistika", "🗑 Adminni o'chirish"],
+                    ["🏛 Reyestr belgilash"]])
 MENU_TEACHER = kb([["📚 Guruhlarim"], ["✅ Davomat", "➕ O'quvchi"],
                    ["💰 Oylikni ko'rish", "📋 Qarzdorlarni ko'rish"],
                    ["🗑 O'quvchini o'chirish", "📞 Telefonni o'zgartirish"],
@@ -421,7 +422,8 @@ async def g_teacher(c: CallbackQuery, db, state: FSMContext):
 
 # ---------------- Admin/Director: o'quvchi ----------------
 class AddStudent(StatesGroup):
-    first = State(); last = State(); grade = State(); phone = State(); group = State()
+    first = State(); last = State(); grade = State(); phone = State()
+    registry = State(); rate = State(); group = State()
 
 
 @router.message(F.text == "➕ O'quvchi", ANYONE)
@@ -452,19 +454,52 @@ async def s_grade(m: Message, state: FSMContext):
                    "Bilmasangiz - yuboring:")
 
 
+async def ask_group(msg: Message, db, state: FSMContext, uid: int):
+    mk = await group_picker(db, "sg", uid if await D.get_role(db, uid) == "teacher" else None)
+    if not mk:
+        await state.clear()
+        return await msg.answer("Avval guruh yarating.")
+    await state.set_state(AddStudent.group)
+    await msg.answer("Guruhni tanlang:", reply_markup=mk)
+
+
 @router.message(AddStudent.phone)
 async def s_phone(m: Message, db, state: FSMContext):
     phone = normalize_phone(m.text or "")
     if phone is None:
         return await m.answer("Raqam noto'g'ri. Masalan: 90 123 45 67 (yoki - yuboring).")
-    await state.update_data(phone=phone)
+    await state.update_data(phone=phone, is_registry=0, reg_rate=0)
     uid = m.from_user.id
-    mk = await group_picker(db, "sg", uid if await D.get_role(db, uid) == "teacher" else None)
-    if not mk:
-        await state.clear()
-        return await m.answer("Avval guruh yarating.")
-    await state.set_state(AddStudent.group)
-    await m.answer("Guruhni tanlang:", reply_markup=mk)
+    if await D.get_role(db, uid) in ("admin", "director"):
+        # Reyestr o'quvchisi o'qituvchi oyligiga ta'sir qiladi, shuning uchun uni faqat admin/direktor belgilaydi
+        await state.set_state(AddStudent.registry)
+        return await m.answer("O'quvchi reyestrdami (kam ta'minlangan oila, davlat to'laydi)?",
+                              reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                                  InlineKeyboardButton(text="🏛 Reyestr", callback_data="reg:y"),
+                                  InlineKeyboardButton(text="Oddiy o'quvchi", callback_data="reg:n")]]))
+    await ask_group(m, db, state, uid)
+
+
+@router.callback_query(AddStudent.registry, F.data.in_({"reg:y", "reg:n"}))
+async def s_registry(c: CallbackQuery, db, state: FSMContext):
+    await c.answer()
+    if c.data == "reg:n":
+        await c.message.edit_text("Oddiy o'quvchi.")
+        return await ask_group(c.message, db, state, c.from_user.id)
+    await c.message.edit_text("🏛 Reyestr o'quvchisi.")
+    await state.set_state(AddStudent.rate)
+    await c.message.answer("Bitta darsi uchun summa (so'm), masalan 8000:")
+
+
+@router.message(AddStudent.rate)
+async def s_rate(m: Message, db, state: FSMContext):
+    try:
+        rate = int((m.text or "").replace(" ", ""))
+        assert rate > 0
+    except Exception:
+        return await m.answer("Musbat butun son kiriting, masalan 8000.")
+    await state.update_data(is_registry=1, reg_rate=rate)
+    await ask_group(m, db, state, m.from_user.id)
 
 
 @router.callback_query(AddStudent.group, F.data.startswith("sg:"))
@@ -472,11 +507,13 @@ async def s_group(c: CallbackQuery, db, state: FSMContext):
     d = await state.get_data()
     if not await can_access_group(db, c.from_user.id, int(c.data[3:])):
         return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
-    await db.execute("INSERT INTO students(first_name,last_name,grade,phone,group_id) VALUES(?,?,?,?,?)",
-                     (d["first"], d["last"], d["grade"], d.get("phone", ""), int(c.data[3:])))
-    await db.commit()
+    await db.execute("INSERT INTO students(first_name,last_name,grade,phone,is_registry,reg_rate,group_id) "
+                     "VALUES(?,?,?,?,?,?,?)",
+                     (d["first"], d["last"], d["grade"], d.get("phone", ""),
+                      d.get("is_registry", 0), d.get("reg_rate", 0), int(c.data[3:])))
     await state.clear()
-    await c.message.answer(f"✅ {d['first']} {d['last']} qo'shildi.")
+    extra = f" 🏛 Reyestr, dars narxi {money(d['reg_rate'])}." if d.get("is_registry") else ""
+    await c.message.answer(f"✅ {d['first']} {d['last']} qo'shildi.{extra}")
     await c.answer()
 
 
@@ -496,7 +533,7 @@ async def p_group(c: CallbackQuery, db):
     studs = await D.group_students(db, int(c.data[3:]))
     b = InlineKeyboardBuilder()
     for s in studs:
-        mark = "✅" if s["paid"] else "❌"
+        mark = "🏛" if s["is_registry"] else ("✅" if s["paid"] else "❌")
         b.button(text=f"{mark} {s['last_name']} {s['first_name']}", callback_data=f"ps:{s['id']}")
     b.adjust(1)
     await c.message.answer("O'quvchini tanlang (✅ - bu oy to'lagan):" if studs else "Guruhda o'quvchi yo'q.",
@@ -605,6 +642,10 @@ async def salary_text(db, tid, month):
     out = [f"💰 Oylik ({month})", f"Tizim: {how}", ""]
     for name, income, cnt in rows:
         out.append(f"• {name}: tushum {money(income)}, to'laganlar {cnt} ta")
+    reg = await D.registry_rows(db, tid, month)
+    if reg:
+        out += ["", "🏛 Reyestr o'quvchilari (100%):"]
+        out += [f"• {name}: {lessons} ta dars = {money(total_)}" for name, lessons, total_ in reg]
     out += ["", f"Jami oylik: {money(total)}"]
     return "\n".join(out)
 
@@ -677,9 +718,11 @@ async def att_done(c: CallbackQuery, db, state: FSMContext, bot: Bot):
     rows, stmts, absent_lines = [], [], []
     for s in await D.group_students(db, gid):
         present = s["id"] not in absent
-        stmts.append(("INSERT INTO attendance(group_id,day,student_id,present) VALUES(?,?,?,?) "
-                      "ON CONFLICT(group_id,day,student_id) DO UPDATE SET present=excluded.present",
-                      (gid, today, s["id"], int(present))))
+        rate = s["reg_rate"] if (present and s["is_registry"]) else 0  # dars paytidagi stavka saqlanadi
+        stmts.append(("INSERT INTO attendance(group_id,day,student_id,present,rate) VALUES(?,?,?,?,?) "
+                      "ON CONFLICT(group_id,day,student_id) DO UPDATE SET "
+                      "present=excluded.present, rate=excluded.rate",
+                      (gid, today, s["id"], int(present), rate)))
         rows.append((f"{s['last_name']} {s['first_name']}", s["grade"], s.get("phone") or "", present))
         if not present:
             absent_lines.append(f"• {s['last_name']} {s['first_name']}{with_phone(s)}")
