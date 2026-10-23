@@ -54,14 +54,14 @@ def kb(rows):
                                resize_keyboard=True)
 
 
-MENU_ADMIN = kb([["📚 Guruhlar"], ["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
+MENU_ADMIN = kb([["📚 Guruhlar"], ["➕ O'quvchi", "📤 Fayldan yuklash"], ["➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
                  ["📊 Guruh hisobi", "🗑 O'quvchini o'chirish"],
                  ["🗑 Guruhni o'chirish", "🗑 O'qituvchini o'chirish"],
                  ["🔁 Guruh o'qituvchisini almashtirish", "🔀 O'quvchini ko'chirish"],
                  ["↩️ To'lovni bekor qilish", "📅 Hisobot"],
                  ["📞 Telefonni o'zgartirish", "🔎 Qidirish"],
                  ["📥 Excel", "🏛 Reyestr belgilash"]])
-MENU_DIRECTOR = kb([["📚 Guruhlar"], ["➕ O'quvchi", "➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
+MENU_DIRECTOR = kb([["📚 Guruhlar"], ["➕ O'quvchi", "📤 Fayldan yuklash"], ["➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
                     ["📊 Guruh hisobi", "👨‍🏫 O'qituvchi qo'shish"],
                     ["🛡 Admin qo'shish", "💰 Oyliklar"],
                     ["🗑 O'quvchini o'chirish", "🗑 Guruhni o'chirish"],
@@ -71,7 +71,7 @@ MENU_DIRECTOR = kb([["📚 Guruhlar"], ["➕ O'quvchi", "➕ Guruh"], ["💵 To'
                     ["🔎 Qidirish", "📥 Excel"], ["📈 Statistika", "🗑 Adminni o'chirish"],
                     ["🏛 Reyestr belgilash", "👁 Reyestr yashirish/ochish"],
                     ["✏️ O'qituvchini tahrirlash"]])
-MENU_TEACHER = kb([["📚 Guruhlarim"], ["✅ Davomat", "➕ O'quvchi"],
+MENU_TEACHER = kb([["📚 Guruhlarim"], ["✅ Davomat", "➕ O'quvchi"], ["📤 Fayldan yuklash"],
                    ["💰 Oylikni ko'rish", "📋 Qarzdorlarni ko'rish"],
                    ["🗑 O'quvchini o'chirish", "📞 Telefonni o'zgartirish"],
                    ["🔎 Qidirish"]])

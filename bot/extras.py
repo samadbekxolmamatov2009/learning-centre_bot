@@ -15,6 +15,7 @@ from openpyxl.styles import Font
 
 from . import db as D
 from .config import TZ_OFFSET, REMINDER_HOUR
+from .importer import parse_file
 from .handlers import (Role, STAFF, ANYONE, DIRECTOR, prev_months, with_phone, group_picker, confirm_kb, money, months_markup, debtors_text,
                        can_access_group, normalize_phone)
 
@@ -763,3 +764,97 @@ async def et_reg_save(m: Message, db, state: FSMContext):
     await state.clear()
     text, kb_ = await _teacher_card(db, tid)
     await m.answer("✅ Saqlandi. Yangi narx faqat keyingi darslarga ta'sir qiladi.\n" + text, reply_markup=kb_)
+
+
+# ---------------- Excel / Word fayldan o'quvchilarni yuklash (bitta guruhga) ----------------
+class Upload(StatesGroup):
+    file = State()
+
+
+UPLOAD_HELP = (
+    "📤 Guruh: {name}\n\n"
+    "Shu guruh o'quvchilari ro'yxatini Excel (.xlsx) yoki Word (.docx) fayl qilib yuboring.\n\n"
+    "Jadval ustunlari (sarlavhasi bilan):\n"
+    "Familiya | Ism | Sinf | Telefon\n"
+    "yoki bitta ustunda \"Familiya Ism\" ham bo'ladi. Sinf va telefon bo'lmasa ham mayli.\n"
+    "Sarlavha yo'q bo'lsa, tartib shunday: Familiya, Ism, Sinf, Telefon.\n"
+    "Word'da jadval yoki har qatorga bittadan: Valiyev Ali, 7, 901234567\n\n"
+    "Hamma o'quvchilar oddiy (reyestrsiz) bo'lib qo'shiladi. Bekor qilish: /cancel")
+
+
+@router.message(F.text == "📤 Fayldan yuklash", ANYONE)
+async def up_start(m: Message, db):
+    uid = m.from_user.id
+    mk = await group_picker(db, "ugp", uid if await D.get_role(db, uid) == "teacher" else None)
+    await m.answer("Qaysi guruhga yuklaymiz?", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
+
+
+@router.callback_query(F.data.startswith("ugp:"))
+async def up_group(c: CallbackQuery, db, state: FSMContext):
+    gid = int(c.data[4:])
+    if not await can_access_group(db, c.from_user.id, gid):
+        return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
+    g = await db.fetchone("SELECT name FROM groups WHERE id=?", (gid,))
+    await state.set_state(Upload.file)
+    await state.update_data(group_id=gid)
+    await c.message.answer(UPLOAD_HELP.format(name=g["name"]))
+    await c.answer()
+
+
+@router.message(Upload.file, ~F.document)
+async def up_not_file(m: Message):
+    await m.answer("Fayl yuboring (.xlsx yoki .docx) yoki /cancel.")
+
+
+@router.message(Upload.file, F.document)
+async def up_file(m: Message, db, state: FSMContext, bot: Bot):
+    doc = m.document
+    if (doc.file_size or 0) > 5 * 1024 * 1024:
+        return await m.answer("Fayl juda katta (5 MB gacha).")
+    gid = (await state.get_data())["group_id"]
+    if not await can_access_group(db, m.from_user.id, gid):
+        await state.clear()
+        return await m.answer("Bu sizning guruhingiz emas.")
+    buf = io.BytesIO()
+    await bot.download(doc, destination=buf)
+    try:
+        students, errors = parse_file(doc.file_name or "", buf.getvalue())
+    except ValueError as e:
+        return await m.answer(f"❌ {e}")
+    except Exception:
+        log.exception("Fayl o'qilmadi")
+        return await m.answer("❌ Faylni o'qib bo'lmadi. Boshqa nomli .xlsx yoki .docx qilib saqlab qayta yuboring.")
+    if not students:
+        return await m.answer("❌ Faylda o'quvchi topilmadi. Ustun sarlavhalarini tekshiring (Familiya, Ism, Sinf, Telefon).")
+
+    existing = {(r["last_name"].casefold(), r["first_name"].casefold())
+                for r in await db.fetchall("SELECT last_name, first_name FROM students WHERE group_id=?", (gid,))}
+    stmts, dups, bad_phone, seen = [], [], [], set()
+    for st in students:
+        key = (st["last"].casefold(), st["first"].casefold())
+        if key in existing or key in seen:
+            dups.append(f"{st['last']} {st['first']}")
+            continue
+        seen.add(key)
+        phone = normalize_phone(st["phone"]) if st["phone"] else ""
+        if phone is None:
+            bad_phone.append(f"{st['last']} {st['first']} ({st['phone']})")
+            phone = ""
+        stmts.append(("INSERT INTO students(first_name,last_name,grade,phone,group_id) VALUES(?,?,?,?,?)",
+                      (st["first"], st["last"], st["grade"] or "-", phone, gid)))
+    for i in range(0, len(stmts), 300):
+        await db.batch(stmts[i:i + 300])
+    await state.clear()
+
+    g = await db.fetchone("SELECT name FROM groups WHERE id=?", (gid,))
+    out = [f"✅ {g['name']} guruhiga {len(stmts)} ta o'quvchi qo'shildi."]
+    if dups:
+        out.append(f"⏭ {len(dups)} ta takror (guruhda bor) o'tkazib yuborildi.")
+    if errors:
+        out.append(f"⚠️ {len(errors)} ta qator o'qilmadi:")
+        out += [f"  • {line}-qator: {why}" for line, why in errors[:15]]
+    if bad_phone:
+        out.append(f"📞 {len(bad_phone)} ta telefon noto'g'ri (raqamsiz qo'shildi):")
+        out += [f"  • {x}" for x in bad_phone[:15]]
+    text = "\n".join(out)
+    await m.answer(text[:4000])
