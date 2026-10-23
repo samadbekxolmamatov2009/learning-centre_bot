@@ -69,7 +69,8 @@ MENU_DIRECTOR = kb([["📚 Guruhlar"], ["➕ O'quvchi", "➕ Guruh"], ["💵 To'
                     ["🔀 O'quvchini ko'chirish", "↩️ To'lovni bekor qilish"],
                     ["📅 Hisobot", "📞 Telefonni o'zgartirish"],
                     ["🔎 Qidirish", "📥 Excel"], ["📈 Statistika", "🗑 Adminni o'chirish"],
-                    ["🏛 Reyestr belgilash"]])
+                    ["🏛 Reyestr belgilash", "👁 Reyestr yashirish/ochish"],
+                    ["✏️ O'qituvchini tahrirlash"]])
 MENU_TEACHER = kb([["📚 Guruhlarim"], ["✅ Davomat", "➕ O'quvchi"],
                    ["💰 Oylikni ko'rish", "📋 Qarzdorlarni ko'rish"],
                    ["🗑 O'quvchini o'chirish", "📞 Telefonni o'zgartirish"],
@@ -288,7 +289,7 @@ async def rg_teacher(c: CallbackQuery, db):
 
 # ---------------- Director: o'qituvchi / admin qo'shish ----------------
 class AddTeacher(StatesGroup):
-    tg_id = State(); name = State(); pay_type = State(); value = State()
+    tg_id = State(); name = State(); pay_type = State(); value = State(); reg_rate = State()
 
 
 class AddAdmin(StatesGroup):
@@ -333,14 +334,28 @@ async def t_value(m: Message, db, state: FSMContext):
         assert v > 0
     except Exception:
         return await m.answer("Musbat son kiriting.")
+    await state.update_data(value=v)
+    await state.set_state(AddTeacher.reg_rate)
+    await m.answer("Reyestr o'quvchilar uchun bitta dars narxi (so'm) - o'qituvchi reyestr o'quvchisi "
+                   "darsga kelganda shuncha oladi (100%). Reyestr bo'lmasa 0 yozing:")
+
+
+@router.message(AddTeacher.reg_rate)
+async def t_reg(m: Message, db, state: FSMContext):
+    try:
+        reg = int((m.text or "").replace(" ", ""))
+        assert reg >= 0
+    except Exception:
+        return await m.answer("0 yoki musbat butun son kiriting.")
     d = await state.get_data()
     await db.batch([
         ("INSERT INTO users(tg_id,full_name,role) VALUES(?,?,'teacher') "
          "ON CONFLICT(tg_id) DO UPDATE SET full_name=excluded.full_name, role='teacher'",
          (d["tg_id"], d["name"])),
-        ("INSERT INTO teachers(tg_id,pay_type,pay_value) VALUES(?,?,?) "
-         "ON CONFLICT(tg_id) DO UPDATE SET pay_type=excluded.pay_type, pay_value=excluded.pay_value",
-         (d["tg_id"], d["pay_type"], v))])
+        ("INSERT INTO teachers(tg_id,pay_type,pay_value,registry_rate) VALUES(?,?,?,?) "
+         "ON CONFLICT(tg_id) DO UPDATE SET pay_type=excluded.pay_type, pay_value=excluded.pay_value, "
+         "registry_rate=excluded.registry_rate",
+         (d["tg_id"], d["pay_type"], d["value"], reg))])
     await state.clear()
     await m.answer(f"✅ O'qituvchi {d['name']} qo'shildi.", reply_markup=MENU_DIRECTOR)
 
@@ -423,7 +438,7 @@ async def g_teacher(c: CallbackQuery, db, state: FSMContext):
 # ---------------- Admin/Director: o'quvchi ----------------
 class AddStudent(StatesGroup):
     first = State(); last = State(); grade = State(); phone = State()
-    registry = State(); rate = State(); group = State()
+    registry = State(); group = State()
 
 
 @router.message(F.text == "➕ O'quvchi", ANYONE)
@@ -485,21 +500,10 @@ async def s_registry(c: CallbackQuery, db, state: FSMContext):
     await c.answer()
     if c.data == "reg:n":
         await c.message.edit_text("Oddiy o'quvchi.")
-        return await ask_group(c.message, db, state, c.from_user.id)
-    await c.message.edit_text("🏛 Reyestr o'quvchisi.")
-    await state.set_state(AddStudent.rate)
-    await c.message.answer("Bitta darsi uchun summa (so'm), masalan 8000:")
-
-
-@router.message(AddStudent.rate)
-async def s_rate(m: Message, db, state: FSMContext):
-    try:
-        rate = int((m.text or "").replace(" ", ""))
-        assert rate > 0
-    except Exception:
-        return await m.answer("Musbat butun son kiriting, masalan 8000.")
-    await state.update_data(is_registry=1, reg_rate=rate)
-    await ask_group(m, db, state, m.from_user.id)
+    else:
+        await state.update_data(is_registry=1)
+        await c.message.edit_text("🏛 Reyestr o'quvchisi (dars narxi o'qituvchi ma'lumotidagi reyestr narxidan olinadi).")
+    await ask_group(c.message, db, state, c.from_user.id)
 
 
 @router.callback_query(AddStudent.group, F.data.startswith("sg:"))
@@ -507,12 +511,13 @@ async def s_group(c: CallbackQuery, db, state: FSMContext):
     d = await state.get_data()
     if not await can_access_group(db, c.from_user.id, int(c.data[3:])):
         return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
-    await db.execute("INSERT INTO students(first_name,last_name,grade,phone,is_registry,reg_rate,group_id) "
+    reg = d.get("is_registry", 0)
+    hidden = 1 if (reg and await D.get_setting(db, "registry_hidden") == "1") else 0
+    await db.execute("INSERT INTO students(first_name,last_name,grade,phone,is_registry,hidden,group_id) "
                      "VALUES(?,?,?,?,?,?,?)",
-                     (d["first"], d["last"], d["grade"], d.get("phone", ""),
-                      d.get("is_registry", 0), d.get("reg_rate", 0), int(c.data[3:])))
+                     (d["first"], d["last"], d["grade"], d.get("phone", ""), reg, hidden, int(c.data[3:])))
     await state.clear()
-    extra = f" 🏛 Reyestr, dars narxi {money(d['reg_rate'])}." if d.get("is_registry") else ""
+    extra = (" 🏛 Reyestr." + (" Hozir yashirin, 'Reyestr yashirish/ochish' orqali ochilganda ko'rinadi." if hidden else "")) if reg else ""
     await c.message.answer(f"✅ {d['first']} {d['last']} qo'shildi.{extra}")
     await c.answer()
 
@@ -716,9 +721,14 @@ async def att_done(c: CallbackQuery, db, state: FSMContext, bot: Bot):
     g = await D.fetchone(db, "SELECT * FROM groups WHERE id=?", (gid,))
     teacher = await D.fetchone(db, "SELECT full_name FROM users WHERE tg_id=?", (c.from_user.id,))
     rows, stmts, absent_lines = [], [], []
+    trow = await D.fetchone(db, "SELECT registry_rate FROM teachers WHERE tg_id=?", (g["teacher_id"],))
+    reg_price = trow["registry_rate"] if trow else 0
+    no_price = False
     for s in await D.group_students(db, gid):
         present = s["id"] not in absent
-        rate = s["reg_rate"] if (present and s["is_registry"]) else 0  # dars paytidagi stavka saqlanadi
+        rate = reg_price if (present and s["is_registry"]) else 0  # dars paytidagi stavka saqlanadi
+        if present and s["is_registry"] and not reg_price:
+            no_price = True
         stmts.append(("INSERT INTO attendance(group_id,day,student_id,present,rate) VALUES(?,?,?,?,?) "
                       "ON CONFLICT(group_id,day,student_id) DO UPDATE SET "
                       "present=excluded.present, rate=excluded.rate",
@@ -730,7 +740,9 @@ async def att_done(c: CallbackQuery, db, state: FSMContext, bot: Bot):
         await db.batch(stmts)
     caption = f"📋 {g['name']} davomati ({teacher['full_name']}), kelmagan: {len(absent)}"
     if absent_lines:
-        caption = (caption + "\n" + "\n".join(absent_lines))[:1000]
+        caption = (caption + "\n" + "\n".join(absent_lines))[:900]
+    if no_price:
+        caption += "\n⚠️ Reyestr o'quvchilar bor, lekin o'qituvchiga reyestr narxi kiritilmagan (0)."
     pdf = attendance_pdf(g["name"], teacher["full_name"], f"{date.today():%d.%m.%Y}", rows)
     for a in await D.fetchall(db, "SELECT tg_id FROM users WHERE role IN ('admin','director')"):
         try:
@@ -741,5 +753,6 @@ async def att_done(c: CallbackQuery, db, state: FSMContext, bot: Bot):
             pass
     await state.clear()
     await c.message.edit_reply_markup(reply_markup=None)
-    await c.message.answer("✅ Davomat yakunlandi va adminga yuborildi.")
+    await c.message.answer("✅ Davomat yakunlandi va adminga yuborildi." +
+                           ("\n⚠️ Reyestr narxi kiritilmagan, direktorga ayting." if no_price else ""))
     await c.answer()

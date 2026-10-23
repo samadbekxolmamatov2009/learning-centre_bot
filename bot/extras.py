@@ -280,14 +280,15 @@ async def sr_do(m: Message, db, state: FSMContext):
     if len(q) < 2:
         return await m.answer("Kamida 2 ta belgi yozing.")
     uid = m.from_user.id
-    sql = ("SELECT s.*, g.name AS gname FROM students s JOIN groups g ON g.id=s.group_id")
+    sql = ("SELECT s.*, g.name AS gname FROM students s JOIN groups g ON g.id=s.group_id "
+           "WHERE s.hidden=0")
     args = ()
     if await D.get_role(db, uid) == "teacher":
-        sql += " WHERE g.teacher_id=?"
+        sql += " AND g.teacher_id=?"
         args = (uid,)
     paid_ids = {r["student_id"] for r in await db.fetchall(
         "SELECT DISTINCT student_id FROM payments WHERE month=?", (D.current_month(),))}
-    paid_ids |= {s["id"] for s in await db.fetchall("SELECT id FROM students WHERE is_registry=1")}
+    paid_ids |= {s["id"] for s in await db.fetchall("SELECT id FROM students WHERE is_registry=1 AND hidden=0")}
     q_digits = "".join(ch for ch in q if ch.isdigit())
     found = []
     for s in await db.fetchall(sql, args):
@@ -397,11 +398,12 @@ async def stats(m: Message, db):
     cur, prev = prev_months(2)
     income = {mo: (await db.fetchone("SELECT COALESCE(SUM(amount),0) t FROM payments WHERE month=?", (mo,)))["t"]
               for mo in (cur, prev)}
-    n_students = (await db.fetchone("SELECT COUNT(*) n FROM students"))["n"]
-    n_reg = (await db.fetchone("SELECT COUNT(*) n FROM students WHERE is_registry=1"))["n"]
+    n_students = (await db.fetchone("SELECT COUNT(*) n FROM students WHERE hidden=0"))["n"]
+    n_reg = (await db.fetchone("SELECT COUNT(*) n FROM students WHERE is_registry=1 AND hidden=0"))["n"]
     n_paid = (await db.fetchone(
         "SELECT COUNT(DISTINCT s.id) n FROM students s LEFT JOIN payments p "
-        "ON p.student_id=s.id AND p.month=? WHERE p.id IS NOT NULL OR s.is_registry=1", (cur,)))["n"]
+        "ON p.student_id=s.id AND p.month=? WHERE s.hidden=0 AND (p.id IS NOT NULL OR s.is_registry=1)",
+        (cur,)))["n"]
     reg_total = await D.registry_total(db, cur)
     salaries = 0
     for t in await db.fetchall("SELECT tg_id FROM teachers"):
@@ -475,7 +477,7 @@ async def _groups_markup(db, teacher_id, back=False):
     else:
         groups = await db.fetchall("SELECT * FROM groups WHERE teacher_id IS NULL ORDER BY name")
     counts = {r["group_id"]: r["n"] for r in await db.fetchall(
-        "SELECT group_id, COUNT(*) n FROM students GROUP BY group_id")}
+        "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 GROUP BY group_id")}
     b = InlineKeyboardBuilder()
     for g in groups:
         b.button(text=f"{g['name']} ({counts.get(g['id'], 0)} ta)", callback_data=f"gl:g:{g['id']}")
@@ -553,11 +555,7 @@ async def gl_group(c: CallbackQuery, db):
     await c.answer()
 
 
-# ---------------- Reyestr belgilash / dars narxini o'zgartirish (admin, direktor) ----------------
-class RegSet(StatesGroup):
-    rate = State()
-
-
+# ---------------- Reyestr belgilash (admin, direktor) ----------------
 @router.message(F.text == "🏛 Reyestr belgilash", STAFF)
 async def rx_start(m: Message, db):
     mk = await group_picker(db, "rxg")
@@ -569,51 +567,199 @@ async def rx_group(c: CallbackQuery, db):
     studs = await D.group_students(db, int(c.data[4:]))
     b = InlineKeyboardBuilder()
     for s in studs:
-        tag = f"🏛 {s['reg_rate']}" if s["is_registry"] else "oddiy"
-        b.button(text=f"{s['last_name']} {s['first_name']} ({tag})", callback_data=f"rxs:{s['id']}")
+        b.button(text=f"{'🏛' if s['is_registry'] else '▫️'} {s['last_name']} {s['first_name']}",
+                 callback_data=f"rxs:{s['id']}")
     b.adjust(1)
-    await c.message.answer("Qaysi o'quvchi?" if studs else "Guruhda o'quvchi yo'q.",
+    await c.message.answer("O'quvchini bosing - reyestr / oddiy holati almashadi (🏛 - reyestr):"
+                           if studs else "Guruhda o'quvchi yo'q.",
                            reply_markup=b.as_markup() if studs else None)
     await c.answer()
 
 
 @router.callback_query(F.data.startswith("rxs:"), STAFF)
-async def rx_student(c: CallbackQuery, db):
+async def rx_toggle(c: CallbackQuery, db):
     s = await db.fetchone("SELECT * FROM students WHERE id=?", (int(c.data[4:]),))
     if not s:
         return await c.answer("Topilmadi", show_alert=True)
-    row = [InlineKeyboardButton(text="🏛 Reyestr / narxni o'zgartirish", callback_data=f"rxa:y:{s['id']}")]
     if s["is_registry"]:
-        row.append(InlineKeyboardButton(text="Oddiy qilish", callback_data=f"rxa:n:{s['id']}"))
-    state_txt = f"reyestr, dars narxi {money(s['reg_rate'])}" if s["is_registry"] else "oddiy"
-    await c.message.answer(f"{s['last_name']} {s['first_name']}: hozir {state_txt}.\n"
-                           "Narx o'zgarsa, faqat keyingi darslarga ta'sir qiladi.",
-                           reply_markup=InlineKeyboardMarkup(inline_keyboard=[[r] for r in row]))
+        await db.execute("UPDATE students SET is_registry=0, hidden=0 WHERE id=?", (s["id"],))
+        txt = "oddiy o'quvchi qilindi"
+    else:
+        hidden = 1 if await D.get_setting(db, "registry_hidden") == "1" else 0
+        await db.execute("UPDATE students SET is_registry=1, hidden=? WHERE id=?", (hidden, s["id"]))
+        txt = "reyestr qilindi" + (" (hozir yashirin)" if hidden else "")
+    await c.message.answer(f"✅ {s['last_name']} {s['first_name']} {txt}.")
     await c.answer()
 
 
-@router.callback_query(F.data.startswith("rxa:"), STAFF)
-async def rx_action(c: CallbackQuery, db, state: FSMContext):
-    _, act, sid = c.data.split(":")
-    sid = int(sid)
-    if act == "n":
-        await db.execute("UPDATE students SET is_registry=0, reg_rate=0 WHERE id=?", (sid,))
-        await c.message.edit_text("✅ Oddiy o'quvchi qilindi. Oldingi darslar uchun hisob o'zgarmaydi.")
-        return await c.answer()
-    await state.set_state(RegSet.rate)
-    await state.update_data(student_id=sid)
-    await c.message.answer("Bitta darsi uchun summa (so'm), masalan 8000:")
+# ---------------- Reyestr o'quvchilarni yashirish / ochish (faqat direktor) ----------------
+async def _reg_stats(db):
+    r = await db.fetchone("SELECT COUNT(*) n, COALESCE(SUM(hidden),0) h FROM students WHERE is_registry=1")
+    return r["n"], r["h"]
+
+
+async def _reg_panel(db):
+    n, h = await _reg_stats(db)
+    mode = await D.get_setting(db, "registry_hidden") == "1"
+    mode_txt = ("YOQILGAN (yangi qo'shiladigan reyestr o'quvchilar ham yashirin bo'ladi)" if mode
+                else "o'chirilgan")
+    text = (f"🏛 Reyestr o'quvchilar: {n} ta (ochiq {n - h}, yashirin {h})\n"
+            f"Yashirin rejim: {mode_txt}\n\n"
+            "Yashirin o'quvchilar ro'yxatlarda, davomatda, qarzdorlarda va hisobda ko'rinmaydi va hisoblanmaydi. "
+            "Ochilgan kundan boshlab davomatga kiradi va hisoblanadi.")
+    kb_ = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🙈 Hammasini yashirish", callback_data="rh:hide")],
+        [InlineKeyboardButton(text="👁 Hammasini ochish", callback_data="rh:show")],
+        [InlineKeyboardButton(text="📋 Yashirinlar ro'yxati", callback_data="rh:list")]])
+    return text, kb_
+
+
+@router.message(F.text == "👁 Reyestr yashirish/ochish", DIRECTOR)
+async def rh_start(m: Message, db):
+    text, kb_ = await _reg_panel(db)
+    await m.answer(text, reply_markup=kb_)
+
+
+@router.callback_query(F.data.in_({"rh:hide", "rh:show"}), DIRECTOR)
+async def rh_toggle(c: CallbackQuery, db):
+    hide = c.data == "rh:hide"
+    await db.batch([("UPDATE students SET hidden=? WHERE is_registry=1", (int(hide),)),
+                    ("INSERT INTO settings(key,value) VALUES('registry_hidden',?) "
+                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value", ("1" if hide else "0",))])
+    text, kb_ = await _reg_panel(db)
+    await c.message.edit_text(("🙈 Hammasi yashirildi.\n\n" if hide else "👁 Hammasi ochildi.\n\n") + text,
+                              reply_markup=kb_)
     await c.answer()
 
 
-@router.message(RegSet.rate)
-async def rx_rate(m: Message, db, state: FSMContext):
-    try:
-        rate = int((m.text or "").replace(" ", ""))
-        assert rate > 0
-    except Exception:
-        return await m.answer("Musbat butun son kiriting, masalan 8000.")
-    sid = (await state.get_data())["student_id"]
-    await db.execute("UPDATE students SET is_registry=1, reg_rate=? WHERE id=?", (rate, sid))
+@router.callback_query(F.data == "rh:list", DIRECTOR)
+async def rh_list(c: CallbackQuery, db):
+    rows = await db.fetchall("SELECT s.*, g.name AS gname FROM students s JOIN groups g ON g.id=s.group_id "
+                             "WHERE s.is_registry=1 AND s.hidden=1 ORDER BY g.name, s.last_name")
+    text = "Yashirin reyestr o'quvchilar yo'q." if not rows else "🙈 Yashirin reyestr o'quvchilar:\n" + "\n".join(
+        f"{i}. {r['last_name']} {r['first_name']} ({r['grade']}-sinf) | {r['gname']}{with_phone(r)}"
+        for i, r in enumerate(rows, 1))
+    for i in range(0, len(text), 4000):
+        await c.message.answer(text[i:i + 4000])
+    await c.answer()
+
+
+# ---------------- O'qituvchi ma'lumotlarini tahrirlash (faqat direktor) ----------------
+class EditTeacher(StatesGroup):
+    name = State(); value = State(); reg = State()
+
+
+async def _teacher_card(db, tid):
+    t = await db.fetchone("SELECT u.full_name, t.* FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
+                          "WHERE u.tg_id=?", (tid,))
+    if not t:
+        return None, None
+    how = (f"{t['pay_value']:g}% (to'lovdan)" if t["pay_type"] == "percent" else
+           f"{money(t['pay_value'])} / o'quvchi ({money(t['pay_value'] * D.LOW_PAY_MULT)} gacha to'lasa to'lovning "
+           f"{D.LOW_PAY_PERCENT}%)")
+    text = (f"👨‍🏫 {t['full_name']} (ID {tid})\n💼 Oylik: {how}\n"
+            f"🏛 Reyestr, bitta dars: {money(t['registry_rate']) if t['registry_rate'] else 'kiritilmagan'}")
+    kb_ = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="👤 Ismni o'zgartirish", callback_data=f"etn:{tid}")],
+        [InlineKeyboardButton(text="💼 Oylik turi / qiymati", callback_data=f"etp:{tid}")],
+        [InlineKeyboardButton(text="🏛 Reyestr dars narxi", callback_data=f"etr:{tid}")]])
+    return text, kb_
+
+
+@router.message(F.text == "✏️ O'qituvchini tahrirlash", DIRECTOR)
+async def et_start(m: Message, db):
+    ts = await db.fetchall("SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
+                           "ORDER BY u.full_name")
+    if not ts:
+        return await m.answer("O'qituvchilar yo'q.")
+    b = InlineKeyboardBuilder()
+    for t in ts:
+        b.button(text=t["full_name"], callback_data=f"et:{t['tg_id']}")
+    b.adjust(1)
+    await m.answer("Qaysi o'qituvchi?", reply_markup=b.as_markup())
+
+
+@router.callback_query(F.data.startswith("et:"), DIRECTOR)
+async def et_pick(c: CallbackQuery, db):
+    text, kb_ = await _teacher_card(db, int(c.data[3:]))
+    if not text:
+        return await c.answer("Topilmadi", show_alert=True)
+    await c.message.answer(text, reply_markup=kb_)
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("etn:"), DIRECTOR)
+async def et_name(c: CallbackQuery, state: FSMContext):
+    await state.set_state(EditTeacher.name)
+    await state.update_data(tid=int(c.data[4:]))
+    await c.message.answer("Yangi ism familiya:")
+    await c.answer()
+
+
+@router.message(EditTeacher.name)
+async def et_name_save(m: Message, db, state: FSMContext):
+    name = (m.text or "").strip()
+    if len(name) < 2:
+        return await m.answer("Ism familiyani yozing.")
+    tid = (await state.get_data())["tid"]
+    await db.execute("UPDATE users SET full_name=? WHERE tg_id=?", (name, tid))
     await state.clear()
-    await m.answer(f"✅ Reyestr, dars narxi {money(rate)}. Keyingi davomatlardan boshlab hisoblanadi.")
+    text, kb_ = await _teacher_card(db, tid)
+    await m.answer("✅ Saqlandi.\n" + text, reply_markup=kb_)
+
+
+@router.callback_query(F.data.startswith("etp:"), DIRECTOR)
+async def et_pay(c: CallbackQuery):
+    tid = c.data[4:]
+    await c.message.answer("Oylik turi:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Foiz (%)", callback_data=f"etpt:{tid}:percent"),
+        InlineKeyboardButton(text="O'quvchi boshiga", callback_data=f"etpt:{tid}:per_student")]]))
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("etpt:"), DIRECTOR)
+async def et_pay_type(c: CallbackQuery, state: FSMContext):
+    _, tid, pt = c.data.split(":")
+    await state.set_state(EditTeacher.value)
+    await state.update_data(tid=int(tid), pay_type=pt)
+    await c.message.answer("Foiz (masalan 40):" if pt == "percent" else
+                           "Bir o'quvchi uchun summa (so'm), masalan 200000:")
+    await c.answer()
+
+
+@router.message(EditTeacher.value)
+async def et_pay_save(m: Message, db, state: FSMContext):
+    try:
+        v = float((m.text or "").replace(" ", "").replace(",", "."))
+        assert v > 0
+    except Exception:
+        return await m.answer("Musbat son kiriting.")
+    d = await state.get_data()
+    await db.execute("UPDATE teachers SET pay_type=?, pay_value=? WHERE tg_id=?", (d["pay_type"], v, d["tid"]))
+    await state.clear()
+    text, kb_ = await _teacher_card(db, d["tid"])
+    await m.answer("✅ Saqlandi. Oylik hisobi (o'tgan oylar ham) yangi shartga ko'ra qayta hisoblanadi.\n" + text,
+                   reply_markup=kb_)
+
+
+@router.callback_query(F.data.startswith("etr:"), DIRECTOR)
+async def et_reg(c: CallbackQuery, state: FSMContext):
+    await state.set_state(EditTeacher.reg)
+    await state.update_data(tid=int(c.data[4:]))
+    await c.message.answer("Reyestr o'quvchi bitta darsga kelganda o'qituvchi oladigan summa (so'm). "
+                           "Yo'q bo'lsa 0:")
+    await c.answer()
+
+
+@router.message(EditTeacher.reg)
+async def et_reg_save(m: Message, db, state: FSMContext):
+    try:
+        v = int((m.text or "").replace(" ", ""))
+        assert v >= 0
+    except Exception:
+        return await m.answer("0 yoki musbat butun son kiriting.")
+    tid = (await state.get_data())["tid"]
+    await db.execute("UPDATE teachers SET registry_rate=? WHERE tg_id=?", (v, tid))
+    await state.clear()
+    text, kb_ = await _teacher_card(db, tid)
+    await m.answer("✅ Saqlandi. Yangi narx faqat keyingi darslarga ta'sir qiladi.\n" + text, reply_markup=kb_)
