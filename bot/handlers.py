@@ -1,17 +1,21 @@
-from datetime import date
+from datetime import date, timedelta
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, Filter, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton,
-                           InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile)
+                           InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile, WebAppInfo,
+                           MenuButtonWebApp)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from . import attendance as A
 from . import db as D
+from .config import WEBAPP_URL
 from .pdfgen import attendance_pdf
 
 router = Router()
+WEEKDAYS = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"]
 
 
 def money(x) -> str:
@@ -54,31 +58,62 @@ def kb(rows):
                                resize_keyboard=True)
 
 
-MENU_ADMIN = kb([["📚 Guruhlar"], ["➕ O'quvchi", "📤 Fayldan yuklash"], ["➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
-                 ["📊 Guruh hisobi", "🗑 O'quvchini o'chirish"],
-                 ["🗑 Guruhni o'chirish", "🗑 O'qituvchini o'chirish"],
-                 ["🔁 Guruh o'qituvchisini almashtirish", "🔀 O'quvchini ko'chirish"],
-                 ["↩️ To'lovni bekor qilish", "📅 Hisobot"],
-                 ["📞 Telefonni o'zgartirish", "🔎 Qidirish"],
-                 ["📥 Excel", "🏛 Reyestr belgilash"]])
-MENU_DIRECTOR = kb([["📚 Guruhlar"], ["➕ O'quvchi", "📤 Fayldan yuklash"], ["➕ Guruh"], ["💵 To'lov kiritish", "📋 Qarzdorlar"],
-                    ["📊 Guruh hisobi", "👨‍🏫 O'qituvchi qo'shish"],
-                    ["🛡 Admin qo'shish", "💰 Oyliklar"],
-                    ["🗑 O'quvchini o'chirish", "🗑 Guruhni o'chirish"],
-                    ["🗑 O'qituvchini o'chirish", "🔁 Guruh o'qituvchisini almashtirish"],
-                    ["🔀 O'quvchini ko'chirish", "↩️ To'lovni bekor qilish"],
-                    ["📅 Hisobot", "📞 Telefonni o'zgartirish"],
-                    ["🔎 Qidirish", "📥 Excel"], ["📈 Statistika", "🗑 Adminni o'chirish"],
-                    ["🏛 Reyestr belgilash", "👁 Reyestr yashirish/ochish"],
-                    ["✏️ O'qituvchini tahrirlash"]])
-MENU_TEACHER = kb([["📚 Guruhlarim"], ["✅ Davomat", "➕ O'quvchi"], ["📤 Fayldan yuklash"],
-                   ["💰 Oylikni ko'rish", "📋 Qarzdorlarni ko'rish"],
-                   ["🗑 O'quvchini o'chirish", "📞 Telefonni o'zgartirish"],
-                   ["🔎 Qidirish"]])
+HOME = "🏠 Asosiy menyu"
+SECTION_TITLES = {
+    "👥 O'quvchilar": "👥 O'quvchilar bo'limi",
+    "💰 Moliya": "💰 Moliya bo'limi",
+    "🏫 Guruh boshqaruvi": "🏫 Guruh boshqaruvi",
+    "📊 Hisobotlar": "📊 Hisobotlar bo'limi",
+    "👨‍🏫 Xodimlar": "👨‍🏫 Xodimlar bo'limi",
+}
 
 
-MENU_TEXTS = {b.text for m in (MENU_ADMIN, MENU_DIRECTOR, MENU_TEACHER)
-              for row in m.keyboard for b in row}
+def main_menu(role: str):
+    if role == "teacher":
+        return kb([["✅ Davomat", "📚 Guruhlarim"], ["📋 Qarzdorlarni ko'rish", "💰 Oylikni ko'rish"],
+                   ["👥 O'quvchilar"]])
+    rows = [["📚 Guruhlar", "🔎 Qidirish"], ["👥 O'quvchilar", "💰 Moliya"],
+            ["🏫 Guruh boshqaruvi", "📊 Hisobotlar"]]
+    if role == "director":
+        rows.append(["👨‍🏫 Xodimlar"])
+    return kb(rows)
+
+
+def section_menu(role: str, section: str):
+    staff = role in ("admin", "director")
+    rows = []
+    if section == "👥 O'quvchilar":
+        if staff:
+            rows = [["➕ O'quvchi", "📤 Fayldan yuklash"], ["🔀 O'quvchini ko'chirish", "🏛 Reyestr belgilash"],
+                    ["📞 Telefonni o'zgartirish", "🗑 O'quvchini o'chirish"]]
+            if role == "director":
+                rows.append(["👁 Reyestr yashirish/ochish"])
+        else:
+            rows = [["➕ O'quvchi", "📤 Fayldan yuklash"], ["🔎 Qidirish", "📞 Telefonni o'zgartirish"],
+                    ["🗑 O'quvchini o'chirish"]]
+    elif section == "💰 Moliya" and staff:
+        rows = [["💵 To'lov kiritish", "↩️ To'lovni bekor qilish"], ["📋 Qarzdorlar", "📊 Guruh hisobi"]]
+        if role == "director":
+            rows.append(["💰 Oyliklar"])
+    elif section == "🏫 Guruh boshqaruvi" and staff:
+        rows = [["➕ Guruh", "🗑 Guruhni o'chirish"], ["🔁 Guruh o'qituvchisini almashtirish", "🗓 Dars jadvali"]]
+    elif section == "📊 Hisobotlar" and staff:
+        rows = [["📅 Hisobot", "📥 Excel"]]
+        if WEBAPP_URL:
+            rows.append(["🖥 Panel"])
+        if role == "director":
+            rows.append(["📈 Statistika"])
+    elif section == "👨‍🏫 Xodimlar" and role == "director":
+        rows = [["👨‍🏫 O'qituvchi qo'shish", "✏️ O'qituvchini tahrirlash"],
+                ["🗑 O'qituvchini o'chirish", "🛡 Admin qo'shish"], ["🗑 Adminni o'chirish"]]
+    rows.append([HOME])
+    return kb(rows)
+
+
+MENU_ADMIN, MENU_DIRECTOR, MENU_TEACHER = main_menu("admin"), main_menu("director"), main_menu("teacher")
+MENU_TEXTS = {b.text for r in ("admin", "director", "teacher")
+              for m in [main_menu(r)] + [section_menu(r, sec) for sec in SECTION_TITLES]
+              for row in m.keyboard for b in row} | {"🖥 Panel", "🗓 Dars jadvali"}
 
 
 @router.message.outer_middleware()
@@ -96,18 +131,78 @@ async def menu_for(db, uid):
 
 
 @router.message(Command("start"))
-async def start(m: Message, db, state: FSMContext):
+@router.message(Command("menu"))
+@router.message(F.text == HOME)
+async def start(m: Message, db, state: FSMContext, bot: Bot):
     await state.clear()
     menu = await menu_for(db, m.from_user.id)
     if not menu:
         return await m.answer(f"Siz ro'yxatda yo'qsiz. Direktorga ID ingizni bering: {m.from_user.id}")
-    await m.answer("Asosiy menyu", reply_markup=menu)
+    await m.answer("Asosiy menyu 👇", reply_markup=menu)
+    if WEBAPP_URL and m.chat.type == "private":
+        role = await D.get_role(db, m.from_user.id)
+        try:  # chap pastdagi "Menu" tugmasi Mini App'ni ochadi
+            await bot.set_chat_menu_button(chat_id=m.chat.id, menu_button=MenuButtonWebApp(
+                text="Davomat" if role == "teacher" else "Panel", web_app=WebAppInfo(url=f"{WEBAPP_URL}/app")))
+        except Exception:
+            pass
+
+
+@router.message(F.text.in_(set(SECTION_TITLES)))
+async def open_section(m: Message, db):
+    role = await D.get_role(db, m.from_user.id)
+    if not role:
+        return
+    await m.answer(SECTION_TITLES[m.text], reply_markup=section_menu(role, m.text))
 
 
 @router.message(Command("cancel"))
 async def cancel(m: Message, db, state: FSMContext):
     await state.clear()
     await m.answer("Bekor qilindi.", reply_markup=await menu_for(db, m.from_user.id))
+
+
+PAGE = 10
+PICKER_LABELS = {
+    "ps": lambda s: f"{'🏛' if s['is_registry'] else ('✅' if s['paid'] else '❌')} {s['last_name']} {s['first_name']}",
+    "xs": lambda s: f"{s['last_name']} {s['first_name']} ({s['grade']})",
+    "ms2": lambda s: f"{s['last_name']} {s['first_name']} ({s['grade']})",
+    "cs": lambda s: f"{s['last_name']} {s['first_name']}",
+    "ph": lambda s: f"{s['last_name']} {s['first_name']} {s['phone'] or '(raqam yoq)'}",
+    "rxs": lambda s: f"{'🏛' if s['is_registry'] else '▫️'} {s['last_name']} {s['first_name']}",
+}
+
+
+async def student_pager(db, gid: int, page: int, kind: str):
+    """O'quvchilar tugmalari (10 tadan sahifalab). -> (markup yoki None, jami soni)"""
+    studs = await D.group_students(db, gid)
+    pages = max(1, -(-len(studs) // PAGE))
+    page = max(0, min(page, pages - 1))
+    b = InlineKeyboardBuilder()
+    for s in studs[page * PAGE:(page + 1) * PAGE]:
+        b.button(text=PICKER_LABELS[kind](s), callback_data=f"{kind}:{s['id']}")
+    b.adjust(1)
+    if pages > 1:
+        b.row(InlineKeyboardButton(text="◀️" if page else "·", callback_data=f"sp:{kind}:{gid}:{page - 1}" if page else "noop"),
+              InlineKeyboardButton(text=f"{page + 1}/{pages}", callback_data="noop"),
+              InlineKeyboardButton(text="▶️" if page < pages - 1 else "·",
+                                   callback_data=f"sp:{kind}:{gid}:{page + 1}" if page < pages - 1 else "noop"))
+    return (b.as_markup() if studs else None), len(studs)
+
+
+@router.callback_query(F.data == "noop")
+async def noop(c: CallbackQuery):
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("sp:"))
+async def pager_nav(c: CallbackQuery, db):
+    _, kind, gid, page = c.data.split(":")
+    if kind not in PICKER_LABELS or not await can_access_group(db, c.from_user.id, int(gid)):
+        return await c.answer("Ruxsat yo'q", show_alert=True)
+    mk, _ = await student_pager(db, int(gid), int(page), kind)
+    await c.message.edit_reply_markup(reply_markup=mk)
+    await c.answer()
 
 
 async def group_picker(db, prefix, teacher_id=None):
@@ -156,13 +251,8 @@ async def xs_group(c: CallbackQuery, db):
     gid = int(c.data[3:])
     if not await can_access_group(db, c.from_user.id, gid):
         return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
-    studs = await D.group_students(db, gid)
-    b = InlineKeyboardBuilder()
-    for s in studs:
-        b.button(text=f"{s['last_name']} {s['first_name']} ({s['grade']})", callback_data=f"xs:{s['id']}")
-    b.adjust(1)
-    await c.message.answer("O'chiriladigan o'quvchini tanlang:" if studs else "Guruhda o'quvchi yo'q.",
-                           reply_markup=b.as_markup() if studs else None)
+    mk, n = await student_pager(db, gid, 0, "xs")
+    await c.message.answer("O'chiriladigan o'quvchini tanlang:" if n else "Guruhda o'quvchi yo'q.", reply_markup=mk)
     await c.answer()
 
 
@@ -535,14 +625,9 @@ async def p_start(m: Message, db):
 
 @router.callback_query(F.data.startswith("pg:"), STAFF)
 async def p_group(c: CallbackQuery, db):
-    studs = await D.group_students(db, int(c.data[3:]))
-    b = InlineKeyboardBuilder()
-    for s in studs:
-        mark = "🏛" if s["is_registry"] else ("✅" if s["paid"] else "❌")
-        b.button(text=f"{mark} {s['last_name']} {s['first_name']}", callback_data=f"ps:{s['id']}")
-    b.adjust(1)
-    await c.message.answer("O'quvchini tanlang (✅ - bu oy to'lagan):" if studs else "Guruhda o'quvchi yo'q.",
-                           reply_markup=b.as_markup() if studs else None)
+    mk, n = await student_pager(db, int(c.data[3:]), 0, "ps")
+    await c.message.answer("O'quvchini tanlang (✅ to'lagan, ❌ qarzdor, 🏛 reyestr):" if n else "Guruhda o'quvchi yo'q.",
+                           reply_markup=mk)
     await c.answer()
 
 
@@ -621,7 +706,8 @@ async def staff_income(m: Message, db):
 
 # ---------------- O'qituvchi: oylik ----------------
 def prev_months(n=6):
-    y, m = date.today().year, date.today().month
+    today = D.today_local()
+    y, m = today.year, today.month
     out = []
     for _ in range(n):
         out.append(f"{y}-{m:02d}")
@@ -668,21 +754,48 @@ async def my_salary_month(c: CallbackQuery, db):
     await c.answer()
 
 
-# ---------------- O'qituvchi: davomat ----------------
+# ---------------- O'qituvchi: davomat (chat ichida; Mini App bo'lmasa shu ishlaydi) ----------------
+def webapp_markup(text="📝 Davomatni ochish", path=""):
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=text, web_app=WebAppInfo(url=f"{WEBAPP_URL}/app{path}"))]])
+
+
 @router.message(F.text == "✅ Davomat", TEACHER)
+@router.message(Command("davomat"), TEACHER)
 async def att_start(m: Message, db):
+    if WEBAPP_URL:
+        kb_ = webapp_markup()
+        kb_.inline_keyboard.append([InlineKeyboardButton(text="💬 Chatda belgilash", callback_data="att:chat")])
+        return await m.answer("Davomat uchun tugmani bosing 👇", reply_markup=kb_)
     mk = await group_picker(db, "ag", m.from_user.id)
     await m.answer("Guruhni tanlang:", reply_markup=mk) if mk else await m.answer("Sizda guruh yo'q.")
 
 
-async def att_markup(db, gid, absent):
+@router.callback_query(F.data == "att:chat", TEACHER)
+async def att_chat(c: CallbackQuery, db):
+    mk = await group_picker(db, "ag", c.from_user.id)
+    await c.message.answer("Guruhni tanlang:", reply_markup=mk) if mk else await c.message.answer("Sizda guruh yo'q.")
+    await c.answer()
+
+
+async def att_markup(db, gid, day, statuses):
+    """statuses: {student_id(str): status}. Har o'quvchi yonida oldingi 3 ta darsi."""
+    days, hist = await A.history(db, gid, before=day, n=3)
     b = InlineKeyboardBuilder()
     for s in await D.group_students(db, gid):
-        mark = "❌ Kelmadi" if s["id"] in absent else "✅"
-        b.button(text=f"{mark} {s['last_name']} {s['first_name']}", callback_data=f"at:{s['id']}")
+        st = statuses.get(str(s["id"]), "present")
+        hm = A.marks(days, hist.get(s["id"]))
+        b.button(text=f"{A.STATUSES[st][0]} {s['last_name']} {s['first_name']}  {hm}".strip(),
+                 callback_data=f"at:{s['id']}")
     b.adjust(1)
-    b.row(InlineKeyboardButton(text="📤 Belgilab yuborish", callback_data="ad"))
+    b.row(InlineKeyboardButton(text="📅 Boshqa kun", callback_data="ad:pick"),
+          InlineKeyboardButton(text="📤 Yuborish", callback_data="ad"))
     return b.as_markup()
+
+
+def att_title(g, day, days_hint=True):
+    t = f"📋 {g['name']} | {date.fromisoformat(day):%d.%m.%Y}\nBosing: ✅ keldi → ❌ kelmadi → 🕒 kechikdi → 📝 sababli."
+    return t + "\nO'ng tomonda oldingi 3 ta dars belgisi." if days_hint else t
 
 
 @router.callback_query(F.data.startswith("ag:"), TEACHER)
@@ -691,10 +804,38 @@ async def att_group(c: CallbackQuery, db, state: FSMContext):
     g = await D.fetchone(db, "SELECT * FROM groups WHERE id=?", (gid,))
     if g["teacher_id"] != c.from_user.id:
         return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
-    await state.update_data(att_group=gid, absent=[])
-    await c.message.answer(f"Davomat: {g['name']} ({date.today():%d.%m.%Y})\n"
-                           "Kelmagan o'quvchilarni bosib belgilang, so'ng yuboring.",
-                           reply_markup=await att_markup(db, gid, set()))
+    day = D.today_local().isoformat()
+    st = {str(k): v for k, v in (await A.day_statuses(db, gid, day)).items()}
+    await state.update_data(att_group=gid, day=day, st=st)
+    await c.message.answer(att_title(g, day), reply_markup=await att_markup(db, gid, day, st))
+    await c.answer()
+
+
+@router.callback_query(F.data == "ad:pick", TEACHER)
+async def att_pick_day(c: CallbackQuery, state: FSMContext):
+    if "att_group" not in await state.get_data():
+        return await c.answer("Davomatni qaytadan boshlang", show_alert=True)
+    today = D.today_local()
+    b = InlineKeyboardBuilder()
+    for i in range(0, 7):
+        d = today - timedelta(days=i)
+        b.button(text=f"{d:%d.%m} {WEEKDAYS[d.weekday()]}" + (" (bugun)" if i == 0 else ""),
+                 callback_data=f"ad:day:{d.isoformat()}")
+    b.adjust(2)
+    await c.message.answer("Qaysi kun davomati?", reply_markup=b.as_markup())
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("ad:day:"), TEACHER)
+async def att_set_day(c: CallbackQuery, db, state: FSMContext):
+    d = await state.get_data()
+    if "att_group" not in d:
+        return await c.answer("Davomatni qaytadan boshlang", show_alert=True)
+    gid, day = d["att_group"], c.data[7:]
+    st = {str(k): v for k, v in (await A.day_statuses(db, gid, day)).items()}
+    await state.update_data(day=day, st=st)
+    g = await D.fetchone(db, "SELECT * FROM groups WHERE id=?", (gid,))
+    await c.message.edit_text(att_title(g, day), reply_markup=await att_markup(db, gid, day, st))
     await c.answer()
 
 
@@ -703,11 +844,12 @@ async def att_toggle(c: CallbackQuery, db, state: FSMContext):
     d = await state.get_data()
     if "att_group" not in d:
         return await c.answer("Davomatni qaytadan boshlang", show_alert=True)
-    sid = int(c.data[3:])
-    absent = set(d["absent"])
-    absent ^= {sid}
-    await state.update_data(absent=list(absent))
-    await c.message.edit_reply_markup(reply_markup=await att_markup(db, d["att_group"], absent))
+    sid = c.data[3:]
+    st = dict(d["st"])
+    cur = st.get(sid, "present")
+    st[sid] = A.CYCLE[(A.CYCLE.index(cur) + 1) % len(A.CYCLE)]
+    await state.update_data(st=st)
+    await c.message.edit_reply_markup(reply_markup=await att_markup(db, d["att_group"], d["day"], st))
     await c.answer()
 
 
@@ -716,43 +858,13 @@ async def att_done(c: CallbackQuery, db, state: FSMContext, bot: Bot):
     d = await state.get_data()
     if "att_group" not in d:
         return await c.answer("Davomatni qaytadan boshlang", show_alert=True)
-    gid, absent = d["att_group"], set(d["absent"])
-    today = date.today().isoformat()
-    g = await D.fetchone(db, "SELECT * FROM groups WHERE id=?", (gid,))
-    teacher = await D.fetchone(db, "SELECT full_name FROM users WHERE tg_id=?", (c.from_user.id,))
-    rows, stmts, absent_lines = [], [], []
-    trow = await D.fetchone(db, "SELECT registry_rate FROM teachers WHERE tg_id=?", (g["teacher_id"],))
-    reg_price = trow["registry_rate"] if trow else 0
-    no_price = False
-    for s in await D.group_students(db, gid):
-        present = s["id"] not in absent
-        rate = reg_price if (present and s["is_registry"]) else 0  # dars paytidagi stavka saqlanadi
-        if present and s["is_registry"] and not reg_price:
-            no_price = True
-        stmts.append(("INSERT INTO attendance(group_id,day,student_id,present,rate) VALUES(?,?,?,?,?) "
-                      "ON CONFLICT(group_id,day,student_id) DO UPDATE SET "
-                      "present=excluded.present, rate=excluded.rate",
-                      (gid, today, s["id"], int(present), rate)))
-        rows.append((f"{s['last_name']} {s['first_name']}", s["grade"], s.get("phone") or "", present))
-        if not present:
-            absent_lines.append(f"• {s['last_name']} {s['first_name']}{with_phone(s)}")
-    if stmts:
-        await db.batch(stmts)
-    caption = f"📋 {g['name']} davomati ({teacher['full_name']}), kelmagan: {len(absent)}"
-    if absent_lines:
-        caption = (caption + "\n" + "\n".join(absent_lines))[:900]
-    if no_price:
-        caption += "\n⚠️ Reyestr o'quvchilar bor, lekin o'qituvchiga reyestr narxi kiritilmagan (0)."
-    pdf = attendance_pdf(g["name"], teacher["full_name"], f"{date.today():%d.%m.%Y}", rows)
-    for a in await D.fetchall(db, "SELECT tg_id FROM users WHERE role IN ('admin','director')"):
-        try:
-            await bot.send_document(
-                a["tg_id"], BufferedInputFile(pdf, f"davomat_{g['name']}_{today}.pdf"),
-                caption=caption)
-        except Exception:
-            pass
+    res = await A.save_attendance(db, bot, c.from_user.id, d["att_group"], date.fromisoformat(d["day"]),
+                                  {int(k): v for k, v in d["st"].items()})
     await state.clear()
     await c.message.edit_reply_markup(reply_markup=None)
-    await c.message.answer("✅ Davomat yakunlandi va adminga yuborildi." +
-                           ("\n⚠️ Reyestr narxi kiritilmagan, direktorga ayting." if no_price else ""))
+    cnt = res["counts"]
+    await c.message.answer(
+        f"✅ Davomat saqlandi va adminga yuborildi.\nKeldi {cnt['present']}, kelmadi {cnt['absent']}, "
+        f"kechikdi {cnt['late']}, sababli {cnt['excused']}." +
+        ("\n⚠️ Reyestr narxi kiritilmagan, direktorga ayting." if res["no_price"] else ""))
     await c.answer()
