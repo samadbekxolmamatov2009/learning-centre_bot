@@ -14,9 +14,9 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 
 from . import db as D
-from .config import TZ_OFFSET, REMINDER_HOUR
+from .config import TZ_OFFSET, REMINDER_HOUR, WEBAPP_URL
 from .importer import parse_file
-from .handlers import (Role, STAFF, ANYONE, DIRECTOR, prev_months, with_phone, group_picker, confirm_kb, money, months_markup, debtors_text,
+from .handlers import (webapp_markup, Role, STAFF, ANYONE, DIRECTOR, prev_months, with_phone, student_pager, group_picker, confirm_kb, money, months_markup, debtors_text,
                        can_access_group, normalize_phone)
 
 router = Router()
@@ -32,13 +32,8 @@ async def mv_start(m: Message, db):
 
 @router.callback_query(F.data.startswith("mg:"), STAFF)
 async def mv_group(c: CallbackQuery, db):
-    studs = await D.group_students(db, int(c.data[3:]))
-    b = InlineKeyboardBuilder()
-    for s in studs:
-        b.button(text=f"{s['last_name']} {s['first_name']} ({s['grade']})", callback_data=f"ms2:{s['id']}")
-    b.adjust(1)
-    await c.message.answer("Qaysi o'quvchi?" if studs else "Guruhda o'quvchi yo'q.",
-                           reply_markup=b.as_markup() if studs else None)
+    mk, n = await student_pager(db, int(c.data[3:]), 0, "ms2")
+    await c.message.answer("Qaysi o'quvchi?" if n else "Guruhda o'quvchi yo'q.", reply_markup=mk)
     await c.answer()
 
 
@@ -93,14 +88,8 @@ async def ph_group(c: CallbackQuery, db):
     gid = int(c.data[4:])
     if not await can_access_group(db, c.from_user.id, gid):
         return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
-    studs = await D.group_students(db, gid)
-    b = InlineKeyboardBuilder()
-    for s in studs:
-        phone = s["phone"] or "(raqam yo'q)"
-        b.button(text=f"{s['last_name']} {s['first_name']} {phone}", callback_data=f"ph:{s['id']}")
-    b.adjust(1)
-    await c.message.answer("Qaysi o'quvchi?" if studs else "Guruhda o'quvchi yo'q.",
-                           reply_markup=b.as_markup() if studs else None)
+    mk, n = await student_pager(db, gid, 0, "ph")
+    await c.message.answer("Qaysi o'quvchi?" if n else "Guruhda o'quvchi yo'q.", reply_markup=mk)
     await c.answer()
 
 
@@ -136,13 +125,8 @@ async def cp_start(m: Message, db):
 
 @router.callback_query(F.data.startswith("cg:"), STAFF)
 async def cp_group(c: CallbackQuery, db):
-    studs = await D.group_students(db, int(c.data[3:]))
-    b = InlineKeyboardBuilder()
-    for s in studs:
-        b.button(text=f"{s['last_name']} {s['first_name']}", callback_data=f"cs:{s['id']}")
-    b.adjust(1)
-    await c.message.answer("Qaysi o'quvchi?" if studs else "Guruhda o'quvchi yo'q.",
-                           reply_markup=b.as_markup() if studs else None)
+    mk, n = await student_pager(db, int(c.data[3:]), 0, "cs")
+    await c.message.answer("Qaysi o'quvchi?" if n else "Guruhda o'quvchi yo'q.", reply_markup=mk)
     await c.answer()
 
 
@@ -255,183 +239,53 @@ async def send_month_end_notice(bot: Bot, db):
     await db.execute("INSERT OR IGNORE INTO notices(key) VALUES(?)", (key,))
 
 
+async def check_attendance_reminders(bot: Bot, db):
+    """Dars vaqtidan 20 daqiqa o'tib davomat olinmagan bo'lsa o'qituvchiga, 2 soatdan keyin adminga xabar."""
+    now = D.now_local()
+    today = now.date().isoformat()
+    for g in await db.fetchall("SELECT g.id, g.name, g.teacher_id, g.lesson_days, g.lesson_time, u.full_name tname "
+                               "FROM groups g LEFT JOIN users u ON u.tg_id=g.teacher_id "
+                               "WHERE g.lesson_days<>'' AND g.lesson_time<>'' AND g.teacher_id IS NOT NULL"):
+        if str(now.isoweekday()) not in g["lesson_days"].split(","):
+            continue
+        try:
+            hh, mm = map(int, g["lesson_time"].split(":"))
+        except ValueError:
+            continue
+        late = (now - now.replace(hour=hh, minute=mm, second=0, microsecond=0)).total_seconds() / 60
+        if late < 20 or late > 8 * 60:
+            continue
+        if await db.fetchone("SELECT 1 FROM attendance WHERE group_id=? AND day=? LIMIT 1", (g["id"], today)):
+            continue
+        k1, k2 = f"attrem-{g['id']}-{today}", f"attadm-{g['id']}-{today}"
+        if not await db.fetchone("SELECT 1 FROM notices WHERE key=?", (k1,)):
+            await db.execute("INSERT OR IGNORE INTO notices(key) VALUES(?)", (k1,))
+            kb_ = (webapp_markup("📝 Davomatni ochish") if WEBAPP_URL else
+                   InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+                       text="📝 Davomat olish", callback_data=f"ag:{g['id']}")]]))
+            try:
+                await bot.send_message(g["teacher_id"], f"⏰ {g['name']} guruhi ({g['lesson_time']}) davomati hali "
+                                       "olinmadi. Iltimos, belgilab yuboring.", reply_markup=kb_)
+            except Exception:
+                log.warning("Eslatma yuborilmadi: %s", g["teacher_id"])
+        if late >= 120 and not await db.fetchone("SELECT 1 FROM notices WHERE key=?", (k2,)):
+            await db.execute("INSERT OR IGNORE INTO notices(key) VALUES(?)", (k2,))
+            for u in await db.fetchall("SELECT tg_id FROM users WHERE role IN ('admin','director')"):
+                try:
+                    await bot.send_message(u["tg_id"], f"⚠️ {g['name']} ({g['tname']}) guruhi davomati olinmadi "
+                                           f"(dars {g['lesson_time']} da edi).")
+                except Exception:
+                    pass
+
+
 async def scheduler(bot: Bot, db):
     while True:
-        try:
-            await send_month_end_notice(bot, db)
-        except Exception:
-            log.exception("Oy oxiri xabarida xato")
-        await asyncio.sleep(1800)
-
-
-# ---------------- Qidirish (ism / familiya / telefon) ----------------
-class Search(StatesGroup):
-    query = State()
-
-
-@router.message(F.text == "🔎 Qidirish", ANYONE)
-async def sr_start(m: Message, state: FSMContext):
-    await state.set_state(Search.query)
-    await m.answer("Ism, familiya yoki telefon raqamning bir qismini yozing:")
-
-
-@router.message(Search.query)
-async def sr_do(m: Message, db, state: FSMContext):
-    q = (m.text or "").strip().casefold()
-    if len(q) < 2:
-        return await m.answer("Kamida 2 ta belgi yozing.")
-    uid = m.from_user.id
-    sql = ("SELECT s.*, g.name AS gname FROM students s JOIN groups g ON g.id=s.group_id "
-           "WHERE s.hidden=0")
-    args = ()
-    if await D.get_role(db, uid) == "teacher":
-        sql += " AND g.teacher_id=?"
-        args = (uid,)
-    paid_ids = {r["student_id"] for r in await db.fetchall(
-        "SELECT DISTINCT student_id FROM payments WHERE month=?", (D.current_month(),))}
-    paid_ids |= {s["id"] for s in await db.fetchall("SELECT id FROM students WHERE is_registry=1 AND hidden=0")}
-    q_digits = "".join(ch for ch in q if ch.isdigit())
-    found = []
-    for s in await db.fetchall(sql, args):
-        names = f"{s['first_name']} {s['last_name']} {s['last_name']} {s['first_name']}".casefold()
-        if q in names or (len(q_digits) >= 3 and q_digits in "".join(ch for ch in s["phone"] if ch.isdigit())):
-            found.append(s)
-    await state.clear()
-    if not found:
-        return await m.answer("Hech narsa topilmadi.")
-    lines = [f"🔎 Topildi: {len(found)} ta" + (" (dastlabki 20 tasi)" if len(found) > 20 else "")]
-    for s in found[:20]:
-        mark = "🏛 reyestr" if s["is_registry"] else ("✅" if s["id"] in paid_ids else "❌ qarzdor")
-        lines.append(f"• {s['last_name']} {s['first_name']} | {s['grade']}-sinf | {s['gname']} | "
-                     f"{mark}{with_phone(s)}")
-    await m.answer("\n".join(lines))
-
-
-# ---------------- Excel eksport ----------------
-@router.message(F.text == "📥 Excel", STAFF)
-async def xl_start(m: Message):
-    kb_ = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📋 Qarzdorlar (joriy oy)", callback_data="xl:debt")],
-        [InlineKeyboardButton(text="👥 Barcha o'quvchilar", callback_data="xl:stud")],
-        [InlineKeyboardButton(text="📅 Oylik hisobot", callback_data="xl:rep")]])
-    await m.answer("Qaysi ma'lumotni yuklab olasiz?", reply_markup=kb_)
-
-
-def _sheet(wb, title, header, rows, first=False):
-    ws = wb.active if first else wb.create_sheet()
-    ws.title = title
-    ws.append(header)
-    for c in ws[1]:
-        c.font = Font(bold=True)
-    for r in rows:
-        ws.append(r)
-    for col in ws.columns:
-        ws.column_dimensions[col[0].column_letter].width = min(
-            40, max(len(str(c.value or "")) for c in col) + 2)
-    return ws
-
-
-async def _students_rows(db, month, only_debtors):
-    rows = []
-    for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
-        for s in await D.group_students(db, g["id"], month):
-            if only_debtors and s["paid"]:
-                continue
-            rows.append([g["name"], s["last_name"], s["first_name"], s["grade"], s["phone"],
-                         "Reyestr" if s["is_registry"] else ("To'lagan" if s["paid"] else "Qarzdor"),
-                         s["paid_sum"]])
-    return rows
-
-
-async def _send_xlsx(c: CallbackQuery, wb, name):
-    buf = io.BytesIO()
-    wb.save(buf)
-    await c.message.answer_document(BufferedInputFile(buf.getvalue(), name))
-    await c.answer()
-
-
-STUD_HEAD = ["Guruh", "Familiya", "Ism", "Sinf", "Telefon", "Holat", "To'langan summa"]
-
-
-@router.callback_query(F.data.in_({"xl:debt", "xl:stud"}), STAFF)
-async def xl_students(c: CallbackQuery, db):
-    mo = D.current_month()
-    debt = c.data == "xl:debt"
-    wb = Workbook()
-    _sheet(wb, "Qarzdorlar" if debt else "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, debt), True)
-    await _send_xlsx(c, wb, f"{'qarzdorlar' if debt else 'oquvchilar'}_{mo}.xlsx")
-
-
-@router.callback_query(F.data == "xl:rep", STAFF)
-async def xl_rep_months(c: CallbackQuery):
-    await c.message.answer("Qaysi oy?", reply_markup=months_markup("xr"))
-    await c.answer()
-
-
-@router.callback_query(F.data.startswith("xr:"), STAFF)
-async def xl_report(c: CallbackQuery, db):
-    mo = c.data[3:]
-    wb = Workbook()
-    grows = []
-    for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
-        studs = await D.group_students(db, g["id"], mo)
-        reg = sum(1 for s in studs if s["is_registry"])
-        paid = sum(1 for s in studs if s["paid"]) - reg
-        grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, len(studs) - paid - reg])
-    _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Reyestr", "Qarzdorlar"], grows, True)
-    trows = []
-    for t in await db.fetchall("SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
-                               "ORDER BY u.full_name"):
-        pt, pv, _, total = await D.teacher_salary(db, t["tg_id"], mo)
-        trows.append([t["full_name"], "Foiz" if pt == "percent" else "O'quvchi boshiga", pv, round(total)])
-    _sheet(wb, "Oyliklar", ["O'qituvchi", "Turi", "Qiymat", "Oylik"], trows)
-    _sheet(wb, "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, False))
-    await _send_xlsx(c, wb, f"hisobot_{mo}.xlsx")
-
-
-# ---------------- Direktor statistikasi ----------------
-def _pct(a, b):
-    return f"{a * 100 / b:.0f}%" if b else "-"
-
-
-@router.message(F.text == "📈 Statistika", DIRECTOR)
-async def stats(m: Message, db):
-    cur, prev = prev_months(2)
-    income = {mo: (await db.fetchone("SELECT COALESCE(SUM(amount),0) t FROM payments WHERE month=?", (mo,)))["t"]
-              for mo in (cur, prev)}
-    n_students = (await db.fetchone("SELECT COUNT(*) n FROM students WHERE hidden=0"))["n"]
-    n_reg = (await db.fetchone("SELECT COUNT(*) n FROM students WHERE is_registry=1 AND hidden=0"))["n"]
-    n_paid = (await db.fetchone(
-        "SELECT COUNT(DISTINCT s.id) n FROM students s LEFT JOIN payments p "
-        "ON p.student_id=s.id AND p.month=? WHERE s.hidden=0 AND (p.id IS NOT NULL OR s.is_registry=1)",
-        (cur,)))["n"]
-    reg_total = await D.registry_total(db, cur)
-    salaries = 0
-    for t in await db.fetchall("SELECT tg_id FROM teachers"):
-        salaries += (await D.teacher_salary(db, t["tg_id"], cur))[3]
-    diff = income[cur] - income[prev]
-    out = [f"📈 Statistika ({cur})", "",
-           f"💵 Tushum: {money(income[cur])}",
-           f"   O'tgan oy ({prev}): {money(income[prev])} ({'+' if diff >= 0 else '-'}{money(abs(diff))})",
-           f"👨‍🏫 O'qituvchilar oyligi: {money(salaries)}",
-           *([f"🏛 Reyestr (davlat to'lovi): {money(reg_total)}"] if reg_total else []),
-           f"🏦 Qolgan (tushum + reyestr - oylik): {money(income[cur] + reg_total - salaries)}", "",
-           f"👥 O'quvchilar: {n_students} ta" + (f" (shundan reyestr: {n_reg})" if n_reg else ""),
-           f"✅ To'laganlar: {n_paid} ({_pct(n_paid, n_students)})",
-           f"❌ Qarzdorlar: {n_students - n_paid} ({_pct(n_students - n_paid, n_students)})", ""]
-    att = await db.fetchone("SELECT COALESCE(SUM(present),0) p, COUNT(*) n FROM attendance WHERE day LIKE ?",
-                            (cur + "-%",))
-    out.append(f"📋 Davomat (shu oy): kelish {_pct(att['p'], att['n'])}" if att["n"]
-               else "📋 Davomat: shu oy hali olinmagan")
-    out += ["", "Guruhlar:"]
-    for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
-        studs = await D.group_students(db, g["id"], cur)
-        debt = sum(1 for s in studs if not s["paid"])
-        ga = await db.fetchone("SELECT COALESCE(SUM(present),0) p, COUNT(*) n FROM attendance "
-                               "WHERE group_id=? AND day LIKE ?", (g["id"], cur + "-%"))
-        out.append(f"• {g['name']}: {money(await D.group_income(db, g['id'], cur))} | "
-                   f"o'quvchi {len(studs)}, qarzdor {debt} | davomat {_pct(ga['p'], ga['n'])}")
-    await m.answer("\n".join(out))
+        for job in (send_month_end_notice, check_attendance_reminders):
+            try:
+                await job(bot, db)
+            except Exception:
+                log.exception("Rejali ishda xato: %s", job.__name__)
+        await asyncio.sleep(300)
 
 
 # ---------------- Adminni o'chirish (faqat direktor) ----------------
@@ -467,95 +321,6 @@ async def xa_do(c: CallbackQuery, db):
     await c.answer()
 
 
-# ---------------- Guruhlar (o'qituvchi -> guruhlar -> o'quvchilar) ----------------
-TEACHER_ONLY = Role("teacher")
-
-
-async def _groups_markup(db, teacher_id, back=False):
-    """teacher_id=0 - o'qituvchisiz guruhlar."""
-    if teacher_id:
-        groups = await db.fetchall("SELECT * FROM groups WHERE teacher_id=? ORDER BY name", (teacher_id,))
-    else:
-        groups = await db.fetchall("SELECT * FROM groups WHERE teacher_id IS NULL ORDER BY name")
-    counts = {r["group_id"]: r["n"] for r in await db.fetchall(
-        "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 GROUP BY group_id")}
-    b = InlineKeyboardBuilder()
-    for g in groups:
-        b.button(text=f"{g['name']} ({counts.get(g['id'], 0)} ta)", callback_data=f"gl:g:{g['id']}")
-    b.adjust(2)
-    if back:
-        b.row(InlineKeyboardButton(text="⬅️ O'qituvchilar", callback_data="gl:back"))
-    return (b.as_markup() if groups else None), bool(groups)
-
-
-@router.message(F.text == "📚 Guruhlarim", TEACHER_ONLY)
-async def my_groups(m: Message, db):
-    mk, ok = await _groups_markup(db, m.from_user.id)
-    await m.answer("Guruhingizni tanlang:", reply_markup=mk) if ok else await m.answer("Sizda guruh yo'q.")
-
-
-async def _teachers_markup(db):
-    teachers = await db.fetchall(
-        "SELECT u.tg_id, u.full_name, (SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id) n "
-        "FROM users u JOIN teachers t ON t.tg_id=u.tg_id ORDER BY u.full_name")
-    b = InlineKeyboardBuilder()
-    for t in teachers:
-        b.button(text=f"{t['full_name']} ({t['n']})", callback_data=f"gl:t:{t['tg_id']}")
-    b.adjust(1)
-    orphan = (await db.fetchone("SELECT COUNT(*) n FROM groups WHERE teacher_id IS NULL"))["n"]
-    if orphan:
-        b.button(text=f"⚠️ O'qituvchisiz guruhlar ({orphan})", callback_data="gl:t:0")
-    b.adjust(1)
-    return b.as_markup() if (teachers or orphan) else None
-
-
-@router.message(F.text == "📚 Guruhlar", STAFF)
-async def all_groups(m: Message, db):
-    mk = await _teachers_markup(db)
-    await m.answer("O'qituvchini tanlang:", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
-
-
-@router.callback_query(F.data == "gl:back", STAFF)
-async def gl_back(c: CallbackQuery, db):
-    mk = await _teachers_markup(db)
-    await c.message.edit_text("O'qituvchini tanlang:", reply_markup=mk)
-    await c.answer()
-
-
-@router.callback_query(F.data.startswith("gl:t:"), STAFF)
-async def gl_teacher(c: CallbackQuery, db):
-    tid = int(c.data[5:])
-    mk, ok = await _groups_markup(db, tid, back=True)
-    if tid:
-        t = await db.fetchone("SELECT full_name FROM users WHERE tg_id=?", (tid,))
-        title = f"👨‍🏫 {t['full_name']} guruhlari:" if t else "Guruhlar:"
-    else:
-        title = "O'qituvchisiz guruhlar:"
-    await c.message.edit_text(title if ok else title + "\nGuruh yo'q.", reply_markup=mk or InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="⬅️ O'qituvchilar", callback_data="gl:back")]]))
-    await c.answer()
-
-
-@router.callback_query(F.data.startswith("gl:g:"))
-async def gl_group(c: CallbackQuery, db):
-    gid = int(c.data[5:])
-    if not await can_access_group(db, c.from_user.id, gid):
-        return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
-    g = await db.fetchone("SELECT g.name, u.full_name tname FROM groups g "
-                          "LEFT JOIN users u ON u.tg_id=g.teacher_id WHERE g.id=?", (gid,))
-    studs = await D.group_students(db, gid)
-    paid = sum(1 for s in studs if s["paid"])
-    tname = g["tname"] or "o'qituvchisiz"
-    head = [f"📚 {g['name']} | {tname}",
-            f"O'quvchilar: {len(studs)} | to'lagan: {paid} | qarzdor: {len(studs) - paid}", ""]
-    lines = [f"{i}. {'🏛' if s['is_registry'] else ('✅' if s['paid'] else '❌')} {s['last_name']} {s['first_name']} "
-             f"({s['grade']}-sinf){with_phone(s)}" for i, s in enumerate(studs, 1)]
-    text = "\n".join(head + (lines or ["Guruhda o'quvchi yo'q."]))
-    for i in range(0, len(text), 4000):
-        await c.message.answer(text[i:i + 4000])
-    await c.answer()
-
-
 # ---------------- Reyestr belgilash (admin, direktor) ----------------
 @router.message(F.text == "🏛 Reyestr belgilash", STAFF)
 async def rx_start(m: Message, db):
@@ -565,15 +330,9 @@ async def rx_start(m: Message, db):
 
 @router.callback_query(F.data.startswith("rxg:"), STAFF)
 async def rx_group(c: CallbackQuery, db):
-    studs = await D.group_students(db, int(c.data[4:]))
-    b = InlineKeyboardBuilder()
-    for s in studs:
-        b.button(text=f"{'🏛' if s['is_registry'] else '▫️'} {s['last_name']} {s['first_name']}",
-                 callback_data=f"rxs:{s['id']}")
-    b.adjust(1)
+    mk, n = await student_pager(db, int(c.data[4:]), 0, "rxs")
     await c.message.answer("O'quvchini bosing - reyestr / oddiy holati almashadi (🏛 - reyestr):"
-                           if studs else "Guruhda o'quvchi yo'q.",
-                           reply_markup=b.as_markup() if studs else None)
+                           if n else "Guruhda o'quvchi yo'q.", reply_markup=mk)
     await c.answer()
 
 
@@ -858,3 +617,84 @@ async def up_file(m: Message, db, state: FSMContext, bot: Bot):
         out += [f"  • {x}" for x in bad_phone[:15]]
     text = "\n".join(out)
     await m.answer(text[:4000])
+
+
+# ---------------- Dars jadvali (admin, direktor) ----------------
+class Schedule(StatesGroup):
+    time = State()
+
+
+WD_NAMES = [("1", "Du"), ("2", "Se"), ("3", "Ch"), ("4", "Pa"), ("5", "Ju"), ("6", "Sh"), ("7", "Ya")]
+
+
+async def _schedule_card(db, gid):
+    g = await db.fetchone("SELECT * FROM groups WHERE id=?", (gid,))
+    days = set((g["lesson_days"] or "").split(","))
+    b = InlineKeyboardBuilder()
+    for n, name in WD_NAMES:
+        b.button(text=("✅ " if n in days else "") + name, callback_data=f"sd:{gid}:{n}")
+    b.adjust(4)
+    b.row(InlineKeyboardButton(text=f"⏰ Vaqt: {g['lesson_time'] or 'kiritilmagan'}", callback_data=f"sdt:{gid}"))
+    text = (f"🗓 <b>{g['name']}</b> dars jadvali\nKunlarni bosib belgilang va vaqtni kiriting.\n"
+            "Shunda dars vaqtidan keyin davomat olinmasa, o'qituvchiga eslatma boradi.")
+    return text, b.as_markup()
+
+
+@router.message(F.text == "🗓 Dars jadvali", STAFF)
+async def sch_start(m: Message, db):
+    mk = await group_picker(db, "sch")
+    await m.answer("Qaysi guruh?", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
+
+
+@router.callback_query(F.data.startswith("sch:"), STAFF)
+async def sch_group(c: CallbackQuery, db):
+    text, mk = await _schedule_card(db, int(c.data[4:]))
+    await c.message.answer(text, reply_markup=mk, parse_mode="HTML")
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("sd:"), STAFF)
+async def sch_toggle(c: CallbackQuery, db):
+    _, gid, n = c.data.split(":")
+    g = await db.fetchone("SELECT lesson_days FROM groups WHERE id=?", (int(gid),))
+    days = {d for d in (g["lesson_days"] or "").split(",") if d}
+    days ^= {n}
+    await db.execute("UPDATE groups SET lesson_days=? WHERE id=?", (",".join(sorted(days)), int(gid)))
+    text, mk = await _schedule_card(db, int(gid))
+    await c.message.edit_text(text, reply_markup=mk, parse_mode="HTML")
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("sdt:"), STAFF)
+async def sch_time(c: CallbackQuery, state: FSMContext):
+    await state.set_state(Schedule.time)
+    await state.update_data(gid=int(c.data[4:]))
+    await c.message.answer("Dars boshlanish vaqti (masalan 15:00). Olib tashlash uchun - yuboring:")
+    await c.answer()
+
+
+@router.message(Schedule.time)
+async def sch_time_save(m: Message, db, state: FSMContext):
+    t = (m.text or "").strip().replace(".", ":")
+    if t == "-":
+        t = ""
+    else:
+        try:
+            hh, mm = map(int, t.split(":"))
+            assert 0 <= hh < 24 and 0 <= mm < 60
+            t = f"{hh:02d}:{mm:02d}"
+        except Exception:
+            return await m.answer("Vaqt noto'g'ri. Masalan: 15:00")
+    gid = (await state.get_data())["gid"]
+    await db.execute("UPDATE groups SET lesson_time=? WHERE id=?", (t, gid))
+    await state.clear()
+    text, mk = await _schedule_card(db, gid)
+    await m.answer("✅ Saqlandi.\n" + text, reply_markup=mk, parse_mode="HTML")
+
+
+# ---------------- Panel (Mini App) ----------------
+@router.message(F.text == "🖥 Panel", STAFF)
+async def open_panel(m: Message):
+    if not WEBAPP_URL:
+        return await m.answer("Mini App hali ulanmagan (Render'da Web Service va WEBAPP_URL kerak).")
+    await m.answer("📊 Panelni ochish uchun tugmani bosing 👇", reply_markup=webapp_markup("🖥 Panelni ochish"))

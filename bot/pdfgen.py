@@ -18,21 +18,22 @@ for p in ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 
 
 def attendance_pdf(group_name, teacher_name, day, rows) -> bytes:
-    """rows: [(full_name, grade, phone, present_bool)]"""
+    """rows: [(full_name, grade, phone, status)]  status: present|absent|late|excused"""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4)
     st = getSampleStyleSheet()["Normal"]
     st.fontName = FONT
-    absent = sum(1 for r in rows if not r[3])
+    LABELS = {"present": "Keldi", "absent": "Kelmadi", "late": "Kechikdi", "excused": "Sababli"}
+    absent = sum(1 for r in rows if r[3] in ("absent", "excused"))
     data = [["#", "O'quvchi", "Sinf", "Telefon", "Davomat"]]
     for i, (name, grade, phone, present) in enumerate(rows, 1):
-        data.append([str(i), name, grade, phone, "Keldi" if present else "Kelmadi"])
+        data.append([str(i), name, grade, phone, LABELS.get(present, "Keldi")])
     tbl = Table(data, colWidths=[28, 190, 45, 100, 70])
     style = [("FONTNAME", (0, 0), (-1, -1), FONT),
              ("GRID", (0, 0), (-1, -1), .5, colors.grey),
              ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey)]
     for i, r in enumerate(rows, 1):
-        if not r[3]:
+        if r[3] in ("absent", "excused"):
             style.append(("TEXTCOLOR", (0, i), (-1, i), colors.red))
     tbl.setStyle(TableStyle(style))
     doc.build([

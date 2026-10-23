@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>O'quv markaz</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{
+  --bg:var(--tg-theme-bg-color,#ffffff);
+  --text:var(--tg-theme-text-color,#111827);
+  --hint:var(--tg-theme-hint-color,#6b7280);
+  --link:var(--tg-theme-link-color,#2563eb);
+  --btn:var(--tg-theme-button-color,#2563eb);
+  --btn-text:var(--tg-theme-button-text-color,#ffffff);
+  --card:var(--tg-theme-secondary-bg-color,#f3f4f6);
+  --line:color-mix(in srgb,var(--hint) 25%,transparent);
+  --ok:#16a34a; --no:#dc2626; --late:#d97706; --exc:#2563eb;
+  --ok-bg:color-mix(in srgb,var(--ok) 16%,transparent);
+  --no-bg:color-mix(in srgb,var(--no) 16%,transparent);
+  --late-bg:color-mix(in srgb,var(--late) 18%,transparent);
+  --exc-bg:color-mix(in srgb,var(--exc) 16%,transparent);
+  --r:14px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font:16px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+body{padding:0 16px calc(96px + env(safe-area-inset-bottom))}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+h1{font-size:20px;margin:16px 0 4px}
+.sub{color:var(--hint);font-size:14px}
+.top{display:flex;align-items:center;gap:10px;padding-top:14px}
+.top .back{width:40px;height:40px;border-radius:12px;background:var(--card);font-size:20px;flex:none}
+.top h1{margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.strip{display:flex;gap:8px;overflow-x:auto;padding:12px 0 4px;scrollbar-width:none}
+.strip::-webkit-scrollbar{display:none}
+.dchip{flex:none;padding:8px 14px;border-radius:999px;background:var(--card);font-size:14px;white-space:nowrap}
+.dchip.on{background:var(--btn);color:var(--btn-text)}
+.dchip input{position:absolute;opacity:0;width:1px;height:1px}
+.notice{margin:10px 0 0;padding:10px 12px;border-radius:12px;background:var(--late-bg);font-size:14px}
+.counts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+.cnt{border-radius:12px;padding:8px 4px;text-align:center;font-size:12px;color:var(--hint)}
+.cnt b{display:block;font-size:20px;color:var(--text)}
+.cnt.ok{background:var(--ok-bg)}.cnt.no{background:var(--no-bg)}.cnt.late{background:var(--late-bg)}.cnt.exc{background:var(--exc-bg)}
+.tools{display:flex;gap:8px}
+.tools input{flex:1;min-width:0;padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit}
+.tools button{flex:none;padding:0 14px;border-radius:12px;background:var(--ok-bg);color:var(--ok);font-weight:600;font-size:14px}
+.list{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.row{background:var(--card);border-radius:var(--r);padding:12px;border-left:4px solid transparent}
+.row.warn{border-left-color:var(--no)}
+.row .main{display:flex;align-items:center;gap:10px}
+.row .who{flex:1;min-width:0}
+.name{font-weight:600;font-size:16px;overflow:hidden;text-overflow:ellipsis}
+.meta{font-size:13px;color:var(--hint);margin-top:2px}
+.meta a{color:var(--link);text-decoration:none;font-weight:500}
+.st{flex:none;width:76px;height:52px;border-radius:12px;font-size:12px;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.st i{font-style:normal;font-size:20px;line-height:1}
+.st.present{background:var(--ok-bg);color:var(--ok)}
+.st.absent{background:var(--no-bg);color:var(--no)}
+.st.late{background:var(--late-bg);color:var(--late)}
+.st.excused{background:var(--exc-bg);color:var(--exc)}
+.hist{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+.h{font-size:12px;padding:3px 8px;border-radius:8px;background:var(--bg)}
+.h.absent,.h.excused{background:var(--no-bg);color:var(--no);font-weight:600}
+.h.late{background:var(--late-bg)}
+.h.none{color:var(--hint)}
+.warnt{font-size:12px;color:var(--no);font-weight:600}
+.more{margin-left:auto;font-size:12px;color:var(--link)}
+.detail{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);font-size:13px}
+.detail .grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+  background:var(--bg);border-top:1px solid var(--line);display:flex;gap:10px;align-items:center}
+.bar .info{font-size:13px;color:var(--hint);flex:1}
+.bar .info b{color:var(--no)}
+.primary{flex:none;background:var(--btn);color:var(--btn-text);font-weight:700;border-radius:14px;padding:14px 22px}
+.primary:disabled{opacity:.5}
+.cards{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.gcard{background:var(--card);border-radius:var(--r);padding:14px;display:flex;align-items:center;gap:12px;text-align:left;width:100%}
+.gcard .t{font-weight:700;font-size:17px}
+.gcard .badge{margin-left:auto;font-size:12px;padding:4px 10px;border-radius:999px;background:var(--late-bg);color:var(--late);font-weight:600;flex:none}
+.gcard .badge.done{background:var(--ok-bg);color:var(--ok)}
+.empty,.err,.done{text-align:center;padding:48px 8px;color:var(--hint)}
+.done .big{font-size:64px}
+.err{color:var(--no)}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--bg);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{flex:1;padding:12px 0;font-size:13px;color:var(--hint)}
+.tabs button.on{color:var(--btn);font-weight:700}
+.tabs span{display:block;font-size:20px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.kpi{background:var(--card);border-radius:var(--r);padding:12px}
+.kpi .l{font-size:12px;color:var(--hint)}
+.kpi .v{font-size:20px;font-weight:800;margin-top:2px}
+.kpi .d{font-size:12px;margin-top:2px}
+.up{color:var(--ok)}.dn{color:var(--no)}
+.chart{background:var(--card);border-radius:var(--r);padding:12px;margin-top:10px}
+.chart h3,.sec{margin:18px 0 8px;font-size:15px}
+.chart h3{margin:0 0 8px}
+.gbox{background:var(--card);border-radius:var(--r);padding:12px;margin-top:8px}
+.gbox .hd{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+.gbox .hd span{font-weight:500;color:var(--hint);font-size:13px}
+.mini{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--hint)}
+.mini .tr{flex:1;height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.mini .fi{height:100%;border-radius:99px}
+.mini .lab{width:92px;flex:none}
+.mini .val{width:56px;text-align:right;flex:none;color:var(--text);font-weight:600}
+.spin{margin:80px auto;width:34px;height:34px;border:4px solid var(--line);border-top-color:var(--btn);border-radius:50%;animation:s 1s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="app"><div class="spin"></div></div>
+<script>
+const tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const $app = document.getElementById('app');
+const ST = {
+  present: {i:'✅', n:'Keldi'}, absent: {i:'❌', n:"Yo'q"},
+  late: {i:'🕒', n:'Kech'}, excused: {i:'📝', n:'Sababli'}
+};
+const CYCLE = ['present','absent','late','excused'];
+const WD = ['Ya','Du','Se','Ch','Pa','Ju','Sh'];
+const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open:new Set(), busy:false};
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDay = d => d.slice(8,10) + '.' + d.slice(5,7);
+const wd = d => WD[new Date(d + 'T12:00:00').getDay()];
+const money = n => Math.round(n).toLocaleString('ru-RU').replace(/ /g,' ');
+const short = n => Math.abs(n) >= 1e6 ? (n/1e6).toFixed(1).replace('.0','') + ' mln' : Math.abs(n) >= 1e3 ? Math.round(n/1e3) + ' ming' : String(Math.round(n));
+const haptic = (k='light') => { try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(k); } catch(e){} };
+
+async function api(path, opts={}) {
+  const r = await fetch(path, {...opts, headers:{'X-Init-Data': (tg && tg.initData) || '', 'Content-Type':'application/json'}});
+  let data = {};
+  try { data = await r.json(); } catch(e) {}
+  if (!r.ok) throw new Error(data.error || (r.status === 401 ? "Botdan qayta oching" : 'Xatolik ' + r.status));
+  return data;
+}
+function fail(e) { $app.innerHTML = `<div class="err"><div style="font-size:48px">⚠️</div><p>${esc(e.message || e)}</p><p class="sub">Botga qaytib, tugmani qayta bosing.</p></div>`; }
+
+/* ---------- boshlash ---------- */
+async function init() {
+  try {
+    S.me = await api('/api/me');
+    if (S.me.role === 'teacher') {
+      if (S.me.groups.length === 1) return openGroup(S.me.groups[0].id, null, true);
+      S.view = 'groups';
+    } else { S.tab = 'dash'; S.view = 'dash'; await loadDash(); return; }
+    render();
+  } catch (e) { fail(e); }
+}
+
+/* ---------- guruhlar ro'yxati ---------- */
+function viewGroups() {
+  const g = S.me.groups;
+  if (!g.length) return `<h1>Guruhlar</h1><div class="empty">Guruh yo'q</div>`;
+  return `<h1>Guruhni tanlang</h1><div class="sub">Bugun: ${fmtDay(S.me.today)}.${S.me.today.slice(0,4)}</div><div class="cards">` +
+    g.map(x => `<button class="gcard" data-act="open" data-id="${x.id}">
+      <div><div class="t">${esc(x.name)}</div><div class="sub">${x.students} ta o'quvchi${x.time ? ' · ' + esc(x.time) : ''}</div></div>
+      <span class="badge ${x.taken_today ? 'done' : ''}">${x.taken_today ? 'Bugun olingan' : 'Olinmagan'}</span></button>`).join('') + '</div>';
+}
+
+/* ---------- davomat ---------- */
+async function openGroup(id, day, single=false) {
+  $app.innerHTML = '<div class="spin"></div>';
+  try {
+    const d = await api(`/api/attendance?group=${id}` + (day ? `&day=${day}` : ''));
+    S.att = {...d, single, statuses: Object.fromEntries(d.students.map(s => [s.id, s.status])), done:null};
+    S.view = 'att'; S.q = ''; S.open = new Set();
+    render();
+  } catch (e) { fail(e); }
+}
+const counts = () => {
+  const c = {present:0, absent:0, late:0, excused:0};
+  Object.values(S.att.statuses).forEach(v => c[v]++);
+  return c;
+};
+function histChips(s, days3) {
+  return days3.map(d => {
+    const st = s.hist[d];
+    return st ? `<span class="h ${st}">${fmtDay(d)} ${ST[st].i}</span>` : `<span class="h none">${fmtDay(d)} ▫️</span>`;
+  }).join('');
+}
+function rowHtml(s) {
+  const a = S.att, days3 = a.hist_days.slice(-3);
+  const miss3 = days3.filter(d => ['absent','excused'].includes(s.hist[d])).length;
+  const cur = a.statuses[s.id];
+  const open = S.open.has(s.id);
+  const allMiss = a.hist_days.filter(d => ['absent','excused'].includes(s.hist[d])).map(fmtDay);
+  return `<div class="row ${miss3 >= 2 ? 'warn' : ''}" data-id="${s.id}">
+    <div class="main">
+      <div class="who" data-act="more" data-id="${s.id}">
+        <div class="name">${esc(s.name)}</div>
+        <div class="meta">${esc(s.grade)}-sinf${s.phone ? ` · <a href="tel:${esc(s.phone)}" data-stop="1">📞 ${esc(s.phone)}</a>` : ''}</div>
+      </div>
+      <button class="st ${cur}" data-act="cycle" data-id="${s.id}"><i>${ST[cur].i}</i>${ST[cur].n}</button>
+    </div>
+    ${days3.length ? `<div class="hist" data-act="more" data-id="${s.id}">${histChips(s, days3)}
+      ${miss3 >= 2 ? `<span class="warnt">⚠ ${miss3} marta yo'q</span>` : ''}<span class="more">${open ? 'yopish ▴' : 'batafsil ▾'}</span></div>` : ''}
+    ${open ? `<div class="detail"><b>Oxirgi ${a.hist_days.length} ta dars:</b>
+      <div class="grid">${a.hist_days.length ? [...a.hist_days].reverse().map(d => { const st = s.hist[d];
+        return `<span class="h ${st || 'none'}">${fmtDay(d)} ${wd(d)} ${st ? ST[st].i : '▫️'}</span>`; }).join('') : "Hali davomat yo'q"}</div>
+      <div style="margin-top:8px">${allMiss.length ? 'Kelmagan kunlari: <b style="color:var(--no)">' + allMiss.join(', ') + '</b>' : "Hammasiga kelgan 👍"}</div></div>` : ''}
+  </div>`;
+}
+function viewAtt() {
+  const a = S.att, c = counts();
+  const q = S.q.trim().toLowerCase();
+  const list = a.students.filter(s => !q || s.name.toLowerCase().includes(q) || (s.phone || '').includes(q));
+  const days = [a.today, ...a.recent_days.filter(d => d !== a.today)].slice(0, 7);
+  const abs = c.absent + c.excused;
+  const chips = days.map(d => `<button class="dchip ${d === a.day ? 'on' : ''}" data-act="day" data-day="${d}">${d === a.today ? 'Bugun' : fmtDay(d) + ' ' + wd(d)}</button>`).join('') +
+    `<label class="dchip">📅<input type="date" max="${a.today}" data-act="pick" value="${a.day}"></label>`;
+  return `<div class="top">${a.single ? '' : '<button class="back" data-act="back">‹</button>'}<h1>${esc(a.group.name)}</h1>
+      <span class="sub">${fmtDay(a.day)}.${a.day.slice(0,4)}</span></div>
+    <div class="strip">${chips}</div>
+    ${a.has_record ? '<div class="notice">Bu kun uchun davomat olingan. O\'zgartirib qayta yuborishingiz mumkin.</div>' : ''}
+    <div class="counts"><div class="cnt ok"><b>${c.present}</b>Keldi</div><div class="cnt no"><b>${c.absent}</b>Yo'q</div>
+      <div class="cnt late"><b>${c.late}</b>Kech</div><div class="cnt exc"><b>${c.excused}</b>Sababli</div></div>
+    <div class="tools"><input id="q" placeholder="Qidirish..." value="${esc(S.q)}" autocomplete="off"><button data-act="all">Hammasi ✅</button></div>
+    <div class="list">${list.map(rowHtml).join('') || '<div class="empty">Topilmadi</div>'}</div>
+    <div class="bar"><div class="info">Jami ${a.students.length} · Kelmagan: <b>${abs}</b><br>Bosing: ✅ → ❌ → 🕒 → 📝</div>
+      <button class="primary" data-act="submit" ${S.busy || !a.students.length ? 'disabled' : ''}>${S.busy ? 'Yuborilmoqda…' : 'Yuborish'}</button></div>`;
+}
+function viewDone() {
+  const r = S.att.done, c = r.counts;
+  return `<div class="done"><div class="big">✅</div><h1>Davomat saqlandi</h1>
+    <p>${esc(S.att.group.name)} · ${fmtDay(S.att.day)}.${S.att.day.slice(0,4)}<br>
+    Keldi ${c.present} · Yo'q ${c.absent} · Kech ${c.late} · Sababli ${c.excused}</p>
+    <p class="sub">Admin PDF hisobotni oldi.${r.no_price ? '<br>⚠️ Reyestr narxi kiritilmagan, direktorga ayting.' : ''}</p>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:24px">
+      <button class="primary" data-act="close">Yopish</button>
+      <button class="primary" style="background:var(--card);color:var(--text)" data-act="edit">Tahrirlash</button></div></div>`;
+}
+
+/* ---------- panel (admin / direktor) ---------- */
+async function loadDash() {
+  $app.innerHTML = '<div class="spin"></div>';
+  try { S.dash = await api('/api/dashboard'); S.view = 'dash'; S.tab = 'dash'; render(); } catch (e) { fail(e); }
+}
+function barChart(months) {
+  const max = Math.max(1, ...months.map(m => m.income + m.registry));
+  const W = 320, H = 130, T = 22, bw = 30, gap = (W - months.length * bw) / (months.length + 1);
+  return `<svg viewBox="0 0 ${W} ${H + T + 22}" width="100%" role="img" aria-label="Oylik tushum">` + months.map((m, i) => {
+    const x = gap + i * (bw + gap), tot = m.income + m.registry;
+    const h1 = m.income / max * H, h2 = m.registry / max * H, top = T + H - h1 - h2;
+    return `${h1 > 0 ? `<rect x="${x}" y="${T + H - h1}" width="${bw}" height="${h1}" rx="5" fill="var(--btn)"/>` : ''}
+      ${h2 > 0 ? `<rect x="${x}" y="${top}" width="${bw}" height="${h2}" rx="5" fill="var(--late)"/>` : ''}
+      ${tot > 0 ? `<text x="${x + bw/2}" y="${top - 5}" font-size="10" text-anchor="middle" fill="var(--text)">${short(tot)}</text>` :
+        `<rect x="${x}" y="${T + H - 3}" width="${bw}" height="3" rx="1.5" fill="var(--line)"/>`}
+      <text x="${x + bw/2}" y="${T + H + 16}" font-size="10" text-anchor="middle" fill="var(--hint)">${m.month.slice(5)}</text>`;
+  }).join('') + `</svg>`;
+}
+function pctBar(label, pct, color, text) {
+  return `<div class="mini"><span class="lab">${label}</span><div class="tr"><div class="fi" style="width:${Math.min(100, pct || 0)}%;background:${color}"></div></div><span class="val">${text}</span></div>`;
+}
+function viewDash() {
+  const d = S.dash, m = d.months, cur = m[m.length - 1], prev = m[m.length - 2] || {income:0, registry:0};
+  const diff = cur.income - prev.income;
+  const dp = d.students ? Math.round(d.debtors * 100 / d.students) : 0;
+  const groups = [...d.groups].sort((a, b) => b.debtors - a.debtors);
+  return `<h1>Panel</h1><div class="sub">${d.month}</div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Tushum</div><div class="v">${short(cur.income)}</div>
+        <div class="d ${diff >= 0 ? 'up' : 'dn'}">${diff >= 0 ? '▲' : '▼'} ${short(Math.abs(diff))} o'tgan oyga nisbatan</div></div>
+      ${cur.registry ? `<div class="kpi"><div class="l">🏛 Reyestr (davlat)</div><div class="v">${short(cur.registry)}</div><div class="d sub">to'liq o'qituvchilarga</div></div>` : ''}
+      ${d.role === 'director' ? `<div class="kpi"><div class="l">O'qituvchilar oyligi</div><div class="v">${short(d.salaries)}</div></div>
+        <div class="kpi"><div class="l">Qolgan</div><div class="v ${d.remaining >= 0 ? 'up' : 'dn'}">${short(d.remaining)}</div></div>` : ''}
+      <div class="kpi"><div class="l">O'quvchilar</div><div class="v">${d.students}</div></div>
+      <div class="kpi"><div class="l">Qarzdorlar</div><div class="v ${dp > 30 ? 'dn' : ''}">${d.debtors}</div><div class="d sub">${dp}% o'quvchi</div></div>
+      <div class="kpi"><div class="l">Davomat (shu oy)</div><div class="v">${d.att === null ? '—' : d.att + '%'}</div></div>
+    </div>
+    <div class="chart"><h3>Oylik tushum (oxirgi 6 oy)</h3>${barChart(m)}
+      <div class="sub" style="display:flex;gap:14px;margin-top:4px"><span><span style="color:var(--btn)">■</span> to'lovlar</span><span><span style="color:var(--late)">■</span> reyestr</span></div></div>
+    <div class="sec"><b>Guruhlar</b> <span class="sub">(qarzdori ko'pi birinchi)</span></div>
+    ${groups.map(g => { const dpg = g.students ? Math.round(g.debtors * 100 / g.students) : 0;
+      return `<div class="gbox"><div class="hd">${esc(g.name)}<span>${esc(g.teacher)}</span></div>
+      <div class="sub" style="margin-top:2px">${g.students} o'quvchi · tushum ${short(g.income)}</div>
+      ${pctBar('Qarzdor', dpg, 'var(--no)', g.debtors + ' ta')}
+      ${pctBar('Davomat', g.att, 'var(--ok)', g.att === null ? '—' : g.att + '%')}</div>`; }).join('') || '<div class="empty">Guruh yo\'q</div>'}`;
+}
+
+/* ---------- umumiy chizish ---------- */
+function tabs() {
+  return `<div class="tabs"><button class="${S.tab === 'dash' ? 'on' : ''}" data-act="tab" data-tab="dash"><span>📊</span>Panel</button>
+    <button class="${S.tab === 'groups' ? 'on' : ''}" data-act="tab" data-tab="groups"><span>📝</span>Davomat</button></div>`;
+}
+function render() {
+  const staff = S.me.role !== 'teacher';
+  let html = '';
+  if (S.view === 'att') html = S.att.done ? viewDone() : viewAtt();
+  else if (S.view === 'dash') html = viewDash() + tabs();
+  else html = viewGroups() + (staff ? tabs() : '');
+  const q = document.activeElement && document.activeElement.id === 'q';
+  const pos = q ? document.activeElement.selectionStart : 0;
+  $app.innerHTML = html;
+  if (q) { const el = document.getElementById('q'); el.focus(); el.setSelectionRange(pos, pos); }
+  try {
+    if (tg && tg.BackButton) {
+      if (S.view === 'att' && !S.att.single && !S.att.done) { tg.BackButton.show(); } else { tg.BackButton.hide(); }
+    }
+  } catch (e) {}
+}
+if (tg && tg.BackButton) tg.BackButton.onClick(() => { if (S.view === 'att') backToGroups(); });
+function backToGroups() { S.view = 'groups'; S.tab = 'groups'; render(); }
+
+async function submit() {
+  const a = S.att;
+  const c = counts(), abs = c.absent + c.excused;
+  const msg = `${a.group.name}: ${a.students.length} o'quvchidan ${abs} tasi kelmagan. Yuborilsinmi?`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  S.busy = true; render();
+  try {
+    const res = await api('/api/attendance', {method:'POST', body: JSON.stringify({group: a.group.id, day: a.day, statuses: a.statuses})});
+    a.done = res; a.has_record = true;
+    try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-stop]')) return;
+  const lab = e.target.closest('label.dchip');
+  if (lab) { const inp = lab.querySelector('input'); try { inp.showPicker(); } catch (x) {} return; }
+  const t = e.target.closest('[data-act]');
+  if (!t) return;
+  const act = t.dataset.act, id = Number(t.dataset.id);
+  if (act === 'open') openGroup(id);
+  else if (act === 'back') backToGroups();
+  else if (act === 'tab') { S.tab = t.dataset.tab; if (S.tab === 'dash') (S.dash ? (S.view = 'dash', render()) : loadDash()); else { S.view = 'groups'; render(); } }
+  else if (act === 'cycle') {
+    const cur = S.att.statuses[id];
+    S.att.statuses[id] = CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length];
+    haptic(); render();
+  }
+  else if (act === 'all') { S.att.students.forEach(s => S.att.statuses[s.id] = 'present'); haptic('medium'); render(); }
+  else if (act === 'more') { S.open.has(id) ? S.open.delete(id) : S.open.add(id); render(); }
+  else if (act === 'day') openGroup(S.att.group.id, t.dataset.day, S.att.single);
+  else if (act === 'submit') submit();
+  else if (act === 'edit') { S.att.done = null; render(); }
+  else if (act === 'close') { tg && tg.close ? tg.close() : history.back(); }
+});
+document.addEventListener('change', e => {
+  if (e.target.dataset && e.target.dataset.act === 'pick' && e.target.value) openGroup(S.att.group.id, e.target.value, S.att.single);
+});
+document.addEventListener('input', e => { if (e.target.id === 'q') { S.q = e.target.value; render(); } });
+init();
+</script>
+</body>
+</html>

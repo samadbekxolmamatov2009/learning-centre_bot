@@ -1,11 +1,11 @@
 import asyncio
 import base64
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import aiohttp
 import aiosqlite
 
-from .config import DB_PATH, DIRECTOR_IDS, TURSO_URL, TURSO_TOKEN
+from .config import DB_PATH, DIRECTOR_IDS, TURSO_URL, TURSO_TOKEN, TZ_OFFSET
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users(
@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS teachers(
     registry_rate INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS groups(
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE,
-    teacher_id INTEGER REFERENCES teachers(tg_id));
+    teacher_id INTEGER REFERENCES teachers(tg_id),
+    lesson_days TEXT NOT NULL DEFAULT '', lesson_time TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS students(
     id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT NOT NULL,
     last_name TEXT NOT NULL, grade TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '',
@@ -35,7 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_payments_group_month ON payments(group_id, month)
 CREATE TABLE IF NOT EXISTS attendance(
     id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER NOT NULL,
     day TEXT NOT NULL, student_id INTEGER NOT NULL, present INTEGER NOT NULL,
-    rate INTEGER NOT NULL DEFAULT 0,
+    rate INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT '',
     UNIQUE(group_id, day, student_id));
 CREATE TABLE IF NOT EXISTS notices(key TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -88,6 +89,12 @@ class Database:
         if "registry_rate" not in tcols:
             await self.execute("ALTER TABLE teachers ADD COLUMN registry_rate INTEGER NOT NULL DEFAULT 0")
         acols = [r["name"] for r in await self.fetchall("PRAGMA table_info(attendance)")]
+        if "status" not in acols:
+            await self.execute("ALTER TABLE attendance ADD COLUMN status TEXT NOT NULL DEFAULT ''")
+        gcols = [r["name"] for r in await self.fetchall("PRAGMA table_info(groups)")]
+        for col in ("lesson_days", "lesson_time"):
+            if col not in gcols:
+                await self.execute(f"ALTER TABLE groups ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         if "rate" not in acols:
             await self.execute("ALTER TABLE attendance ADD COLUMN rate INTEGER NOT NULL DEFAULT 0")
         if "phone" not in cols:  # eski bazani yangilash
@@ -207,8 +214,17 @@ class TursoDB(Database):
         await self.session.close()
 
 
+def now_local() -> datetime:
+    """Toshkent vaqti (server UTC da bo'lsa ham)."""
+    return datetime.now(timezone(timedelta(hours=TZ_OFFSET)))
+
+
+def today_local() -> date:
+    return now_local().date()
+
+
 def current_month() -> str:
-    return date.today().strftime("%Y-%m")
+    return today_local().strftime("%Y-%m")
 
 
 async def connect() -> Database:
