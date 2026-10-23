@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS users(
 CREATE TABLE IF NOT EXISTS teachers(
     tg_id INTEGER PRIMARY KEY REFERENCES users(tg_id),
     pay_type TEXT NOT NULL CHECK(pay_type IN ('percent','per_student')),
-    pay_value REAL NOT NULL);
+    pay_value REAL NOT NULL,
+    registry_rate INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS groups(
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE,
     teacher_id INTEGER REFERENCES teachers(tg_id));
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS students(
     id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT NOT NULL,
     last_name TEXT NOT NULL, grade TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '',
     is_registry INTEGER NOT NULL DEFAULT 0, reg_rate INTEGER NOT NULL DEFAULT 0,
+    hidden INTEGER NOT NULL DEFAULT 0,
     group_id INTEGER NOT NULL REFERENCES groups(id));
 CREATE TABLE IF NOT EXISTS payments(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,6 +38,7 @@ CREATE TABLE IF NOT EXISTS attendance(
     rate INTEGER NOT NULL DEFAULT 0,
     UNIQUE(group_id, day, student_id));
 CREATE TABLE IF NOT EXISTS notices(key TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 
 
@@ -77,9 +80,13 @@ class Database:
                 ("ALTER TABLE payments_new RENAME TO payments", ()),
                 ("CREATE INDEX IF NOT EXISTS idx_payments_student_month ON payments(student_id, month)", ()),
                 ("CREATE INDEX IF NOT EXISTS idx_payments_group_month ON payments(group_id, month)", ())])
-        for col, ddl in (("is_registry", "INTEGER NOT NULL DEFAULT 0"), ("reg_rate", "INTEGER NOT NULL DEFAULT 0")):
+        for col, ddl in (("is_registry", "INTEGER NOT NULL DEFAULT 0"), ("reg_rate", "INTEGER NOT NULL DEFAULT 0"),
+                         ("hidden", "INTEGER NOT NULL DEFAULT 0")):
             if col not in cols:
                 await self.execute(f"ALTER TABLE students ADD COLUMN {col} {ddl}")
+        tcols = [r["name"] for r in await self.fetchall("PRAGMA table_info(teachers)")]
+        if "registry_rate" not in tcols:
+            await self.execute("ALTER TABLE teachers ADD COLUMN registry_rate INTEGER NOT NULL DEFAULT 0")
         acols = [r["name"] for r in await self.fetchall("PRAGMA table_info(attendance)")]
         if "rate" not in acols:
             await self.execute("ALTER TABLE attendance ADD COLUMN rate INTEGER NOT NULL DEFAULT 0")
@@ -236,8 +243,18 @@ async def group_students(db, group_id, month=None):
                (COUNT(p.id) > 0 OR s.is_registry = 1) AS paid
         FROM students s LEFT JOIN payments p
              ON p.student_id=s.id AND p.month=?
-        WHERE s.group_id=? GROUP BY s.id ORDER BY s.last_name, s.first_name
+        WHERE s.group_id=? AND s.hidden=0 GROUP BY s.id ORDER BY s.last_name, s.first_name
     """, (month, group_id))
+
+
+async def get_setting(db, key, default=""):
+    row = await fetchone(db, "SELECT value FROM settings WHERE key=?", (key,))
+    return row["value"] if row else default
+
+
+async def set_setting(db, key, value):
+    await db.execute("INSERT INTO settings(key,value) VALUES(?,?) "
+                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
 
 async def group_income(db, group_id, month=None):
