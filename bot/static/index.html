@@ -25,7 +25,7 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--text);
   font:16px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-body{padding:0 16px calc(96px + env(safe-area-inset-bottom))}
+body{padding:0 16px calc(160px + env(safe-area-inset-bottom))}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
 h1{font-size:20px;margin:16px 0 4px}
 .sub{color:var(--hint);font-size:14px}
@@ -70,6 +70,7 @@ h1{font-size:20px;margin:16px 0 4px}
 .detail .grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .bar{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));
   background:var(--bg);border-top:1px solid var(--line);display:flex;gap:10px;align-items:center}
+.bar.withtabs{bottom:calc(58px + env(safe-area-inset-bottom));padding-bottom:10px;border-top:1px solid var(--line)}
 .bar .info{font-size:13px;color:var(--hint);flex:1}
 .bar .info b{color:var(--no)}
 .primary{flex:none;background:var(--btn);color:var(--btn-text);font-weight:700;border-radius:14px;padding:14px 22px}
@@ -106,6 +107,41 @@ h1{font-size:20px;margin:16px 0 4px}
 .mini .val{width:56px;text-align:right;flex:none;color:var(--text);font-weight:600}
 .spin{margin:80px auto;width:34px;height:34px;border:4px solid var(--line);border-top-color:var(--btn);border-radius:50%;animation:s 1s linear infinite}
 @keyframes s{to{transform:rotate(360deg)}}
+.field{margin-top:14px}
+.field label{display:block;font-size:13px;color:var(--hint);margin-bottom:6px}
+.field .req{color:var(--no)}
+.input,select,input[type=text],input[type=tel]{width:100%;padding:12px 14px;border-radius:12px;
+  border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;appearance:none}
+select.input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7280'%3E%3Cpath d='M5.2 7.5l4.8 5 4.8-5z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center}
+.check{display:flex;align-items:center;gap:10px;margin-top:16px;background:var(--card);padding:12px 14px;border-radius:12px}
+.check input{width:20px;height:20px;flex:none}
+.form-actions{display:flex;gap:10px;margin-top:20px}
+.secondary{flex:none;background:var(--card);color:var(--text);font-weight:700;border-radius:14px;padding:14px 18px}
+.form-actions .primary{flex:1}
+.toast{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--ok-bg);color:var(--ok);font-size:14px;font-weight:600}
+.srow{display:flex;gap:8px;margin:12px 0 4px}
+.srow .input{flex:1}
+.iconbtn{flex:none;width:46px;height:46px;border-radius:12px;background:var(--card);font-size:20px;display:flex;align-items:center;justify-content:center}
+.card-detail{background:var(--card);border-radius:var(--r);padding:16px;margin-top:10px}
+.card-detail .nm{font-size:19px;font-weight:700}
+.card-detail .ln{margin-top:6px;font-size:14px;color:var(--hint)}
+.card-detail .ln b{color:var(--text);font-weight:600}
+.card-detail .ln a{color:var(--link);text-decoration:none;font-weight:600}
+.pay-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}
+.pay-badge.ok{background:var(--ok-bg);color:var(--ok)}
+.pay-badge.no{background:var(--no-bg);color:var(--no)}
+.pay-badge.reg{background:var(--late-bg);color:var(--late)}
+.actions2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.abtn{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:14px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;gap:6px;text-align:center}
+.abtn.danger{color:var(--no);border-color:color-mix(in srgb,var(--no) 35%,transparent)}
+.inline-form{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);display:flex;gap:8px}
+.srow-row{background:var(--card);border-radius:12px;padding:12px;display:flex;align-items:center;gap:10px}
+.srow-row .who{flex:1;min-width:0}
+.group-badge{font-size:12px;color:var(--hint);margin-top:1px}
+.fabrow{display:flex;gap:8px;margin-top:12px}
+.fabrow .primary{flex:1;border-radius:14px;padding:13px}
 </style>
 </head>
 <body>
@@ -120,7 +156,10 @@ const ST = {
 };
 const CYCLE = ['present','absent','late','excused'];
 const WD = ['Ya','Du','Se','Ch','Pa','Ju','Sh'];
-const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open:new Set(), busy:false};
+const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open:new Set(), busy:false,
+  stu:{view:'groups', groups:[], teachers:[], students:[], searching:false, searchResults:null, q:'',
+       group:null, detail:null, formBack:'groups', detailBack:'groups', payOpen:false, payAmount:'', moveOpen:false, moveTo:'',
+       form:null, toast:'', gform:null}};
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d.slice(8,10) + '.' + d.slice(5,7);
@@ -219,7 +258,7 @@ function viewAtt() {
       <div class="cnt late"><b>${c.late}</b>Kech</div><div class="cnt exc"><b>${c.excused}</b>Sababli</div></div>
     <div class="tools"><input id="q" placeholder="Qidirish..." value="${esc(S.q)}" autocomplete="off"><button data-act="all">Hammasi ✅</button></div>
     <div class="list">${list.map(rowHtml).join('') || '<div class="empty">Topilmadi</div>'}</div>
-    <div class="bar"><div class="info">Jami ${a.students.length} · Kelmagan: <b>${abs}</b><br>Bosing: ✅ → ❌ → 🕒 → 📝</div>
+    <div class="bar withtabs"><div class="info">Jami ${a.students.length} · Kelmagan: <b>${abs}</b><br>Bosing: ✅ → ❌ → 🕒 → 📝</div>
       <button class="primary" data-act="submit" ${S.busy || !a.students.length ? 'disabled' : ''}>${S.busy ? 'Yuborilmoqda…' : 'Yuborish'}</button></div>`;
 }
 function viewDone() {
@@ -280,29 +319,301 @@ function viewDash() {
       ${pctBar('Davomat', g.att, 'var(--ok)', g.att === null ? '—' : g.att + '%')}</div>`; }).join('') || '<div class="empty">Guruh yo\'q</div>'}`;
 }
 
+/* ---------- o'quvchilar bo'limi ---------- */
+let searchTimer = null;
+
+async function loadStudentsTab() {
+  S.tab = 'stu'; S.view = 'stu';
+  if (S.stu.groups.length) { S.stu.view = 'groups'; render(); return; }
+  $app.innerHTML = '<div class="spin"></div>';
+  try {
+    const d = await api('/api/groups');
+    S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    S.stu.view = 'groups'; render();
+  } catch (e) { fail(e); }
+}
+function groupName(id) { const g = S.stu.groups.find(x => x.id === id); return g ? g.name : ''; }
+
+function emptyForm(mode, groupId) {
+  return {mode, id:null, last:'', first:'', grade:'', phone:'', group: groupId || '', is_registry:false};
+}
+function goStuForm(mode, prefillGroup, student) {
+  S.stu.formBack = mode === 'edit' ? 'detail' : S.stu.view;
+  S.stu.form = student
+    ? {mode, id:student.id, last:student.last, first:student.first, grade:student.grade,
+       phone:student.phone, group:student.group, is_registry:student.is_registry}
+    : emptyForm(mode, prefillGroup);
+  S.stu.toast = '';
+  S.stu.view = 'form';
+  render();
+}
+function goStuDetail(student) {
+  S.stu.detailBack = S.stu.view === 'detail' ? S.stu.detailBack : S.stu.view;
+  S.stu.detail = student; S.stu.payOpen = false; S.stu.payAmount = ''; S.stu.moveOpen = false; S.stu.moveTo = '';
+  S.stu.view = 'detail';
+  render();
+}
+async function openStuGroup(gid) {
+  $app.innerHTML = '<div class="spin"></div>';
+  try {
+    const d = await api(`/api/students?group=${gid}`);
+    S.stu.students = d.students; S.stu.group = {id: gid, name: groupName(gid)};
+    S.stu.q = ''; S.stu.view = 'list'; render();
+  } catch (e) { fail(e); }
+}
+async function refreshStuGroup() {
+  if (!S.stu.group) return;
+  try { const d = await api(`/api/students?group=${S.stu.group.id}`); S.stu.students = d.students; } catch (e) {}
+}
+async function doStuSearch(q) {
+  if (q.length < 2) { S.stu.searchResults = null; render(); return; }
+  S.stu.searching = true;
+  try { const d = await api(`/api/students?q=${encodeURIComponent(q)}`); S.stu.searchResults = d.students; }
+  catch (e) { S.stu.searchResults = []; }
+  S.stu.searching = false; render();
+}
+
+function payBadge(s) {
+  if (s.is_registry) return `<span class="pay-badge reg">🏛 reyestr</span>`;
+  return s.paid ? `<span class="pay-badge ok">✅ to'lagan</span>` : `<span class="pay-badge no">❌ qarzdor</span>`;
+}
+function stuRow(s, showGroup) {
+  return `<div class="srow-row" data-act="stu-open" data-sid="${s.id}">
+    <div class="who"><div class="name">${esc(s.last)} ${esc(s.first)}</div>
+      <div class="meta">${esc(s.grade)}-sinf${showGroup ? ' · ' + esc(s.group_name || groupName(s.group)) : ''}${s.phone ? ' · 📞 ' + esc(s.phone) : ''}</div></div>
+    ${payBadge(s)}</div>`;
+}
+
+function viewStuGroups() {
+  const st = S.stu, staff = S.me.role !== 'teacher';
+  const header = `<h1>👥 O'quvchilar</h1>
+    <div class="srow"><input class="input" id="stuq" placeholder="Qidirish: ism, familiya, telefon..." value="${esc(st.q)}" autocomplete="off">
+      <button class="iconbtn" data-act="stu-add-any" title="Yangi o'quvchi">➕</button></div>`;
+  if (st.q.trim().length >= 2) {
+    const res = st.searchResults;
+    const body = st.searching && !res ? '<div class="spin" style="margin:40px auto"></div>'
+      : (res && res.length ? `<div class="list" style="margin-top:4px">${res.map(s => stuRow(s, true)).join('')}</div>`
+                            : '<div class="empty">Hech narsa topilmadi</div>');
+    return header + body;
+  }
+  const groups = st.groups;
+  const cards = groups.map(g => `<button class="gcard" data-act="stu-group" data-id="${g.id}">
+    <div><div class="t">${esc(g.name)}</div><div class="sub">${g.students} ta o'quvchi${g.teacher ? ' · 👨‍🏫 ' + esc(g.teacher) : ''}</div></div>
+    <span class="sub">▸</span></button>`).join('');
+  const addGroup = staff ? `<button class="gcard" data-act="stu-gform" style="border:1.5px dashed var(--line);background:transparent">
+    <div class="t">➕ Yangi guruh</div></button>` : '';
+  return header + `<div class="cards">${cards}${addGroup}</div>` + (groups.length ? '' : (staff ? '' : '<div class="empty">Sizda guruh yo\'q</div>'));
+}
+
+function viewStuList() {
+  const st = S.stu;
+  const q = st.q.trim().toLowerCase();
+  const list = st.students.filter(s => !q || (s.last + ' ' + s.first).toLowerCase().includes(q) || (s.phone || '').includes(q));
+  const debt = st.students.filter(s => !s.paid).length;
+  return `<div class="top"><button class="back" data-act="stu-back">‹</button><h1>${esc(st.group.name)}</h1></div>
+    <div class="sub">${st.students.length} o'quvchi${debt ? ' · ❌ ' + debt + ' qarzdor' : ''}</div>
+    <div class="srow"><input class="input" id="stuq" placeholder="Shu guruhda qidirish..." value="${esc(st.q)}" autocomplete="off">
+      <button class="iconbtn" data-act="stu-add-group" title="Yangi o'quvchi">➕</button></div>
+    <div class="list" style="margin-top:4px">${list.map(s => stuRow(s, false)).join('') || '<div class="empty">Topilmadi</div>'}</div>`;
+}
+
+function viewStuForm() {
+  const f = S.stu.form, isEdit = f.mode === 'edit';
+  const groups = S.stu.groups;
+  const staff = S.me.role !== 'teacher';
+  return `<div class="top"><button class="back" data-act="stu-form-back">‹</button><h1>${isEdit ? 'Tahrirlash' : "Yangi o'quvchi"}</h1></div>
+    ${S.stu.toast ? `<div class="toast">${esc(S.stu.toast)}</div>` : ''}
+    <div class="field"><label>Familiya <span class="req">*</span></label>
+      <input class="input" id="f_last" placeholder="Valiyev" value="${esc(f.last)}" autocomplete="off"></div>
+    <div class="field"><label>Ism <span class="req">*</span></label>
+      <input class="input" id="f_first" placeholder="Ali" value="${esc(f.first)}" autocomplete="off"></div>
+    <div class="field"><label>Sinf</label>
+      <input class="input" id="f_grade" placeholder="7" value="${esc(f.grade)}" autocomplete="off"></div>
+    <div class="field"><label>Telefon</label>
+      <input class="input" id="f_phone" type="tel" placeholder="90 123 45 67" value="${esc(f.phone)}" autocomplete="off"></div>
+    <div class="field"><label>Guruh <span class="req">*</span></label>
+      <select class="input" id="f_group">${!f.group ? '<option value="">— tanlang —</option>' : ''}${groups.map(g =>
+        `<option value="${g.id}" ${g.id === f.group ? 'selected' : ''}>${esc(g.name)}${g.teacher ? ' · ' + esc(g.teacher) : ''}</option>`).join('')}</select></div>
+    ${staff ? `<label class="check"><input type="checkbox" id="f_reg" ${f.is_registry ? 'checked' : ''}>
+      <span>🏛 Reyestr o'quvchisi (davlat to'laydi)</span></label>` : ''}
+    <div class="form-actions"><button class="secondary" data-act="stu-form-back">Bekor qilish</button>
+      <button class="primary" data-act="stu-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : (isEdit ? 'Saqlash' : "Qo'shish")}</button></div>`;
+}
+
+function viewStuDetail() {
+  const s = S.stu.detail, st = S.stu;
+  const otherGroups = S.stu.groups.filter(g => g.id !== s.group);
+  return `<div class="top"><button class="back" data-act="stu-detail-back">‹</button><h1>${esc(s.last)} ${esc(s.first)}</h1></div>
+    <div class="card-detail">
+      <div class="nm">${esc(s.last)} ${esc(s.first)}</div>
+      <div class="ln">🏫 <b>${esc(s.grade)}-sinf</b> · 📚 <b>${esc(s.group_name || groupName(s.group))}</b></div>
+      <div class="ln">${s.phone ? `📞 <a href="tel:${esc(s.phone)}">${esc(s.phone)}</a>` : '📞 raqam kiritilmagan'}</div>
+      <div class="ln" style="margin-top:10px">${payBadge(s)}</div>
+      <div class="actions2">
+        <button class="abtn" data-act="stu-pay-toggle">💵 To'lov kiritish</button>
+        <button class="abtn" data-act="stu-edit">✏️ Tahrirlash</button>
+        <button class="abtn" data-act="stu-move-toggle">🔀 Ko'chirish</button>
+        <button class="abtn danger" data-act="stu-delete">🗑 O'chirish</button>
+      </div>
+      ${st.payOpen ? `<div class="inline-form"><input class="input" id="payAmt" type="number" inputmode="numeric"
+          placeholder="Summa, masalan 300000" value="${esc(st.payAmount)}">
+        <button class="primary" style="flex:none" data-act="stu-pay-send" ${S.busy ? 'disabled' : ''}>Yubor</button></div>` : ''}
+      ${st.moveOpen ? `<div class="inline-form"><select class="input" id="moveSel">
+          <option value="">— guruh —</option>${otherGroups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select>
+        <button class="primary" style="flex:none" data-act="stu-move-send" ${S.busy ? 'disabled' : ''}>Ko'chir</button></div>` : ''}
+    </div>`;
+}
+
+function viewStuGroupForm() {
+  const f = S.stu.gform;
+  return `<div class="top"><button class="back" data-act="stu-gform-back">‹</button><h1>Yangi guruh</h1></div>
+    ${S.stu.toast ? `<div class="toast">${esc(S.stu.toast)}</div>` : ''}
+    <div class="field"><label>Guruh nomi <span class="req">*</span></label>
+      <input class="input" id="g_name" placeholder="A1" value="${esc(f.name)}" autocomplete="off"></div>
+    <div class="field"><label>O'qituvchi</label>
+      <select class="input" id="g_teacher"><option value="">— keyinroq biriktirish —</option>
+        ${S.stu.teachers.map(t => `<option value="${t.id}" ${String(t.id) === String(f.teacher) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>
+    <div class="form-actions"><button class="secondary" data-act="stu-gform-back">Bekor qilish</button>
+      <button class="primary" data-act="stu-gform-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : "Yaratish"}</button></div>`;
+}
+
+async function saveStudent() {
+  const f = S.stu.form;
+  f.last = document.getElementById('f_last').value.trim();
+  f.first = document.getElementById('f_first').value.trim();
+  f.grade = document.getElementById('f_grade').value.trim();
+  f.phone = document.getElementById('f_phone').value.trim();
+  f.group = document.getElementById('f_group').value;
+  const regEl = document.getElementById('f_reg');
+  f.is_registry = regEl ? regEl.checked : false;
+  if (f.last.length < 2 || f.first.length < 2) return alert("Ism va familiyani to'liq kiriting.");
+  if (!f.group) return alert('Guruhni tanlang.');
+  S.busy = true; render();
+  try {
+    if (f.mode === 'add') {
+      await api('/api/students', {method:'POST', body: JSON.stringify(
+        {group:+f.group, last:f.last, first:f.first, grade:f.grade, phone:f.phone, is_registry:f.is_registry})});
+      haptic('medium');
+      S.stu.toast = `✅ ${f.last} ${f.first} qo'shildi. Yana qo'shishingiz mumkin.`;
+      const keepGroup = f.group, keepGrade = f.grade, keepReg = f.is_registry;
+      S.stu.form = emptyForm('add', keepGroup);
+      S.stu.form.grade = keepGrade; S.stu.form.is_registry = keepReg;
+      if (S.stu.group && String(S.stu.group.id) === String(keepGroup)) await refreshStuGroup();
+    } else {
+      const r = await api(`/api/students/${f.id}`, {method:'PATCH', body: JSON.stringify(
+        {last:f.last, first:f.first, grade:f.grade, phone:f.phone, group:+f.group, is_registry:f.is_registry})});
+      haptic('medium');
+      S.stu.detail = r.student;
+      if (S.stu.group) await refreshStuGroup();
+      S.stu.view = 'detail';
+    }
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
+async function sendPayment() {
+  const amt = parseInt(document.getElementById('payAmt').value, 10);
+  if (!amt || amt <= 0) return alert("Musbat summa kiriting.");
+  S.busy = true; render();
+  try {
+    await api('/api/payments', {method:'POST', body: JSON.stringify({student: S.stu.detail.id, amount: amt})});
+    haptic('medium');
+    S.stu.detail = {...S.stu.detail, paid: true};
+    S.stu.payOpen = false; S.stu.payAmount = '';
+    await refreshStuGroup();
+    try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
+async function sendMove() {
+  const gid = document.getElementById('moveSel').value;
+  if (!gid) return alert('Guruhni tanlang.');
+  S.busy = true; render();
+  try {
+    const r = await api(`/api/students/${S.stu.detail.id}`, {method:'PATCH', body: JSON.stringify({group:+gid})});
+    haptic('medium');
+    S.stu.detail = r.student; S.stu.moveOpen = false;
+    await refreshStuGroup();
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
+async function deleteStudent() {
+  const s = S.stu.detail;
+  const msg = `${s.last} ${s.first} o'chirilsinmi? Bu amalni qaytarib bo'lmaydi.`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  S.busy = true; render();
+  try {
+    await api(`/api/students/${s.id}`, {method:'DELETE'});
+    haptic('medium');
+    S.stu.view = S.stu.detailBack;
+    await refreshStuGroup();
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
+async function saveGroup() {
+  const f = S.stu.gform;
+  f.name = document.getElementById('g_name').value.trim();
+  f.teacher = document.getElementById('g_teacher').value;
+  if (f.name.length < 1) return alert('Guruh nomini kiriting.');
+  S.busy = true; render();
+  try {
+    const r = await api('/api/groups', {method:'POST', body: JSON.stringify({name:f.name, teacher:f.teacher || null})});
+    haptic('medium');
+    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    S.stu.view = 'groups';
+  } catch (e) { S.stu.toast = ''; alert(e.message); }
+  S.busy = false; render();
+}
+
 /* ---------- umumiy chizish ---------- */
 function tabs() {
-  return `<div class="tabs"><button class="${S.tab === 'dash' ? 'on' : ''}" data-act="tab" data-tab="dash"><span>📊</span>Panel</button>
-    <button class="${S.tab === 'groups' ? 'on' : ''}" data-act="tab" data-tab="groups"><span>📝</span>Davomat</button></div>`;
+  const staff = S.me.role !== 'teacher';
+  const first = staff
+    ? `<button class="${S.tab === 'dash' ? 'on' : ''}" data-act="tab" data-tab="dash"><span>📊</span>Panel</button>`
+    : `<button class="${S.tab === 'groups' ? 'on' : ''}" data-act="tab" data-tab="groups"><span>📝</span>Davomat</button>`;
+  return `<div class="tabs">${first}
+    <button class="${S.tab === 'stu' ? 'on' : ''}" data-act="tab" data-tab="stu"><span>👥</span>O'quvchilar</button></div>`;
 }
+const STU_VIEWS = {groups: viewStuGroups, list: viewStuList, form: viewStuForm, detail: viewStuDetail, gform: viewStuGroupForm};
 function render() {
   const staff = S.me.role !== 'teacher';
   let html = '';
-  if (S.view === 'att') html = S.att.done ? viewDone() : viewAtt();
+  if (S.view === 'att') html = S.att.done ? viewDone() : (viewAtt() + tabs());
   else if (S.view === 'dash') html = viewDash() + tabs();
-  else html = viewGroups() + (staff ? tabs() : '');
-  const q = document.activeElement && document.activeElement.id === 'q';
-  const pos = q ? document.activeElement.selectionStart : 0;
+  else if (S.view === 'stu') html = STU_VIEWS[S.stu.view]() + (S.stu.view === 'groups' ? tabs() : '');
+  else html = viewGroups() + tabs();
+  const focusEl = document.activeElement;
+  const focusId = focusEl && focusEl.id;
+  const pos = focusId && focusEl.selectionStart != null ? focusEl.selectionStart : null;
   $app.innerHTML = html;
-  if (q) { const el = document.getElementById('q'); el.focus(); el.setSelectionRange(pos, pos); }
+  if (focusId) {
+    const el = document.getElementById(focusId);
+    if (el) { el.focus(); if (pos != null) { try { el.setSelectionRange(pos, pos); } catch (e) {} } }
+  }
   try {
     if (tg && tg.BackButton) {
-      if (S.view === 'att' && !S.att.single && !S.att.done) { tg.BackButton.show(); } else { tg.BackButton.hide(); }
+      const canBack = (S.view === 'att' && !S.att.single && !S.att.done) ||
+        (S.view === 'stu' && S.stu.view !== 'groups');
+      canBack ? tg.BackButton.show() : tg.BackButton.hide();
     }
   } catch (e) {}
 }
-if (tg && tg.BackButton) tg.BackButton.onClick(() => { if (S.view === 'att') backToGroups(); });
+if (tg && tg.BackButton) tg.BackButton.onClick(() => {
+  if (S.view === 'att') backToGroups();
+  else if (S.view === 'stu') stuBack();
+});
 function backToGroups() { S.view = 'groups'; S.tab = 'groups'; render(); }
+function stuBack() {
+  const v = S.stu.view;
+  if (v === 'list' || v === 'gform') S.stu.view = 'groups';
+  else if (v === 'form') S.stu.view = S.stu.formBack;
+  else if (v === 'detail') S.stu.view = S.stu.detailBack;
+  render();
+}
 
 async function submit() {
   const a = S.att;
@@ -328,7 +639,12 @@ document.addEventListener('click', e => {
   const act = t.dataset.act, id = Number(t.dataset.id);
   if (act === 'open') openGroup(id);
   else if (act === 'back') backToGroups();
-  else if (act === 'tab') { S.tab = t.dataset.tab; if (S.tab === 'dash') (S.dash ? (S.view = 'dash', render()) : loadDash()); else { S.view = 'groups'; render(); } }
+  else if (act === 'tab') {
+    S.tab = t.dataset.tab;
+    if (t.dataset.tab === 'dash') (S.dash ? (S.view = 'dash', render()) : loadDash());
+    else if (t.dataset.tab === 'stu') loadStudentsTab();
+    else { S.view = 'groups'; render(); }
+  }
   else if (act === 'cycle') {
     const cur = S.att.statuses[id];
     S.att.statuses[id] = CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length];
@@ -340,11 +656,43 @@ document.addEventListener('click', e => {
   else if (act === 'submit') submit();
   else if (act === 'edit') { S.att.done = null; render(); }
   else if (act === 'close') { tg && tg.close ? tg.close() : history.back(); }
+  else if (act === 'stu-group') openStuGroup(id);
+  else if (act === 'stu-back') { S.stu.view = 'groups'; render(); }
+  else if (act === 'stu-open') {
+    const sid = Number(t.dataset.sid);
+    const pool = S.stu.view === 'list' ? S.stu.students : (S.stu.searchResults || []);
+    const s = pool.find(x => x.id === sid);
+    if (s) goStuDetail(s);
+  }
+  else if (act === 'stu-add-any') goStuForm('add', S.stu.group ? S.stu.group.id : '');
+  else if (act === 'stu-add-group') goStuForm('add', S.stu.group.id);
+  else if (act === 'stu-edit') goStuForm('edit', null, S.stu.detail);
+  else if (act === 'stu-form-back') { S.stu.view = S.stu.formBack; render(); }
+  else if (act === 'stu-detail-back') { S.stu.view = S.stu.detailBack; render(); }
+  else if (act === 'stu-save') saveStudent();
+  else if (act === 'stu-pay-toggle') { S.stu.payOpen = !S.stu.payOpen; S.stu.moveOpen = false; render(); }
+  else if (act === 'stu-move-toggle') { S.stu.moveOpen = !S.stu.moveOpen; S.stu.payOpen = false; render(); }
+  else if (act === 'stu-pay-send') sendPayment();
+  else if (act === 'stu-move-send') sendMove();
+  else if (act === 'stu-delete') deleteStudent();
+  else if (act === 'stu-gform') { S.stu.gform = {name:'', teacher:''}; S.stu.toast = ''; S.stu.view = 'gform'; render(); }
+  else if (act === 'stu-gform-back') { S.stu.view = 'groups'; render(); }
+  else if (act === 'stu-gform-save') saveGroup();
 });
 document.addEventListener('change', e => {
   if (e.target.dataset && e.target.dataset.act === 'pick' && e.target.value) openGroup(S.att.group.id, e.target.value, S.att.single);
 });
-document.addEventListener('input', e => { if (e.target.id === 'q') { S.q = e.target.value; render(); } });
+document.addEventListener('input', e => {
+  if (e.target.id === 'q') { S.q = e.target.value; render(); }
+  else if (e.target.id === 'stuq') {
+    S.stu.q = e.target.value; render();
+    if (S.stu.view === 'groups') {
+      clearTimeout(searchTimer);
+      const v = e.target.value.trim();
+      searchTimer = setTimeout(() => doStuSearch(v), 350);
+    }
+  }
+});
 init();
 </script>
 </body>

@@ -42,6 +42,11 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
   qaysi kunlari kelmagani, 2 marta kelmagan bo'lsa ogohlantirish, telefon qo'ng'irog'i tugmasi. Holatlar:
   ✅ keldi, ❌ kelmadi, 🕒 kechikdi, 📝 sababli. O'tgan kun davomatini ham tuzatish mumkin. Saqlanganda adminga PDF boradi.
 - **Panel** (admin/direktor): tushum, qarzdorlar, davomat, 6 oylik grafik, guruhlar bo'yicha ko'rsatkichlar.
+- **O'quvchilar bo'limi (Mini App)** (hamma, pastki "O'quvchilar" tab): guruh tanlab yoki qidirib o'quvchini topish,
+  **bitta formada** yangi o'quvchi qo'shish (ism, familiya, sinf, telefon, guruh, admin/direktorga reyestr belgisi),
+  qo'shgandan keyin forma guruh/sinfni saqlab, faqat ism-familiyani tozalab, ketma-ket tez qo'shishga imkon beradi.
+  O'quvchi kartochkasida: to'lov kiritish, tahrirlash, boshqa guruhga ko'chirish, o'chirish. Admin/direktor shu yerdan
+  yangi guruh ham yarata oladi (nomi + o'qituvchi).
 - Autentifikatsiya: Telegram `initData` imzosi (BOT_TOKEN bilan HMAC), rol bazadan olinadi.
 - Menyu bo'limlarga bo'lingan (O'quvchilar, Moliya, Guruh boshqaruvi, Hisobotlar, Xodimlar), `🏠 Asosiy menyu` tugmasi.
 - Guruhlar: o'qituvchi -> guruh -> o'quvchi -> kartochka (bitta xabar tahrirlanadi), sahifalash, davomat tarixi.
