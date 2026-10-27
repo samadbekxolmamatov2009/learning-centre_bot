@@ -50,6 +50,10 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - O'quvchi kartochkasida **to'lovlar tarixi** (oxirgi 10 ta) va admin/direktor uchun **to'lovni bekor qilish**.
 - Guruh va qidiruv ro'yxatlarida **"❌ Faqat qarzdorlar"** filtri, guruh kartochkasida qarzdorlar soni darhol ko'rinadi.
 - O'qituvchi uchun pastki **"💰 Oylik"** tab: oy tanlab (oxirgi 6 oy), guruh-guruh tushum/to'laganlar, reyestr va jami oylik.
+- Direktorga pastki **"👨‍🏫 Xodimlar"** tab: o'qituvchi qo'shish/tahrirlash/o'chirish, admin qo'shish/o'chirish, reyestr yashirish/ochish.
+- Panelda **"📥"** tugmasi: qarzdorlar, barcha o'quvchilar va oylik hisobotni .xlsx qilib to'g'ridan-to'g'ri telefonga yuklab olish.
+- Guruh kartochkasidagi **"⚙️"** (admin/direktor): guruh nomini o'zgartirish, o'qituvchisini almashtirish, guruhni o'chirish.
+- Davomatda **"Hammasi ❌"** tezkor tugmasi (bayram va h.k. uchun).
 - Autentifikatsiya: Telegram `initData` imzosi (BOT_TOKEN bilan HMAC), rol bazadan olinadi.
 - Menyu bo'limlarga bo'lingan (O'quvchilar, Moliya, Guruh boshqaruvi, Hisobotlar, Xodimlar), `🏠 Asosiy menyu` tugmasi.
 - Guruhlar: o'qituvchi -> guruh -> o'quvchi -> kartochka (bitta xabar tahrirlanadi), sahifalash, davomat tarixi.
