@@ -135,6 +135,9 @@ async def menu_for(db, uid):
 @router.message(F.text == HOME)
 async def start(m: Message, db, state: FSMContext, bot: Bot):
     await state.clear()
+    args = (m.text or "").split(maxsplit=1)
+    if len(args) > 1 and args[1].startswith("p"):
+        return await start_parent(m, db, args[1])
     menu = await menu_for(db, m.from_user.id)
     if not menu:
         return await m.answer(f"Siz ro'yxatda yo'qsiz. Direktorga ID ingizni bering: {m.from_user.id}")
@@ -146,6 +149,26 @@ async def start(m: Message, db, state: FSMContext, bot: Bot):
                 text="Davomat" if role == "teacher" else "Panel", web_app=WebAppInfo(url=f"{WEBAPP_URL}/app")))
         except Exception:
             pass
+
+
+async def start_parent(m: Message, db, payload: str):
+    """Ota-ona havolasi: /start p<student_id>_<imzo>."""
+    from .ptoken import verify
+    sid = verify(payload)
+    if sid is None:
+        return await m.answer("Havola yaroqsiz. Markazdan yangi havola so'rang.")
+    s = await D.fetchone(db, "SELECT s.*, g.name AS gname FROM students s JOIN groups g ON g.id=s.group_id "
+                             "WHERE s.id=?", (sid,))
+    if not s:
+        return await m.answer("O'quvchi topilmadi. Ehtimol o'chirilgan.")
+    await db.execute("INSERT OR IGNORE INTO parent_links(parent_tg_id, student_id) VALUES(?,?)",
+                     (m.from_user.id, sid))
+    text = f"👪 Siz <b>{s['last_name']} {s['first_name']}</b> ({s['gname']} guruhi) ota-onasi sifatida bog'landingiz."
+    if WEBAPP_URL:
+        await m.answer(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="👪 Farzandim haqida", web_app=WebAppInfo(url=f"{WEBAPP_URL}/parent"))]]))
+    else:
+        await m.answer(text, parse_mode="HTML")
 
 
 @router.message(F.text.in_(set(SECTION_TITLES)))

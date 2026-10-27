@@ -42,8 +42,28 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
   qaysi kunlari kelmagani, 2 marta kelmagan bo'lsa ogohlantirish, telefon qo'ng'irog'i tugmasi. Holatlar:
   ✅ keldi, ❌ kelmadi, 🕒 kechikdi, 📝 sababli. O'tgan kun davomatini ham tuzatish mumkin. Saqlanganda adminga PDF boradi.
 - **Panel** (admin/direktor): tushum, qarzdorlar, davomat, 6 oylik grafik, guruhlar bo'yicha ko'rsatkichlar.
+- **O'quvchilar bo'limi (Mini App)** (hamma, pastki "O'quvchilar" tab): guruh tanlab yoki qidirib o'quvchini topish,
+  **bitta formada** yangi o'quvchi qo'shish (ism, familiya, sinf, telefon, guruh, admin/direktorga reyestr belgisi),
+  qo'shgandan keyin forma guruh/sinfni saqlab, faqat ism-familiyani tozalab, ketma-ket tez qo'shishga imkon beradi.
+  O'quvchi kartochkasida: to'lov kiritish, tahrirlash, boshqa guruhga ko'chirish, o'chirish. Admin/direktor shu yerdan
+  yangi guruh ham yarata oladi (nomi + o'qituvchi).
+- O'quvchi kartochkasida **to'lovlar tarixi** (oxirgi 10 ta) va admin/direktor uchun **to'lovni bekor qilish**.
+- Guruh va qidiruv ro'yxatlarida **"❌ Faqat qarzdorlar"** filtri, guruh kartochkasida qarzdorlar soni darhol ko'rinadi.
+- O'qituvchi uchun pastki **"💰 Oylik"** tab: oy tanlab (oxirgi 6 oy), guruh-guruh tushum/to'laganlar, reyestr va jami oylik.
+- Direktorga pastki **"👨‍🏫 Xodimlar"** tab: o'qituvchi qo'shish/tahrirlash/o'chirish, admin qo'shish/o'chirish, reyestr yashirish/ochish.
+- Panelda **"📥"** tugmasi: qarzdorlar, barcha o'quvchilar va oylik hisobotni .xlsx qilib to'g'ridan-to'g'ri telefonga yuklab olish.
+- Guruh kartochkasidagi **"⚙️"** (admin/direktor): guruh nomini o'zgartirish, o'qituvchisini almashtirish, guruhni o'chirish.
+- Davomatda **"Hammasi ❌"** tezkor tugmasi (bayram va h.k. uchun).
+- **🔔 Bildirishnomalar**: davomat olinmagan guruhlar, qarzdorlar, reyestr narxi kiritilmagan o'qituvchilar — bitta ro'yxatda, bosib tegishli joyga o'tiladi. Belgi raqami Panel/Davomat sahifasida ko'rinadi.
+- **Tuzatilgan xato:** qarzdorlar soni (guruh kartochkasi va bildirishnomada) oyning birinchi kunlarida, hali hech kim to'lov qilmagan paytda, noto'g'ri "0" ko'rsatayotgan edi.
 - Autentifikatsiya: Telegram `initData` imzosi (BOT_TOKEN bilan HMAC), rol bazadan olinadi.
 - Menyu bo'limlarga bo'lingan (O'quvchilar, Moliya, Guruh boshqaruvi, Hisobotlar, Xodimlar), `🏠 Asosiy menyu` tugmasi.
 - Guruhlar: o'qituvchi -> guruh -> o'quvchi -> kartochka (bitta xabar tahrirlanadi), sahifalash, davomat tarixi.
 - **Dars jadvali** (🗓): dars kunlari va vaqti; davomat olinmasa o'qituvchiga (20 daqiqadan keyin) va adminga (2 soatdan keyin) eslatma.
 - Vaqt Toshkent bo'yicha (`TZ_OFFSET=5`).
+
+## Ota-onalar uchun (faqat ko'rish)
+O'quvchi kartochkasida (chatda "📚 Guruhlar" -> o'quvchi, yoki Mini App'da "👪 Ota-onaga havola") maxsus havola
+yaratiladi. Ota-ona shu havolani bosib botni ochsa, `/parent` Mini App sahifasida farzandining sinfi, guruhi,
+shu oy to'lov holati va oxirgi darslar davomati ko'rinadi — hech narsani o'zgartira olmaydi. Bir nechta farzand
+bo'lsa, hammasi ro'yxatda chiqadi. Havola doimiy ishlaydi (muddati tugamaydi), istalgan vaqt qayta yuborilishi mumkin.

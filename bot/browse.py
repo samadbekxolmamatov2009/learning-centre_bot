@@ -208,8 +208,28 @@ async def student_card(db, uid, sid, page):
     else:
         rows.append([btn("📞 Telefon", f"ph:{sid}"), btn("🗑 O'chirish", f"xs:{sid}")])
     rows.append([btn("📅 Davomat tarixi", f"gl:h:{sid}:{page}")])
+    rows.append([btn("👪 Ota-onaga havola", f"gl:parent:{sid}:{page}")])
     rows.append([btn("⬅️ Guruhga qaytish", f"gl:g:{gid}:{page}")])
     return text, InlineKeyboardMarkup(inline_keyboard=rows), gid
+
+
+@router.callback_query(F.data.startswith("gl:parent:"))
+async def gl_parent_link(c: CallbackQuery, db):
+    parts = c.data.split(":")
+    sid, page = int(parts[2]), int(parts[3]) if len(parts) > 3 else 0
+    s = await db.fetchone("SELECT first_name, last_name, group_id FROM students WHERE id=?", (sid,))
+    if not s or not await can_access_group(db, c.from_user.id, s["group_id"]):
+        return await c.answer("Ruxsat yo'q", show_alert=True)
+    from .config import BOT_USERNAME
+    from .ptoken import make
+    if not BOT_USERNAME:
+        return await c.answer("Bot nomi aniqlanmadi, birozdan keyin urinib ko'ring.", show_alert=True)
+    link = f"https://t.me/{BOT_USERNAME}?start={make(sid)}"
+    await c.message.answer(
+        f"👪 <b>{e(s['last_name'])} {e(s['first_name'])}</b> ota-onasiga shu havolani yuboring:\n\n{link}\n\n"
+        "Ota-ona shu havolani bosib botni ochsa, farzandining davomati va to'lov holatini ko'ra oladi "
+        "(faqat ko'rish, o'zgartira olmaydi).", parse_mode="HTML")
+    await c.answer()
 
 
 @router.callback_query(F.data.startswith("gl:s:"))

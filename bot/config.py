@@ -9,3 +9,4 @@ TZ_OFFSET = int(os.getenv("TZ_OFFSET", "5"))  # Toshkent UTC+5
 REMINDER_HOUR = int(os.getenv("REMINDER_HOUR", "9"))
 PORT = int(os.getenv("PORT", "0") or 0)  # Render Web Service o'zi beradi; 0 bo'lsa veb-server ishga tushmaydi
 WEBAPP_URL = (os.getenv("WEBAPP_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
+BOT_USERNAME = ""  # main.py bot.get_me() orqali ishga tushganda to'ldiradi

@@ -25,7 +25,7 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--text);
   font:16px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-body{padding:0 16px calc(96px + env(safe-area-inset-bottom))}
+body{padding:0 16px calc(160px + env(safe-area-inset-bottom))}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
 h1{font-size:20px;margin:16px 0 4px}
 .sub{color:var(--hint);font-size:14px}
@@ -70,6 +70,7 @@ h1{font-size:20px;margin:16px 0 4px}
 .detail .grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .bar{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));
   background:var(--bg);border-top:1px solid var(--line);display:flex;gap:10px;align-items:center}
+.bar.withtabs{bottom:calc(58px + env(safe-area-inset-bottom));padding-bottom:10px;border-top:1px solid var(--line)}
 .bar .info{font-size:13px;color:var(--hint);flex:1}
 .bar .info b{color:var(--no)}
 .primary{flex:none;background:var(--btn);color:var(--btn-text);font-weight:700;border-radius:14px;padding:14px 22px}
@@ -106,6 +107,41 @@ h1{font-size:20px;margin:16px 0 4px}
 .mini .val{width:56px;text-align:right;flex:none;color:var(--text);font-weight:600}
 .spin{margin:80px auto;width:34px;height:34px;border:4px solid var(--line);border-top-color:var(--btn);border-radius:50%;animation:s 1s linear infinite}
 @keyframes s{to{transform:rotate(360deg)}}
+.field{margin-top:14px}
+.field label{display:block;font-size:13px;color:var(--hint);margin-bottom:6px}
+.field .req{color:var(--no)}
+.input,select,input[type=text],input[type=tel]{width:100%;padding:12px 14px;border-radius:12px;
+  border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;appearance:none}
+select.input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%236b7280'%3E%3Cpath d='M5.2 7.5l4.8 5 4.8-5z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center}
+.check{display:flex;align-items:center;gap:10px;margin-top:16px;background:var(--card);padding:12px 14px;border-radius:12px}
+.check input{width:20px;height:20px;flex:none}
+.form-actions{display:flex;gap:10px;margin-top:20px}
+.secondary{flex:none;background:var(--card);color:var(--text);font-weight:700;border-radius:14px;padding:14px 18px}
+.form-actions .primary{flex:1}
+.toast{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--ok-bg);color:var(--ok);font-size:14px;font-weight:600}
+.srow{display:flex;gap:8px;margin:12px 0 4px}
+.srow .input{flex:1}
+.iconbtn{flex:none;width:46px;height:46px;border-radius:12px;background:var(--card);font-size:20px;display:flex;align-items:center;justify-content:center}
+.card-detail{background:var(--card);border-radius:var(--r);padding:16px;margin-top:10px}
+.card-detail .nm{font-size:19px;font-weight:700}
+.card-detail .ln{margin-top:6px;font-size:14px;color:var(--hint)}
+.card-detail .ln b{color:var(--text);font-weight:600}
+.card-detail .ln a{color:var(--link);text-decoration:none;font-weight:600}
+.pay-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}
+.pay-badge.ok{background:var(--ok-bg);color:var(--ok)}
+.pay-badge.no{background:var(--no-bg);color:var(--no)}
+.pay-badge.reg{background:var(--late-bg);color:var(--late)}
+.actions2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.abtn{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:14px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;gap:6px;text-align:center}
+.abtn.danger{color:var(--no);border-color:color-mix(in srgb,var(--no) 35%,transparent)}
+.inline-form{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);display:flex;gap:8px}
+.srow-row{background:var(--card);border-radius:12px;padding:12px;display:flex;align-items:center;gap:10px}
+.srow-row .who{flex:1;min-width:0}
+.group-badge{font-size:12px;color:var(--hint);margin-top:1px}
+.fabrow{display:flex;gap:8px;margin-top:12px}
+.fabrow .primary{flex:1;border-radius:14px;padding:13px}
 </style>
 </head>
 <body>
@@ -120,7 +156,15 @@ const ST = {
 };
 const CYCLE = ['present','absent','late','excused'];
 const WD = ['Ya','Du','Se','Ch','Pa','Ju','Sh'];
-const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open:new Set(), busy:false};
+const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open:new Set(), busy:false,
+  stu:{view:'groups', groups:[], teachers:[], students:[], searching:false, searchResults:null, q:'', debtOnly:false,
+       group:null, detail:null, formBack:'groups', detailBack:'groups', payOpen:false, payAmount:'', moveOpen:false, moveTo:'',
+       payHistOpen:false, payHistory:null, parentOpen:false, parentLink:null, parentLoading:false, parentCopied:false,
+       form:null, toast:'', gform:null},
+  salary:{loading:false, data:null, month:null},
+  xport:{busy:false, error:'', month:null},
+  hr:{view:'home', teachers:[], admins:[], registry:null, toast:'', tform:null, aform:null},
+  notif:{count:0, items:null, loading:false, from:null}};
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d.slice(8,10) + '.' + d.slice(5,7);
@@ -142,6 +186,7 @@ function fail(e) { $app.innerHTML = `<div class="err"><div style="font-size:48px
 async function init() {
   try {
     S.me = await api('/api/me');
+    loadNotifCount();
     if (S.me.role === 'teacher') {
       if (S.me.groups.length === 1) return openGroup(S.me.groups[0].id, null, true);
       S.view = 'groups';
@@ -150,11 +195,71 @@ async function init() {
   } catch (e) { fail(e); }
 }
 
+/* ---------- bildirishnomalar ---------- */
+async function loadNotifCount() {
+  try {
+    const d = await api('/api/notifications');
+    S.notif.count = d.count; S.notif.items = d.items;
+    if (S.view !== 'notif') render();
+  } catch (e) {}
+}
+function notifBell() {
+  const c = S.notif.count;
+  return `<button class="iconbtn" style="position:relative" data-act="notif-open" title="Bildirishnomalar">🔔${c ?
+    `<span style="position:absolute;top:-2px;right:-2px;background:var(--no);color:#fff;font-size:10px;font-weight:700;
+      border-radius:999px;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;
+      border:2px solid var(--bg)">${c > 9 ? '9+' : c}</span>` : ''}</button>`;
+}
+async function openNotif(fromView, fromTab) {
+  S.notif.from = {view: fromView, tab: fromTab};
+  S.view = 'notif'; S.notif.loading = !S.notif.items; render();
+  if (!S.notif.items) {
+    try { const d = await api('/api/notifications'); S.notif.items = d.items; S.notif.count = d.count; }
+    catch (e) { S.notif.items = []; }
+  }
+  S.notif.loading = false; render();
+}
+function notifBack() {
+  const f = S.notif.from || {view: S.me.role === 'teacher' ? 'groups' : 'dash', tab: S.me.role === 'teacher' ? 'groups' : 'dash'};
+  S.view = f.view; S.tab = f.tab; render();
+}
+const NOTIF_LABEL = {no_attendance: 'Davomat olinmagan', debtors: 'Qarzdorlar', no_price: 'Reyestr narxi'};
+function viewNotif() {
+  if (S.notif.loading) return '<div class="spin" style="margin:60px auto"></div>';
+  const items = S.notif.items || [];
+  const staff = S.me.role !== 'teacher';
+  return `<div class="top"><button class="back" data-act="notif-back">‹</button><h1>🔔 Bildirishnomalar</h1></div>
+    ${items.length ? `<div class="list" style="margin-top:12px">${items.map((it, i) => {
+        const clickable = (it.kind === 'debtors') || (it.kind === 'no_attendance' && !staff) ||
+          (it.kind === 'no_price' && S.me.role === 'director');
+        return `<div class="srow-row" ${clickable ? `data-act="notif-item" data-i="${i}" style="cursor:pointer"` : ''}>
+          <div class="who"><div class="name">${it.icon} ${esc(NOTIF_LABEL[it.kind] || '')}</div>
+            <div class="meta">${esc(it.text)}</div></div>${clickable ? '<span class="sub">▸</span>' : ''}</div>`;
+      }).join('')}</div>`
+      : `<div class="empty" style="padding:48px 8px"><div style="font-size:48px">✅</div>Hammasi joyida</div>`}`;
+}
+function notifGo(i) {
+  const it = (S.notif.items || [])[i];
+  if (!it) return;
+  if (it.kind === 'debtors' && it.group != null) {
+    S.tab = 'stu'; S.view = 'stu';
+    if (!S.stu.groups.length) loadStudentsTab().then(() => { S.stu.debtOnly = true; openStuGroup(it.group); });
+    else { S.stu.debtOnly = true; openStuGroup(it.group); }
+  } else if (it.kind === 'no_attendance' && it.group != null && S.me.role === 'teacher') {
+    openGroup(it.group);
+  } else if (it.kind === 'no_price' && it.teacher != null && S.me.role === 'director') {
+    S.tab = 'hr'; S.view = 'hr';
+    if (!S.hr.teachers.length) loadStaffTab().then(() => hrOpenTeacher(it.teacher));
+    else hrOpenTeacher(it.teacher);
+  }
+}
+
 /* ---------- guruhlar ro'yxati ---------- */
 function viewGroups() {
   const g = S.me.groups;
-  if (!g.length) return `<h1>Guruhlar</h1><div class="empty">Guruh yo'q</div>`;
-  return `<h1>Guruhni tanlang</h1><div class="sub">Bugun: ${fmtDay(S.me.today)}.${S.me.today.slice(0,4)}</div><div class="cards">` +
+  if (!g.length) return `<div class="top"><h1 style="padding-top:0">Guruhlar</h1>${notifBell()}</div><div class="empty">Guruh yo'q</div>`;
+  return `<div class="top"><h1 style="padding-top:0">Guruhni tanlang</h1>${notifBell()}</div>
+    <div class="sub" style="margin-top:-6px">Bugun: ${fmtDay(S.me.today)}.${S.me.today.slice(0,4)}</div><div class="cards">` +
     g.map(x => `<button class="gcard" data-act="open" data-id="${x.id}">
       <div><div class="t">${esc(x.name)}</div><div class="sub">${x.students} ta o'quvchi${x.time ? ' · ' + esc(x.time) : ''}</div></div>
       <span class="badge ${x.taken_today ? 'done' : ''}">${x.taken_today ? 'Bugun olingan' : 'Olinmagan'}</span></button>`).join('') + '</div>';
@@ -212,14 +317,15 @@ function viewAtt() {
   const chips = days.map(d => `<button class="dchip ${d === a.day ? 'on' : ''}" data-act="day" data-day="${d}">${d === a.today ? 'Bugun' : fmtDay(d) + ' ' + wd(d)}</button>`).join('') +
     `<label class="dchip">📅<input type="date" max="${a.today}" data-act="pick" value="${a.day}"></label>`;
   return `<div class="top">${a.single ? '' : '<button class="back" data-act="back">‹</button>'}<h1>${esc(a.group.name)}</h1>
-      <span class="sub">${fmtDay(a.day)}.${a.day.slice(0,4)}</span></div>
+      <span class="sub">${fmtDay(a.day)}.${a.day.slice(0,4)}</span>${notifBell()}</div>
     <div class="strip">${chips}</div>
     ${a.has_record ? '<div class="notice">Bu kun uchun davomat olingan. O\'zgartirib qayta yuborishingiz mumkin.</div>' : ''}
     <div class="counts"><div class="cnt ok"><b>${c.present}</b>Keldi</div><div class="cnt no"><b>${c.absent}</b>Yo'q</div>
       <div class="cnt late"><b>${c.late}</b>Kech</div><div class="cnt exc"><b>${c.excused}</b>Sababli</div></div>
-    <div class="tools"><input id="q" placeholder="Qidirish..." value="${esc(S.q)}" autocomplete="off"><button data-act="all">Hammasi ✅</button></div>
+    <div class="tools"><input id="q" placeholder="Qidirish..." value="${esc(S.q)}" autocomplete="off">
+      <button data-act="all">Hammasi ✅</button><button data-act="all-absent" style="background:var(--no-bg);color:var(--no)">Hammasi ❌</button></div>
     <div class="list">${list.map(rowHtml).join('') || '<div class="empty">Topilmadi</div>'}</div>
-    <div class="bar"><div class="info">Jami ${a.students.length} · Kelmagan: <b>${abs}</b><br>Bosing: ✅ → ❌ → 🕒 → 📝</div>
+    <div class="bar withtabs"><div class="info">Jami ${a.students.length} · Kelmagan: <b>${abs}</b><br>Bosing: ✅ → ❌ → 🕒 → 📝</div>
       <button class="primary" data-act="submit" ${S.busy || !a.students.length ? 'disabled' : ''}>${S.busy ? 'Yuborilmoqda…' : 'Yuborish'}</button></div>`;
 }
 function viewDone() {
@@ -259,7 +365,8 @@ function viewDash() {
   const diff = cur.income - prev.income;
   const dp = d.students ? Math.round(d.debtors * 100 / d.students) : 0;
   const groups = [...d.groups].sort((a, b) => b.debtors - a.debtors);
-  return `<h1>Panel</h1><div class="sub">${d.month}</div>
+  return `<div class="top"><h1 style="padding-top:0">Panel</h1><span style="margin-left:auto;display:flex;gap:8px">${notifBell()}<button class="iconbtn" data-act="export-open" title="Excel yuklab olish">📥</button></span></div>
+    <div class="sub" style="margin-top:-6px">${d.month}</div>
     <div class="kpis">
       <div class="kpi"><div class="l">Tushum</div><div class="v">${short(cur.income)}</div>
         <div class="d ${diff >= 0 ? 'up' : 'dn'}">${diff >= 0 ? '▲' : '▼'} ${short(Math.abs(diff))} o'tgan oyga nisbatan</div></div>
@@ -280,29 +387,679 @@ function viewDash() {
       ${pctBar('Davomat', g.att, 'var(--ok)', g.att === null ? '—' : g.att + '%')}</div>`; }).join('') || '<div class="empty">Guruh yo\'q</div>'}`;
 }
 
+/* ---------- o'quvchilar bo'limi ---------- */
+let searchTimer = null;
+
+async function loadStudentsTab() {
+  S.tab = 'stu'; S.view = 'stu';
+  if (S.stu.groups.length) { S.stu.view = 'groups'; render(); return; }
+  $app.innerHTML = '<div class="spin"></div>';
+  try {
+    const d = await api('/api/groups');
+    S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    S.stu.view = 'groups'; render();
+  } catch (e) { fail(e); }
+}
+function groupName(id) { const g = S.stu.groups.find(x => x.id === id); return g ? g.name : ''; }
+
+function emptyForm(mode, groupId) {
+  return {mode, id:null, last:'', first:'', grade:'', phone:'', group: groupId || '', is_registry:false};
+}
+function goStuForm(mode, prefillGroup, student) {
+  S.stu.formBack = mode === 'edit' ? 'detail' : S.stu.view;
+  S.stu.form = student
+    ? {mode, id:student.id, last:student.last, first:student.first, grade:student.grade,
+       phone:student.phone, group:student.group, is_registry:student.is_registry}
+    : emptyForm(mode, prefillGroup);
+  S.stu.toast = '';
+  S.stu.view = 'form';
+  render();
+}
+function goStuDetail(student) {
+  S.stu.detailBack = S.stu.view === 'detail' ? S.stu.detailBack : S.stu.view;
+  S.stu.detail = student; S.stu.payOpen = false; S.stu.payAmount = ''; S.stu.moveOpen = false; S.stu.moveTo = '';
+  S.stu.payHistOpen = false; S.stu.payHistory = null;
+  S.stu.parentOpen = false; S.stu.parentLink = null; S.stu.parentCopied = false;
+  S.stu.view = 'detail';
+  render();
+}
+async function toggleParentLink() {
+  S.stu.parentOpen = !S.stu.parentOpen; S.stu.parentCopied = false;
+  if (S.stu.parentOpen && !S.stu.parentLink) {
+    S.stu.parentLoading = true; render();
+    try { S.stu.parentLink = await api(`/api/students/${S.stu.detail.id}/parent-link`, {method:'POST'}); }
+    catch (e) { S.stu.parentOpen = false; alert(e.message); }
+    S.stu.parentLoading = false;
+  }
+  render();
+}
+async function copyParentLink() {
+  try {
+    await navigator.clipboard.writeText(S.stu.parentLink.url);
+  } catch (e) {
+    const el = document.getElementById('parentUrl'); el.select(); document.execCommand('copy');
+  }
+  S.stu.parentCopied = true; haptic('light'); render();
+}
+async function togglePayHistory() {
+  S.stu.payHistOpen = !S.stu.payHistOpen;
+  if (S.stu.payHistOpen && !S.stu.payHistory) {
+    render();
+    try { const d = await api(`/api/payments?student=${S.stu.detail.id}`); S.stu.payHistory = d.payments; }
+    catch (e) { S.stu.payHistory = []; }
+  }
+  render();
+}
+async function cancelPayment(pid) {
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm("To'lov bekor qilinsinmi?", r))
+                                   : confirm("To'lov bekor qilinsinmi?");
+  if (!ok) return;
+  try {
+    await api(`/api/payments/${pid}`, {method:'DELETE'});
+    haptic('medium');
+    S.stu.payHistory = S.stu.payHistory.filter(p => p.id !== pid);
+    const d = await api(`/api/payments?student=${S.stu.detail.id}`);
+    S.stu.payHistory = d.payments;
+    await refreshStuGroup();
+    if (S.stu.group) { const fresh = S.stu.students.find(x => x.id === S.stu.detail.id); if (fresh) S.stu.detail = fresh; }
+  } catch (e) { alert(e.message); }
+  render();
+}
+
+/* ---------- o'qituvchi oyligi ---------- */
+async function loadSalary(month) {
+  S.tab = 'sal'; S.view = 'sal'; S.salary.loading = true; render();
+  try {
+    const d = await api('/api/salary' + (month ? `?month=${month}` : ''));
+    S.salary.data = d; S.salary.month = d.month;
+  } catch (e) { S.salary.data = null; fail(e); return; }
+  S.salary.loading = false; render();
+}
+function viewSalary() {
+  const d = S.salary.data;
+  if (S.salary.loading || !d) return '<div class="spin" style="margin:60px auto"></div>';
+  const how = d.pay_type === 'percent' ? `${d.pay_value}% (to'lovdan)` : `${money(d.pay_value)} so'm / o'quvchi`;
+  const chips = d.months.map(m => `<button class="dchip ${m === d.month ? 'on' : ''}" data-act="sal-month" data-month="${m}">${m}</button>`).join('');
+  return `<h1>💰 Oylik</h1><div class="sub">${esc(d.month)} · ${esc(how)}</div>
+    <div class="strip">${chips}</div>
+    <div class="sec">Guruhlar</div>
+    ${d.groups.map(g => `<div class="srow-row"><div class="who"><div class="name">${esc(g.name)}</div>
+        <div class="meta">To'lagan: ${g.paid} ta</div></div><div class="name">${short(g.income)}</div></div>`).join('')
+      || '<div class="empty">Guruh yo\'q</div>'}
+    ${d.registry.length ? `<div class="sec">🏛 Reyestr (100%)</div>
+      ${d.registry.map(r => `<div class="srow-row"><div class="who"><div class="name">${esc(r.group)}</div>
+          <div class="meta">${r.lessons} ta dars</div></div><div class="name">${short(r.total)}</div></div>`).join('')}` : ''}
+    <div class="kpi" style="margin-top:16px"><div class="l">Jami oylik</div><div class="v" style="font-size:26px">${money(d.total)} so'm</div></div>`;
+}
+
+/* ---------- Excel yuklab olish ---------- */
+function monthsBack(n) {
+  const out = [];
+  const d = new Date();
+  for (let i = 0; i < n; i++) {
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    d.setMonth(d.getMonth() - 1);
+  }
+  return out;
+}
+function viewExport() {
+  const months = monthsBack(6);
+  const month = S.xport.month || months[0];
+  const chips = months.map(m => `<button class="dchip ${m === month ? 'on' : ''}" data-act="xp-month" data-month="${m}">${m}</button>`).join('');
+  return `<div class="top"><button class="back" data-act="xp-back">‹</button><h1>📥 Excel yuklab olish</h1></div>
+    <div class="sub" style="margin-top:4px">Fayl .xlsx formatida, telefoningizga yuklanadi</div>
+    <div class="cards">
+      <button class="gcard" data-act="xp-go" data-type="debtors"><div><div class="t">📋 Qarzdorlar</div>
+        <div class="sub">Joriy oy · ${S.me ? S.me.today.slice(0, 7) : ''}</div></div><span class="sub">⬇️</span></button>
+      <button class="gcard" data-act="xp-go" data-type="students"><div><div class="t">👥 Barcha o'quvchilar</div>
+        <div class="sub">Joriy oy to'lovlari bilan</div></div><span class="sub">⬇️</span></button>
+    </div>
+    <div class="sec">📅 Oylik hisobot (guruhlar, oyliklar, o'quvchilar)</div>
+    <div class="strip">${chips}</div>
+    <button class="primary" style="width:100%;margin-top:8px" data-act="xp-go" data-type="report" data-month="${month}"
+      ${S.xport.busy ? 'disabled' : ''}>${S.xport.busy ? 'Tayyorlanmoqda…' : `⬇️ ${month} hisobotini yuklash`}</button>
+    ${S.xport.error ? `<div class="toast" style="background:var(--no-bg);color:var(--no)">${esc(S.xport.error)}</div>` : ''}`;
+}
+async function downloadExport(type, month) {
+  S.xport.busy = true; S.xport.error = ''; render();
+  try {
+    const url = `/api/export?type=${type}` + (month ? `&month=${month}` : '');
+    const r = await fetch(url, {headers: {'X-Init-Data': (tg && tg.initData) || ''}});
+    if (!r.ok) { let d = {}; try { d = await r.json(); } catch (e) {} throw new Error(d.error || 'Yuklab bo\'lmadi'); }
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const match = /filename="([^"]+)"/.exec(cd);
+    const fname = match ? match[1] : `${type}.xlsx`;
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+    haptic('medium');
+  } catch (e) { S.xport.error = "Yuklab bo'lmadi: " + e.message; }
+  S.xport.busy = false; render();
+}
+
+/* ---------- Xodimlar (faqat direktor) ---------- */
+async function loadStaffTab() {
+  S.tab = 'hr'; S.view = 'hr';
+  if (S.hr.teachers.length || S.hr.admins.length) { S.hr.view = 'home'; render(); return; }
+  $app.innerHTML = '<div class="spin"></div>';
+  try {
+    const [t, a, r] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry')]);
+    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r;
+    S.hr.view = 'home'; render();
+  } catch (e) { fail(e); }
+}
+async function refreshStaff() {
+  try {
+    const [t, a, r] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry')]);
+    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r;
+  } catch (e) {}
+}
+function viewHrHome() {
+  const h = S.hr, r = h.registry;
+  const payHow = t => t.pay_type === 'percent' ? `${t.pay_value}%` : `${money(t.pay_value)} so'm/o'quvchi`;
+  return `<h1>👨‍🏫 Xodimlar</h1>
+    ${h.toast ? `<div class="toast">${esc(h.toast)}</div>` : ''}
+    <div class="sec">O'qituvchilar</div>
+    <div class="list">${h.teachers.map(t => `<div class="srow-row" data-act="hr-teacher-open" data-id="${t.id}">
+        <div class="who"><div class="name">${esc(t.name)}</div>
+          <div class="meta">${payHow(t)}${t.registry_rate ? ` · 🏛 ${money(t.registry_rate)}` : ''} · ${t.groups} guruh</div></div>
+        <span class="sub">▸</span></div>`).join('') || '<div class="empty">O\'qituvchilar yo\'q</div>'}</div>
+    <button class="gcard" data-act="hr-teacher-add" style="border:1.5px dashed var(--line);background:transparent;margin-top:8px">
+      <div class="t">➕ Yangi o'qituvchi</div></button>
+    <div class="sec">Adminlar</div>
+    <div class="list">${h.admins.map(a => `<div class="srow-row">
+        <div class="who"><div class="name">${esc(a.name)}</div><div class="meta">ID ${a.id}</div></div>
+        <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-admin-del" data-id="${a.id}">🗑</button>
+      </div>`).join('') || '<div class="empty">Adminlar yo\'q</div>'}</div>
+    <button class="gcard" data-act="hr-admin-add" style="border:1.5px dashed var(--line);background:transparent;margin-top:8px">
+      <div class="t">➕ Yangi admin</div></button>
+    ${r ? `<div class="sec">🏛 Reyestr sozlamasi</div>
+    <div class="gbox"><div class="hd">Reyestr o'quvchilar<span>${r.total} ta, yashirin ${r.hidden_count}</span></div>
+      <div class="sub" style="margin-top:6px">Yashirin o'quvchilar ro'yxat, davomat, qarzdor va hisobda ko'rinmaydi hamda hisoblanmaydi.</div>
+      <div class="actions2" style="grid-template-columns:1fr 1fr">
+        <button class="abtn" data-act="hr-reg" data-hide="1" ${r.hidden_mode ? 'disabled' : ''}>🙈 Hammasini yashirish</button>
+        <button class="abtn" data-act="hr-reg" data-hide="0" ${!r.hidden_mode ? 'disabled' : ''}>👁 Hammasini ochish</button>
+      </div></div>` : ''}`;
+}
+function hrBack() { S.hr.view = 'home'; render(); }
+function viewHrTeacherForm() {
+  const f = S.hr.tform, isEdit = f.mode === 'edit';
+  return `<div class="top"><button class="back" data-act="hr-back">‹</button><h1>${isEdit ? esc(f.name) : "Yangi o'qituvchi"}</h1></div>
+    ${S.hr.toast ? `<div class="toast">${esc(S.hr.toast)}</div>` : ''}
+    ${isEdit ? '' : `<div class="field"><label>Telegram ID <span class="req">*</span></label>
+      <input class="input" id="t_id" type="number" inputmode="numeric" placeholder="masalan 123456789" autocomplete="off"></div>`}
+    <div class="field"><label>Ism familiya <span class="req">*</span></label>
+      <input class="input" id="t_name" value="${esc(f.name)}" autocomplete="off"></div>
+    <div class="field"><label>Oylik turi</label>
+      <select class="input" id="t_ptype"><option value="percent" ${f.pay_type === 'percent' ? 'selected' : ''}>Foiz (%)</option>
+        <option value="per_student" ${f.pay_type === 'per_student' ? 'selected' : ''}>O'quvchi boshiga</option></select></div>
+    <div class="field"><label>Oylik qiymati</label>
+      <input class="input" id="t_pvalue" type="number" inputmode="decimal" value="${f.pay_value || ''}" placeholder="masalan 40 yoki 200000"></div>
+    <div class="field"><label>Reyestr: bitta dars narxi (so'm)</label>
+      <input class="input" id="t_reg" type="number" inputmode="numeric" value="${f.registry_rate || 0}" placeholder="0 - reyestr yo'q"></div>
+    <div class="form-actions"><button class="secondary" data-act="hr-back">Bekor qilish</button>
+      <button class="primary" data-act="hr-teacher-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : 'Saqlash'}</button></div>
+    ${isEdit ? `<button class="abtn danger" style="width:100%;margin-top:20px" data-act="hr-teacher-del" data-id="${f.id}">🗑 O'qituvchini o'chirish</button>` : ''}`;
+}
+function viewHrAdminForm() {
+  const f = S.hr.aform;
+  return `<div class="top"><button class="back" data-act="hr-back">‹</button><h1>Yangi admin</h1></div>
+    ${S.hr.toast ? `<div class="toast">${esc(S.hr.toast)}</div>` : ''}
+    <div class="field"><label>Telegram ID <span class="req">*</span></label>
+      <input class="input" id="a_id" type="number" inputmode="numeric" placeholder="masalan 123456789" value="${f.id || ''}" autocomplete="off"></div>
+    <div class="field"><label>Ism familiya <span class="req">*</span></label>
+      <input class="input" id="a_name" value="${esc(f.name || '')}" autocomplete="off"></div>
+    <div class="form-actions"><button class="secondary" data-act="hr-back">Bekor qilish</button>
+      <button class="primary" data-act="hr-admin-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : "Qo'shish"}</button></div>`;
+}
+const HR_VIEWS = {home: viewHrHome, tform: viewHrTeacherForm, aform: viewHrAdminForm};
+
+function hrOpenTeacher(id) {
+  const t = S.hr.teachers.find(x => x.id === id);
+  if (!t) return;
+  S.hr.tform = {mode:'edit', id, name:t.name, pay_type:t.pay_type, pay_value:t.pay_value, registry_rate:t.registry_rate};
+  S.hr.toast = ''; S.hr.view = 'tform'; render();
+}
+function hrNewTeacher() {
+  S.hr.tform = {mode:'add', id:null, name:'', pay_type:'percent', pay_value:'', registry_rate:0};
+  S.hr.toast = ''; S.hr.view = 'tform'; render();
+}
+async function hrSaveTeacher() {
+  const f = S.hr.tform;
+  f.name = document.getElementById('t_name').value.trim();
+  f.pay_type = document.getElementById('t_ptype').value;
+  f.pay_value = parseFloat(document.getElementById('t_pvalue').value);
+  f.registry_rate = parseInt(document.getElementById('t_reg').value || '0', 10);
+  if (f.name.length < 2) return alert('Ism familiyani to\'liq kiriting.');
+  if (!f.pay_value || f.pay_value <= 0) return alert('Oylik qiymatini kiriting.');
+  if (isNaN(f.registry_rate) || f.registry_rate < 0) return alert('Reyestr narxi noto\'g\'ri.');
+  let tid = f.id;
+  if (f.mode === 'add') {
+    tid = parseInt(document.getElementById('t_id').value, 10);
+    if (!tid) return alert('Telegram ID kiriting.');
+  }
+  S.busy = true; render();
+  try {
+    if (f.mode === 'add') {
+      await api('/api/teachers', {method:'POST', body: JSON.stringify(
+        {id:tid, name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate})});
+    } else {
+      await api(`/api/teachers/${tid}`, {method:'PATCH', body: JSON.stringify(
+        {name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate})});
+    }
+    haptic('medium');
+    await refreshStaff();
+    S.hr.view = 'home';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function hrDeleteTeacher(tid) {
+  const t = S.hr.teachers.find(x => x.id === tid);
+  const msg = `${t ? t.name : ''} o'chirilsinmi? Uning guruhlari o'qituvchisiz qoladi.`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  S.busy = true; render();
+  try {
+    await api(`/api/teachers/${tid}`, {method:'DELETE'});
+    haptic('medium');
+    await refreshStaff();
+    S.hr.view = 'home';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+function hrNewAdmin() { S.hr.aform = {id:'', name:''}; S.hr.toast = ''; S.hr.view = 'aform'; render(); }
+async function hrSaveAdmin() {
+  const id = parseInt(document.getElementById('a_id').value, 10);
+  const name = document.getElementById('a_name').value.trim();
+  if (!id) return alert('Telegram ID kiriting.');
+  if (name.length < 2) return alert('Ism familiyani to\'liq kiriting.');
+  S.busy = true; render();
+  try {
+    await api('/api/admins', {method:'POST', body: JSON.stringify({id, name})});
+    haptic('medium');
+    await refreshStaff();
+    S.hr.view = 'home';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function hrDeleteAdmin(aid) {
+  const a = S.hr.admins.find(x => x.id === aid);
+  const msg = `${a ? a.name : ''} admin ro'yxatidan o'chirilsinmi?`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  try {
+    await api(`/api/admins/${aid}`, {method:'DELETE'});
+    haptic('medium');
+    await refreshStaff();
+    render();
+  } catch (e) { alert(e.message); }
+}
+async function hrToggleRegistry(hide) {
+  try {
+    await api('/api/registry', {method:'POST', body: JSON.stringify({hide})});
+    haptic('medium');
+    await refreshStaff();
+    render();
+  } catch (e) { alert(e.message); }
+}
+async function openStuGroup(gid) {
+  $app.innerHTML = '<div class="spin"></div>';
+  try {
+    const d = await api(`/api/students?group=${gid}`);
+    S.stu.students = d.students; S.stu.group = {id: gid, name: groupName(gid)};
+    S.stu.q = ''; S.stu.view = 'list'; render();
+  } catch (e) { fail(e); }
+}
+async function refreshStuGroup() {
+  if (!S.stu.group) return;
+  try { const d = await api(`/api/students?group=${S.stu.group.id}`); S.stu.students = d.students; } catch (e) {}
+}
+async function doStuSearch(q) {
+  if (q.length < 2) { S.stu.searchResults = null; render(); return; }
+  S.stu.searching = true;
+  try { const d = await api(`/api/students?q=${encodeURIComponent(q)}`); S.stu.searchResults = d.students; }
+  catch (e) { S.stu.searchResults = []; }
+  S.stu.searching = false; render();
+}
+
+function payBadge(s) {
+  if (s.is_registry) return `<span class="pay-badge reg">🏛 reyestr</span>`;
+  return s.paid ? `<span class="pay-badge ok">✅ to'lagan</span>` : `<span class="pay-badge no">❌ qarzdor</span>`;
+}
+function stuRow(s, showGroup) {
+  return `<div class="srow-row" data-act="stu-open" data-sid="${s.id}">
+    <div class="who"><div class="name">${esc(s.last)} ${esc(s.first)}</div>
+      <div class="meta">${esc(s.grade)}-sinf${showGroup ? ' · ' + esc(s.group_name || groupName(s.group)) : ''}${s.phone ? ' · 📞 ' + esc(s.phone) : ''}</div></div>
+    ${payBadge(s)}</div>`;
+}
+function debtChip() {
+  return `<button class="dchip ${S.stu.debtOnly ? 'on' : ''}" data-act="stu-debt-toggle">❌ Faqat qarzdorlar</button>`;
+}
+
+function viewStuGroups() {
+  const st = S.stu, staff = S.me.role !== 'teacher';
+  const header = `<h1>👥 O'quvchilar</h1>
+    <div class="srow"><input class="input" id="stuq" placeholder="Qidirish: ism, familiya, telefon..." value="${esc(st.q)}" autocomplete="off">
+      <button class="iconbtn" data-act="stu-add-any" title="Yangi o'quvchi">➕</button></div>`;
+  if (st.q.trim().length >= 2) {
+    const res = st.searchResults;
+    const list = res && st.debtOnly ? res.filter(s => !s.paid) : res;
+    const body = st.searching && !res ? '<div class="spin" style="margin:40px auto"></div>'
+      : (res ? `<div class="strip">${debtChip()}</div>
+         ${list.length ? `<div class="list" style="margin-top:4px">${list.map(s => stuRow(s, true)).join('')}</div>`
+                        : '<div class="empty">Topilmadi</div>'}` : '');
+    return header + body;
+  }
+  const groups = st.groups;
+  const cards = groups.map(g => `<div class="gcard" data-act="stu-group" data-id="${g.id}" style="cursor:pointer">
+    <div style="flex:1;min-width:0"><div class="t">${esc(g.name)}</div><div class="sub">${g.students} ta o'quvchi${g.teacher ? ' · 👨‍🏫 ' + esc(g.teacher) : ''}
+      ${g.debtors ? ' · <span style="color:var(--no);font-weight:600">❌ ' + g.debtors + '</span>' : ''}</div></div>
+    ${staff ? `<button class="iconbtn" style="width:40px;height:40px;font-size:16px;flex:none" data-act="stu-gedit" data-id="${g.id}">⚙️</button>` : '<span class="sub">▸</span>'}</div>`).join('');
+  const addGroup = staff ? `<button class="gcard" data-act="stu-gform" style="border:1.5px dashed var(--line);background:transparent">
+    <div class="t">➕ Yangi guruh</div></button>` : '';
+  return header + `<div class="cards">${cards}${addGroup}</div>` + (groups.length ? '' : (staff ? '' : '<div class="empty">Sizda guruh yo\'q</div>'));
+}
+
+function viewStuList() {
+  const st = S.stu;
+  const q = st.q.trim().toLowerCase();
+  let list = st.students.filter(s => !q || (s.last + ' ' + s.first).toLowerCase().includes(q) || (s.phone || '').includes(q));
+  const debt = st.students.filter(s => !s.paid).length;
+  if (st.debtOnly) list = list.filter(s => !s.paid);
+  return `<div class="top"><button class="back" data-act="stu-back">‹</button><h1>${esc(st.group.name)}</h1></div>
+    <div class="sub">${st.students.length} o'quvchi${debt ? ' · ❌ ' + debt + ' qarzdor' : ''}</div>
+    <div class="srow"><input class="input" id="stuq" placeholder="Shu guruhda qidirish..." value="${esc(st.q)}" autocomplete="off">
+      <button class="iconbtn" data-act="stu-add-group" title="Yangi o'quvchi">➕</button></div>
+    ${debt ? `<div class="strip">${debtChip()}</div>` : ''}
+    <div class="list" style="margin-top:4px">${list.map(s => stuRow(s, false)).join('') || '<div class="empty">Topilmadi</div>'}</div>`;
+}
+
+function viewStuForm() {
+  const f = S.stu.form, isEdit = f.mode === 'edit';
+  const groups = S.stu.groups;
+  const staff = S.me.role !== 'teacher';
+  return `<div class="top"><button class="back" data-act="stu-form-back">‹</button><h1>${isEdit ? 'Tahrirlash' : "Yangi o'quvchi"}</h1></div>
+    ${S.stu.toast ? `<div class="toast">${esc(S.stu.toast)}</div>` : ''}
+    <div class="field"><label>Familiya <span class="req">*</span></label>
+      <input class="input" id="f_last" placeholder="Valiyev" value="${esc(f.last)}" autocomplete="off"></div>
+    <div class="field"><label>Ism <span class="req">*</span></label>
+      <input class="input" id="f_first" placeholder="Ali" value="${esc(f.first)}" autocomplete="off"></div>
+    <div class="field"><label>Sinf</label>
+      <input class="input" id="f_grade" placeholder="7" value="${esc(f.grade)}" autocomplete="off"></div>
+    <div class="field"><label>Telefon</label>
+      <input class="input" id="f_phone" type="tel" inputmode="tel" placeholder="90 123 45 67" value="${esc(f.phone)}" autocomplete="tel"></div>
+    <div class="field"><label>Guruh <span class="req">*</span></label>
+      <select class="input" id="f_group">${!f.group ? '<option value="">— tanlang —</option>' : ''}${groups.map(g =>
+        `<option value="${g.id}" ${g.id === f.group ? 'selected' : ''}>${esc(g.name)}${g.teacher ? ' · ' + esc(g.teacher) : ''}</option>`).join('')}</select></div>
+    ${staff ? `<label class="check"><input type="checkbox" id="f_reg" ${f.is_registry ? 'checked' : ''}>
+      <span>🏛 Reyestr o'quvchisi (davlat to'laydi)</span></label>` : ''}
+    <div class="form-actions"><button class="secondary" data-act="stu-form-back">Bekor qilish</button>
+      <button class="primary" data-act="stu-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : (isEdit ? 'Saqlash' : "Qo'shish")}</button></div>`;
+}
+
+function viewStuDetail() {
+  const s = S.stu.detail, st = S.stu, staff = S.me.role !== 'teacher';
+  const otherGroups = S.stu.groups.filter(g => g.id !== s.group);
+  return `<div class="top"><button class="back" data-act="stu-detail-back">‹</button><h1>${esc(s.last)} ${esc(s.first)}</h1></div>
+    <div class="card-detail">
+      <div class="nm">${esc(s.last)} ${esc(s.first)}</div>
+      <div class="ln">🏫 <b>${esc(s.grade)}-sinf</b> · 📚 <b>${esc(s.group_name || groupName(s.group))}</b></div>
+      <div class="ln">${s.phone ? `📞 <a href="tel:${esc(s.phone)}">${esc(s.phone)}</a>` : '📞 raqam kiritilmagan'}</div>
+      <div class="ln" style="margin-top:10px">${payBadge(s)}</div>
+      <div class="actions2">
+        <button class="abtn" data-act="stu-pay-toggle">💵 To'lov kiritish</button>
+        <button class="abtn" data-act="stu-edit">✏️ Tahrirlash</button>
+        <button class="abtn" data-act="stu-move-toggle">🔀 Ko'chirish</button>
+        <button class="abtn danger" data-act="stu-delete">🗑 O'chirish</button>
+      </div>
+      ${st.payOpen ? `<div class="inline-form"><input class="input" id="payAmt" type="number" inputmode="numeric"
+          placeholder="Summa, masalan 300000" value="${esc(st.payAmount)}">
+        <button class="primary" style="flex:none" data-act="stu-pay-send" ${S.busy ? 'disabled' : ''}>Yubor</button></div>` : ''}
+      ${st.moveOpen ? `<div class="inline-form"><select class="input" id="moveSel">
+          <option value="">— guruh —</option>${otherGroups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select>
+        <button class="primary" style="flex:none" data-act="stu-move-send" ${S.busy ? 'disabled' : ''}>Ko'chir</button></div>` : ''}
+    </div>
+    <button class="abtn" style="width:100%;margin-top:10px" data-act="stu-parent-toggle">👪 Ota-onaga havola</button>
+    ${st.parentOpen ? viewParentLink() : ''}
+    <button class="abtn" style="width:100%;margin-top:10px" data-act="stu-hist-toggle">📜 To'lovlar tarixi ${st.payHistOpen ? '▴' : '▾'}</button>
+    ${st.payHistOpen ? viewPayHistory(staff) : ''}`;
+}
+function viewParentLink() {
+  const st = S.stu;
+  if (st.parentLoading) return '<div class="spin" style="margin:20px auto"></div>';
+  if (!st.parentLink) return '';
+  return `<div class="card-detail" style="margin-top:8px">
+    <div class="sub">Shu havolani ota-onaga yuboring. Bosib botni ochsa, faqat ko'rish uchun sahifa ochiladi.</div>
+    <div class="srow" style="margin-top:8px"><input class="input" id="parentUrl" value="${esc(st.parentLink.url)}" readonly>
+      <button class="iconbtn" data-act="stu-parent-copy" title="Nusxalash">📋</button></div>
+    ${st.parentCopied ? '<div class="toast" style="margin-top:8px">✅ Nusxalandi</div>' : ''}
+  </div>`;
+}
+function viewPayHistory(staff) {
+  const h = S.stu.payHistory;
+  if (!h) return '<div class="spin" style="margin:30px auto"></div>';
+  if (!h.length) return '<div class="empty" style="padding:20px 8px">To\'lovlar yo\'q</div>';
+  return `<div class="list" style="margin-top:8px">${h.map(p => `<div class="srow-row">
+      <div class="who"><div class="name">${money(p.amount)} so'm</div>
+        <div class="meta">${esc(p.month)} · ${esc(p.created_at.slice(0, 16))}</div></div>
+      ${staff ? `<button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="stu-pay-cancel" data-pid="${p.id}">🗑</button>` : ''}
+    </div>`).join('')}</div>`;
+}
+
+function viewStuGroupForm() {
+  const f = S.stu.gform;
+  return `<div class="top"><button class="back" data-act="stu-gform-back">‹</button><h1>Yangi guruh</h1></div>
+    ${S.stu.toast ? `<div class="toast">${esc(S.stu.toast)}</div>` : ''}
+    <div class="field"><label>Guruh nomi <span class="req">*</span></label>
+      <input class="input" id="g_name" placeholder="A1" value="${esc(f.name)}" autocomplete="off"></div>
+    <div class="field"><label>O'qituvchi</label>
+      <select class="input" id="g_teacher"><option value="">— keyinroq biriktirish —</option>
+        ${S.stu.teachers.map(t => `<option value="${t.id}" ${String(t.id) === String(f.teacher) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>
+    <div class="form-actions"><button class="secondary" data-act="stu-gform-back">Bekor qilish</button>
+      <button class="primary" data-act="stu-gform-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : "Yaratish"}</button></div>`;
+}
+
+async function saveStudent() {
+  const f = S.stu.form;
+  f.last = document.getElementById('f_last').value.trim();
+  f.first = document.getElementById('f_first').value.trim();
+  f.grade = document.getElementById('f_grade').value.trim();
+  f.phone = document.getElementById('f_phone').value.trim();
+  f.group = document.getElementById('f_group').value;
+  const regEl = document.getElementById('f_reg');
+  f.is_registry = regEl ? regEl.checked : false;
+  if (f.last.length < 2 || f.first.length < 2) return alert("Ism va familiyani to'liq kiriting.");
+  if (!f.group) return alert('Guruhni tanlang.');
+  S.busy = true; render();
+  try {
+    if (f.mode === 'add') {
+      await api('/api/students', {method:'POST', body: JSON.stringify(
+        {group:+f.group, last:f.last, first:f.first, grade:f.grade, phone:f.phone, is_registry:f.is_registry})});
+      haptic('medium');
+      S.stu.toast = `✅ ${f.last} ${f.first} qo'shildi. Yana qo'shishingiz mumkin.`;
+      const keepGroup = f.group, keepGrade = f.grade, keepReg = f.is_registry;
+      S.stu.form = emptyForm('add', keepGroup);
+      S.stu.form.grade = keepGrade; S.stu.form.is_registry = keepReg;
+      if (S.stu.group && String(S.stu.group.id) === String(keepGroup)) await refreshStuGroup();
+    } else {
+      const r = await api(`/api/students/${f.id}`, {method:'PATCH', body: JSON.stringify(
+        {last:f.last, first:f.first, grade:f.grade, phone:f.phone, group:+f.group, is_registry:f.is_registry})});
+      haptic('medium');
+      S.stu.detail = r.student;
+      if (S.stu.group) await refreshStuGroup();
+      S.stu.view = 'detail';
+    }
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
+async function sendPayment() {
+  const amt = parseInt(document.getElementById('payAmt').value, 10);
+  if (!amt || amt <= 0) return alert("Musbat summa kiriting.");
+  S.busy = true; render();
+  try {
+    await api('/api/payments', {method:'POST', body: JSON.stringify({student: S.stu.detail.id, amount: amt})});
+    haptic('medium');
+    S.stu.detail = {...S.stu.detail, paid: true};
+    S.stu.payOpen = false; S.stu.payAmount = '';
+    await refreshStuGroup();
+    try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
+async function sendMove() {
+  const gid = document.getElementById('moveSel').value;
+  if (!gid) return alert('Guruhni tanlang.');
+  S.busy = true; render();
+  try {
+    const r = await api(`/api/students/${S.stu.detail.id}`, {method:'PATCH', body: JSON.stringify({group:+gid})});
+    haptic('medium');
+    S.stu.detail = r.student; S.stu.moveOpen = false;
+    await refreshStuGroup();
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
+async function deleteStudent() {
+  const s = S.stu.detail;
+  const msg = `${s.last} ${s.first} o'chirilsinmi? Bu amalni qaytarib bo'lmaydi.`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  S.busy = true; render();
+  try {
+    await api(`/api/students/${s.id}`, {method:'DELETE'});
+    haptic('medium');
+    S.stu.view = S.stu.detailBack;
+    await refreshStuGroup();
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
+async function saveGroup() {
+  const f = S.stu.gform;
+  f.name = document.getElementById('g_name').value.trim();
+  f.teacher = document.getElementById('g_teacher').value;
+  if (f.name.length < 1) return alert('Guruh nomini kiriting.');
+  S.busy = true; render();
+  try {
+    const r = await api('/api/groups', {method:'POST', body: JSON.stringify({name:f.name, teacher:f.teacher || null})});
+    haptic('medium');
+    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    S.stu.view = 'groups';
+  } catch (e) { S.stu.toast = ''; alert(e.message); }
+  S.busy = false; render();
+}
+
+/* ---------- guruh sozlamalari (staff) ---------- */
+function openGroupEdit(gid) {
+  const g = S.stu.groups.find(x => x.id === gid);
+  if (!g) return;
+  S.stu.gedit = {id: gid, name: g.name, teacher: g.teacherId ?? ''};
+  S.stu.toast = '';
+  S.stu.view = 'gedit';
+  render();
+}
+function viewGroupEdit() {
+  const f = S.stu.gedit;
+  const g = S.stu.groups.find(x => x.id === f.id);
+  return `<div class="top"><button class="back" data-act="stu-gedit-back">‹</button><h1>⚙️ ${esc(g ? g.name : '')}</h1></div>
+    ${S.stu.toast ? `<div class="toast">${esc(S.stu.toast)}</div>` : ''}
+    <div class="field"><label>Guruh nomi</label>
+      <input class="input" id="ge_name" value="${esc(f.name)}" autocomplete="off"></div>
+    <div class="field"><label>O'qituvchi</label>
+      <select class="input" id="ge_teacher"><option value="">— biriktirilmagan —</option>
+        ${S.stu.teachers.map(t => `<option value="${t.id}" ${String(t.id) === String(f.teacher) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>
+    <div class="form-actions"><button class="secondary" data-act="stu-gedit-back">Bekor qilish</button>
+      <button class="primary" data-act="stu-gedit-save" ${S.busy ? 'disabled' : ''}>Saqlash</button></div>
+    <button class="abtn danger" style="width:100%;margin-top:20px" data-act="stu-gedit-delete">🗑 Guruhni o'chirish</button>`;
+}
+async function saveGroupEdit() {
+  const f = S.stu.gedit;
+  const name = document.getElementById('ge_name').value.trim();
+  const teacher = document.getElementById('ge_teacher').value;
+  if (!name) return alert('Guruh nomini kiriting.');
+  S.busy = true; render();
+  try {
+    await api(`/api/groups/${f.id}`, {method:'PATCH', body: JSON.stringify({name, teacher: teacher || null})});
+    haptic('medium');
+    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    S.stu.view = 'groups';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function deleteGroupEdit() {
+  const g = S.stu.groups.find(x => x.id === S.stu.gedit.id);
+  const msg = `${g ? g.name : ''} guruhi va undagi ${g ? g.students : ''} ta o'quvchi o'chirilsinmi? Bu amalni qaytarib bo'lmaydi.`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  S.busy = true; render();
+  try {
+    await api(`/api/groups/${S.stu.gedit.id}`, {method:'DELETE'});
+    haptic('medium');
+    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    S.stu.view = 'groups';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
 /* ---------- umumiy chizish ---------- */
 function tabs() {
-  return `<div class="tabs"><button class="${S.tab === 'dash' ? 'on' : ''}" data-act="tab" data-tab="dash"><span>📊</span>Panel</button>
-    <button class="${S.tab === 'groups' ? 'on' : ''}" data-act="tab" data-tab="groups"><span>📝</span>Davomat</button></div>`;
+  const staff = S.me.role !== 'teacher';
+  const first = staff
+    ? `<button class="${S.tab === 'dash' ? 'on' : ''}" data-act="tab" data-tab="dash"><span>📊</span>Panel</button>`
+    : `<button class="${S.tab === 'groups' ? 'on' : ''}" data-act="tab" data-tab="groups"><span>📝</span>Davomat</button>`;
+  const salTab = staff ? '' : `<button class="${S.tab === 'sal' ? 'on' : ''}" data-act="tab" data-tab="sal"><span>💰</span>Oylik</button>`;
+  const hrTab = S.me.role === 'director' ? `<button class="${S.tab === 'hr' ? 'on' : ''}" data-act="tab" data-tab="hr"><span>👨‍🏫</span>Xodimlar</button>` : '';
+  return `<div class="tabs">${first}
+    <button class="${S.tab === 'stu' ? 'on' : ''}" data-act="tab" data-tab="stu"><span>👥</span>O'quvchilar</button>${salTab}${hrTab}</div>`;
 }
+const STU_VIEWS = {groups: viewStuGroups, list: viewStuList, form: viewStuForm, detail: viewStuDetail, gform: viewStuGroupForm, gedit: viewGroupEdit};
 function render() {
   const staff = S.me.role !== 'teacher';
   let html = '';
-  if (S.view === 'att') html = S.att.done ? viewDone() : viewAtt();
+  if (S.view === 'att') html = S.att.done ? viewDone() : (viewAtt() + tabs());
   else if (S.view === 'dash') html = viewDash() + tabs();
-  else html = viewGroups() + (staff ? tabs() : '');
-  const q = document.activeElement && document.activeElement.id === 'q';
-  const pos = q ? document.activeElement.selectionStart : 0;
+  else if (S.view === 'stu') html = STU_VIEWS[S.stu.view]() + (S.stu.view === 'groups' ? tabs() : '');
+  else if (S.view === 'sal') html = viewSalary() + tabs();
+  else if (S.view === 'xport') html = viewExport();
+  else if (S.view === 'hr') html = HR_VIEWS[S.hr.view]() + (S.hr.view === 'home' ? tabs() : '');
+  else if (S.view === 'notif') html = viewNotif();
+  else html = viewGroups() + tabs();
+  const focusEl = document.activeElement;
+  const focusId = focusEl && focusEl.id;
+  const pos = focusId && focusEl.selectionStart != null ? focusEl.selectionStart : null;
   $app.innerHTML = html;
-  if (q) { const el = document.getElementById('q'); el.focus(); el.setSelectionRange(pos, pos); }
+  if (focusId) {
+    const el = document.getElementById(focusId);
+    if (el) { el.focus(); if (pos != null) { try { el.setSelectionRange(pos, pos); } catch (e) {} } }
+  }
   try {
     if (tg && tg.BackButton) {
-      if (S.view === 'att' && !S.att.single && !S.att.done) { tg.BackButton.show(); } else { tg.BackButton.hide(); }
+      const canBack = (S.view === 'att' && !S.att.single && !S.att.done) ||
+        (S.view === 'stu' && S.stu.view !== 'groups') || S.view === 'xport' ||
+        (S.view === 'hr' && S.hr.view !== 'home') || S.view === 'notif';
+      canBack ? tg.BackButton.show() : tg.BackButton.hide();
     }
   } catch (e) {}
 }
-if (tg && tg.BackButton) tg.BackButton.onClick(() => { if (S.view === 'att') backToGroups(); });
+if (tg && tg.BackButton) tg.BackButton.onClick(() => {
+  if (S.view === 'att') backToGroups();
+  else if (S.view === 'stu') stuBack();
+  else if (S.view === 'xport') { S.view = 'dash'; S.tab = 'dash'; render(); }
+  else if (S.view === 'hr') hrBack();
+  else if (S.view === 'notif') notifBack();
+});
 function backToGroups() { S.view = 'groups'; S.tab = 'groups'; render(); }
+function stuBack() {
+  const v = S.stu.view;
+  if (v === 'list' || v === 'gform' || v === 'gedit') S.stu.view = 'groups';
+  else if (v === 'form') S.stu.view = S.stu.formBack;
+  else if (v === 'detail') S.stu.view = S.stu.detailBack;
+  render();
+}
 
 async function submit() {
   const a = S.att;
@@ -328,23 +1085,93 @@ document.addEventListener('click', e => {
   const act = t.dataset.act, id = Number(t.dataset.id);
   if (act === 'open') openGroup(id);
   else if (act === 'back') backToGroups();
-  else if (act === 'tab') { S.tab = t.dataset.tab; if (S.tab === 'dash') (S.dash ? (S.view = 'dash', render()) : loadDash()); else { S.view = 'groups'; render(); } }
+  else if (act === 'tab') {
+    S.tab = t.dataset.tab;
+    if (t.dataset.tab === 'dash') (S.dash ? (S.view = 'dash', render()) : loadDash());
+    else if (t.dataset.tab === 'stu') loadStudentsTab();
+    else if (t.dataset.tab === 'sal') (S.salary.data ? (S.view = 'sal', render()) : loadSalary());
+    else if (t.dataset.tab === 'hr') loadStaffTab();
+    else { S.view = 'groups'; render(); }
+  }
   else if (act === 'cycle') {
     const cur = S.att.statuses[id];
     S.att.statuses[id] = CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length];
     haptic(); render();
   }
   else if (act === 'all') { S.att.students.forEach(s => S.att.statuses[s.id] = 'present'); haptic('medium'); render(); }
+  else if (act === 'all-absent') {
+    const msg = `${S.att.students.length} ta o'quvchining hammasi "kelmadi" deb belgilansinmi?`;
+    const go = tg && tg.showConfirm ? p => tg.showConfirm(msg, p) : p => p(confirm(msg));
+    go(ok => { if (ok) { S.att.students.forEach(s => S.att.statuses[s.id] = 'absent'); haptic('medium'); render(); } });
+  }
   else if (act === 'more') { S.open.has(id) ? S.open.delete(id) : S.open.add(id); render(); }
   else if (act === 'day') openGroup(S.att.group.id, t.dataset.day, S.att.single);
   else if (act === 'submit') submit();
   else if (act === 'edit') { S.att.done = null; render(); }
   else if (act === 'close') { tg && tg.close ? tg.close() : history.back(); }
+  else if (act === 'stu-group') openStuGroup(id);
+  else if (act === 'stu-back') { S.stu.view = 'groups'; render(); }
+  else if (act === 'stu-open') {
+    const sid = Number(t.dataset.sid);
+    const pool = S.stu.view === 'list' ? S.stu.students : (S.stu.searchResults || []);
+    const s = pool.find(x => x.id === sid);
+    if (s) goStuDetail(s);
+  }
+  else if (act === 'stu-add-any') goStuForm('add', S.stu.group ? S.stu.group.id : '');
+  else if (act === 'stu-add-group') goStuForm('add', S.stu.group.id);
+  else if (act === 'stu-edit') goStuForm('edit', null, S.stu.detail);
+  else if (act === 'stu-form-back') { S.stu.view = S.stu.formBack; render(); }
+  else if (act === 'stu-detail-back') { S.stu.view = S.stu.detailBack; render(); }
+  else if (act === 'stu-save') saveStudent();
+  else if (act === 'stu-pay-toggle') { S.stu.payOpen = !S.stu.payOpen; S.stu.moveOpen = false; render(); }
+  else if (act === 'stu-move-toggle') { S.stu.moveOpen = !S.stu.moveOpen; S.stu.payOpen = false; render(); }
+  else if (act === 'stu-pay-send') sendPayment();
+  else if (act === 'stu-move-send') sendMove();
+  else if (act === 'stu-delete') deleteStudent();
+  else if (act === 'stu-gform') { S.stu.gform = {name:'', teacher:''}; S.stu.toast = ''; S.stu.view = 'gform'; render(); }
+  else if (act === 'stu-gform-back') { S.stu.view = 'groups'; render(); }
+  else if (act === 'stu-gform-save') saveGroup();
+  else if (act === 'stu-gedit') openGroupEdit(id);
+  else if (act === 'stu-gedit-back') { S.stu.view = 'groups'; render(); }
+  else if (act === 'stu-gedit-save') saveGroupEdit();
+  else if (act === 'stu-gedit-delete') deleteGroupEdit();
+  else if (act === 'export-open') { S.xport = {busy:false, error:'', month: monthsBack(6)[0]}; S.view = 'xport'; render(); }
+  else if (act === 'xp-back') { S.view = 'dash'; S.tab = 'dash'; render(); }
+  else if (act === 'xp-month') { S.xport.month = t.dataset.month; render(); }
+  else if (act === 'xp-go') downloadExport(t.dataset.type, t.dataset.month || S.xport.month);
+  else if (act === 'hr-back') hrBack();
+  else if (act === 'hr-teacher-open') hrOpenTeacher(id);
+  else if (act === 'hr-teacher-add') hrNewTeacher();
+  else if (act === 'hr-teacher-save') hrSaveTeacher();
+  else if (act === 'hr-teacher-del') hrDeleteTeacher(Number(t.dataset.id));
+  else if (act === 'hr-admin-add') hrNewAdmin();
+  else if (act === 'hr-admin-save') hrSaveAdmin();
+  else if (act === 'hr-admin-del') hrDeleteAdmin(id);
+  else if (act === 'hr-reg') hrToggleRegistry(t.dataset.hide === '1');
+  else if (act === 'notif-open') openNotif(S.view, S.tab);
+  else if (act === 'notif-back') notifBack();
+  else if (act === 'notif-item') notifGo(Number(t.dataset.i));
+  else if (act === 'stu-debt-toggle') { S.stu.debtOnly = !S.stu.debtOnly; render(); }
+  else if (act === 'stu-hist-toggle') togglePayHistory();
+  else if (act === 'stu-parent-toggle') toggleParentLink();
+  else if (act === 'stu-parent-copy') copyParentLink();
+  else if (act === 'stu-pay-cancel') cancelPayment(Number(t.dataset.pid));
+  else if (act === 'sal-month') loadSalary(t.dataset.month);
 });
 document.addEventListener('change', e => {
   if (e.target.dataset && e.target.dataset.act === 'pick' && e.target.value) openGroup(S.att.group.id, e.target.value, S.att.single);
 });
-document.addEventListener('input', e => { if (e.target.id === 'q') { S.q = e.target.value; render(); } });
+document.addEventListener('input', e => {
+  if (e.target.id === 'q') { S.q = e.target.value; render(); }
+  else if (e.target.id === 'stuq') {
+    S.stu.q = e.target.value; render();
+    if (S.stu.view === 'groups') {
+      clearTimeout(searchTimer);
+      const v = e.target.value.trim();
+      searchTimer = setTimeout(() => doStuSearch(v), 350);
+    }
+  }
+});
 init();
 </script>
 </body>

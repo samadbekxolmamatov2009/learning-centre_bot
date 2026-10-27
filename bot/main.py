@@ -53,6 +53,11 @@ async def main():
         return True
 
     bot = Bot(config.BOT_TOKEN)
+    try:
+        me = await bot.get_me()
+        config.BOT_USERNAME = me.username or ""
+    except Exception:
+        log.warning("Bot username olinmadi (ota-onaga havola ishlamaydi)", exc_info=True)
     await setup_bot(bot)
     runner = await start_server(db, bot, config.PORT) if config.PORT else None  # Render Web Service
     task = asyncio.create_task(scheduler(bot, db))

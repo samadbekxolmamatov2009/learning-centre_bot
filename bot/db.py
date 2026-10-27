@@ -40,6 +40,10 @@ CREATE TABLE IF NOT EXISTS attendance(
     UNIQUE(group_id, day, student_id));
 CREATE TABLE IF NOT EXISTS notices(key TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS parent_links(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, parent_tg_id INTEGER NOT NULL,
+    student_id INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(parent_tg_id, student_id));
 """
 
 
