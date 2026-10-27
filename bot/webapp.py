@@ -243,7 +243,12 @@ async def api_groups(request):
                                    "LEFT JOIN users u ON u.tg_id=g.teacher_id ORDER BY g.name")
     counts = {r["group_id"]: r["n"] for r in await db.fetchall(
         "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 GROUP BY group_id")}
-    out = {"groups": [{**dict(g), "students": counts.get(g["id"], 0)} for g in groups]}
+    paid_ids = {r["student_id"] for r in await db.fetchall(
+        "SELECT DISTINCT student_id FROM payments WHERE month=?", (D.current_month(),))}
+    debt = {r["group_id"]: r["n"] for r in await db.fetchall(
+        "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 AND is_registry=0 "
+        f"AND id NOT IN ({','.join('?' * len(paid_ids)) or 'NULL'}) GROUP BY group_id", tuple(paid_ids))}
+    out = {"groups": [{**dict(g), "students": counts.get(g["id"], 0), "debtors": debt.get(g["id"], 0)} for g in groups]}
     if role in ("admin", "director"):
         out["teachers"] = [dict(t) for t in await db.fetchall(
             "SELECT u.tg_id AS id, u.full_name AS name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
@@ -417,6 +422,66 @@ async def api_payment_post(request):
     return web.json_response({"ok": True})
 
 
+async def api_payments_get(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        sid = int(request.query["student"])
+    except Exception:
+        return bad("student kerak")
+    s = await _student_access(db, uid, role, sid)
+    if not s:
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    rows = await db.fetchall("SELECT * FROM payments WHERE student_id=? ORDER BY id DESC LIMIT 10", (sid,))
+    return web.json_response({"payments": [{"id": r["id"], "amount": r["amount"], "month": r["month"],
+                                            "created_at": str(r["created_at"])} for r in rows]})
+
+
+async def api_payment_delete(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        pid = int(request.match_info["pid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    p = await db.fetchone("SELECT * FROM payments WHERE id=?", (pid,))
+    if not p:
+        return bad("Topilmadi", 404)
+    await db.execute("DELETE FROM payments WHERE id=?", (pid,))
+    return web.json_response({"ok": True})
+
+
+async def api_salary(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    target = uid
+    if role in ("admin", "director") and request.query.get("teacher"):
+        target = int(request.query["teacher"])
+    elif role == "teacher":
+        target = uid
+    elif role in ("admin", "director"):
+        return bad("teacher parametri kerak")
+    month = request.query.get("month") or D.current_month()
+    res = await D.teacher_salary(db, target, month)
+    if not res:
+        return bad("O'qituvchi topilmadi", 404)
+    pay_type, pay_value, rows, total = res
+    reg = await D.registry_rows(db, target, month)
+    months = []
+    y, m = (int(x) for x in D.current_month().split("-"))
+    for _ in range(6):
+        months.append(f"{y}-{m:02d}")
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    return web.json_response({
+        "pay_type": pay_type, "pay_value": pay_value, "month": month, "months": list(reversed(months)),
+        "groups": [{"name": n, "income": i, "paid": c} for n, i, c in rows],
+        "registry": [{"group": n, "lessons": l, "total": t} for n, l, t in reg], "total": round(total)})
+
+
 def create_app(db, bot=None) -> web.Application:
     app = web.Application(middlewares=[errors_mw])
     app["db"] = db
@@ -434,6 +499,9 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_patch("/api/students/{sid}", api_student_patch)
     app.router.add_delete("/api/students/{sid}", api_student_delete)
     app.router.add_post("/api/payments", api_payment_post)
+    app.router.add_get("/api/payments", api_payments_get)
+    app.router.add_delete("/api/payments/{pid}", api_payment_delete)
+    app.router.add_get("/api/salary", api_salary)
     return app
 
 

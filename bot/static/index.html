@@ -157,9 +157,10 @@ const ST = {
 const CYCLE = ['present','absent','late','excused'];
 const WD = ['Ya','Du','Se','Ch','Pa','Ju','Sh'];
 const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open:new Set(), busy:false,
-  stu:{view:'groups', groups:[], teachers:[], students:[], searching:false, searchResults:null, q:'',
+  stu:{view:'groups', groups:[], teachers:[], students:[], searching:false, searchResults:null, q:'', debtOnly:false,
        group:null, detail:null, formBack:'groups', detailBack:'groups', payOpen:false, payAmount:'', moveOpen:false, moveTo:'',
-       form:null, toast:'', gform:null}};
+       payHistOpen:false, payHistory:null, form:null, toast:'', gform:null},
+  salary:{loading:false, data:null, month:null}};
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d.slice(8,10) + '.' + d.slice(5,7);
@@ -350,8 +351,59 @@ function goStuForm(mode, prefillGroup, student) {
 function goStuDetail(student) {
   S.stu.detailBack = S.stu.view === 'detail' ? S.stu.detailBack : S.stu.view;
   S.stu.detail = student; S.stu.payOpen = false; S.stu.payAmount = ''; S.stu.moveOpen = false; S.stu.moveTo = '';
+  S.stu.payHistOpen = false; S.stu.payHistory = null;
   S.stu.view = 'detail';
   render();
+}
+async function togglePayHistory() {
+  S.stu.payHistOpen = !S.stu.payHistOpen;
+  if (S.stu.payHistOpen && !S.stu.payHistory) {
+    render();
+    try { const d = await api(`/api/payments?student=${S.stu.detail.id}`); S.stu.payHistory = d.payments; }
+    catch (e) { S.stu.payHistory = []; }
+  }
+  render();
+}
+async function cancelPayment(pid) {
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm("To'lov bekor qilinsinmi?", r))
+                                   : confirm("To'lov bekor qilinsinmi?");
+  if (!ok) return;
+  try {
+    await api(`/api/payments/${pid}`, {method:'DELETE'});
+    haptic('medium');
+    S.stu.payHistory = S.stu.payHistory.filter(p => p.id !== pid);
+    const d = await api(`/api/payments?student=${S.stu.detail.id}`);
+    S.stu.payHistory = d.payments;
+    await refreshStuGroup();
+    if (S.stu.group) { const fresh = S.stu.students.find(x => x.id === S.stu.detail.id); if (fresh) S.stu.detail = fresh; }
+  } catch (e) { alert(e.message); }
+  render();
+}
+
+/* ---------- o'qituvchi oyligi ---------- */
+async function loadSalary(month) {
+  S.tab = 'sal'; S.view = 'sal'; S.salary.loading = true; render();
+  try {
+    const d = await api('/api/salary' + (month ? `?month=${month}` : ''));
+    S.salary.data = d; S.salary.month = d.month;
+  } catch (e) { S.salary.data = null; fail(e); return; }
+  S.salary.loading = false; render();
+}
+function viewSalary() {
+  const d = S.salary.data;
+  if (S.salary.loading || !d) return '<div class="spin" style="margin:60px auto"></div>';
+  const how = d.pay_type === 'percent' ? `${d.pay_value}% (to'lovdan)` : `${money(d.pay_value)} so'm / o'quvchi`;
+  const chips = d.months.map(m => `<button class="dchip ${m === d.month ? 'on' : ''}" data-act="sal-month" data-month="${m}">${m}</button>`).join('');
+  return `<h1>💰 Oylik</h1><div class="sub">${esc(d.month)} · ${esc(how)}</div>
+    <div class="strip">${chips}</div>
+    <div class="sec">Guruhlar</div>
+    ${d.groups.map(g => `<div class="srow-row"><div class="who"><div class="name">${esc(g.name)}</div>
+        <div class="meta">To'lagan: ${g.paid} ta</div></div><div class="name">${short(g.income)}</div></div>`).join('')
+      || '<div class="empty">Guruh yo\'q</div>'}
+    ${d.registry.length ? `<div class="sec">🏛 Reyestr (100%)</div>
+      ${d.registry.map(r => `<div class="srow-row"><div class="who"><div class="name">${esc(r.group)}</div>
+          <div class="meta">${r.lessons} ta dars</div></div><div class="name">${short(r.total)}</div></div>`).join('')}` : ''}
+    <div class="kpi" style="margin-top:16px"><div class="l">Jami oylik</div><div class="v" style="font-size:26px">${money(d.total)} so'm</div></div>`;
 }
 async function openStuGroup(gid) {
   $app.innerHTML = '<div class="spin"></div>';
@@ -383,6 +435,9 @@ function stuRow(s, showGroup) {
       <div class="meta">${esc(s.grade)}-sinf${showGroup ? ' · ' + esc(s.group_name || groupName(s.group)) : ''}${s.phone ? ' · 📞 ' + esc(s.phone) : ''}</div></div>
     ${payBadge(s)}</div>`;
 }
+function debtChip() {
+  return `<button class="dchip ${S.stu.debtOnly ? 'on' : ''}" data-act="stu-debt-toggle">❌ Faqat qarzdorlar</button>`;
+}
 
 function viewStuGroups() {
   const st = S.stu, staff = S.me.role !== 'teacher';
@@ -391,14 +446,17 @@ function viewStuGroups() {
       <button class="iconbtn" data-act="stu-add-any" title="Yangi o'quvchi">➕</button></div>`;
   if (st.q.trim().length >= 2) {
     const res = st.searchResults;
+    const list = res && st.debtOnly ? res.filter(s => !s.paid) : res;
     const body = st.searching && !res ? '<div class="spin" style="margin:40px auto"></div>'
-      : (res && res.length ? `<div class="list" style="margin-top:4px">${res.map(s => stuRow(s, true)).join('')}</div>`
-                            : '<div class="empty">Hech narsa topilmadi</div>');
+      : (res ? `<div class="strip">${debtChip()}</div>
+         ${list.length ? `<div class="list" style="margin-top:4px">${list.map(s => stuRow(s, true)).join('')}</div>`
+                        : '<div class="empty">Topilmadi</div>'}` : '');
     return header + body;
   }
   const groups = st.groups;
   const cards = groups.map(g => `<button class="gcard" data-act="stu-group" data-id="${g.id}">
-    <div><div class="t">${esc(g.name)}</div><div class="sub">${g.students} ta o'quvchi${g.teacher ? ' · 👨‍🏫 ' + esc(g.teacher) : ''}</div></div>
+    <div><div class="t">${esc(g.name)}</div><div class="sub">${g.students} ta o'quvchi${g.teacher ? ' · 👨‍🏫 ' + esc(g.teacher) : ''}
+      ${g.debtors ? ' · <span style="color:var(--no);font-weight:600">❌ ' + g.debtors + '</span>' : ''}</div></div>
     <span class="sub">▸</span></button>`).join('');
   const addGroup = staff ? `<button class="gcard" data-act="stu-gform" style="border:1.5px dashed var(--line);background:transparent">
     <div class="t">➕ Yangi guruh</div></button>` : '';
@@ -408,12 +466,14 @@ function viewStuGroups() {
 function viewStuList() {
   const st = S.stu;
   const q = st.q.trim().toLowerCase();
-  const list = st.students.filter(s => !q || (s.last + ' ' + s.first).toLowerCase().includes(q) || (s.phone || '').includes(q));
+  let list = st.students.filter(s => !q || (s.last + ' ' + s.first).toLowerCase().includes(q) || (s.phone || '').includes(q));
   const debt = st.students.filter(s => !s.paid).length;
+  if (st.debtOnly) list = list.filter(s => !s.paid);
   return `<div class="top"><button class="back" data-act="stu-back">‹</button><h1>${esc(st.group.name)}</h1></div>
     <div class="sub">${st.students.length} o'quvchi${debt ? ' · ❌ ' + debt + ' qarzdor' : ''}</div>
     <div class="srow"><input class="input" id="stuq" placeholder="Shu guruhda qidirish..." value="${esc(st.q)}" autocomplete="off">
       <button class="iconbtn" data-act="stu-add-group" title="Yangi o'quvchi">➕</button></div>
+    ${debt ? `<div class="strip">${debtChip()}</div>` : ''}
     <div class="list" style="margin-top:4px">${list.map(s => stuRow(s, false)).join('') || '<div class="empty">Topilmadi</div>'}</div>`;
 }
 
@@ -441,7 +501,7 @@ function viewStuForm() {
 }
 
 function viewStuDetail() {
-  const s = S.stu.detail, st = S.stu;
+  const s = S.stu.detail, st = S.stu, staff = S.me.role !== 'teacher';
   const otherGroups = S.stu.groups.filter(g => g.id !== s.group);
   return `<div class="top"><button class="back" data-act="stu-detail-back">‹</button><h1>${esc(s.last)} ${esc(s.first)}</h1></div>
     <div class="card-detail">
@@ -461,7 +521,19 @@ function viewStuDetail() {
       ${st.moveOpen ? `<div class="inline-form"><select class="input" id="moveSel">
           <option value="">— guruh —</option>${otherGroups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select>
         <button class="primary" style="flex:none" data-act="stu-move-send" ${S.busy ? 'disabled' : ''}>Ko'chir</button></div>` : ''}
-    </div>`;
+    </div>
+    <button class="abtn" style="width:100%;margin-top:10px" data-act="stu-hist-toggle">📜 To'lovlar tarixi ${st.payHistOpen ? '▴' : '▾'}</button>
+    ${st.payHistOpen ? viewPayHistory(staff) : ''}`;
+}
+function viewPayHistory(staff) {
+  const h = S.stu.payHistory;
+  if (!h) return '<div class="spin" style="margin:30px auto"></div>';
+  if (!h.length) return '<div class="empty" style="padding:20px 8px">To\'lovlar yo\'q</div>';
+  return `<div class="list" style="margin-top:8px">${h.map(p => `<div class="srow-row">
+      <div class="who"><div class="name">${money(p.amount)} so'm</div>
+        <div class="meta">${esc(p.month)} · ${esc(p.created_at.slice(0, 16))}</div></div>
+      ${staff ? `<button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="stu-pay-cancel" data-pid="${p.id}">🗑</button>` : ''}
+    </div>`).join('')}</div>`;
 }
 
 function viewStuGroupForm() {
@@ -575,8 +647,9 @@ function tabs() {
   const first = staff
     ? `<button class="${S.tab === 'dash' ? 'on' : ''}" data-act="tab" data-tab="dash"><span>📊</span>Panel</button>`
     : `<button class="${S.tab === 'groups' ? 'on' : ''}" data-act="tab" data-tab="groups"><span>📝</span>Davomat</button>`;
+  const salTab = staff ? '' : `<button class="${S.tab === 'sal' ? 'on' : ''}" data-act="tab" data-tab="sal"><span>💰</span>Oylik</button>`;
   return `<div class="tabs">${first}
-    <button class="${S.tab === 'stu' ? 'on' : ''}" data-act="tab" data-tab="stu"><span>👥</span>O'quvchilar</button></div>`;
+    <button class="${S.tab === 'stu' ? 'on' : ''}" data-act="tab" data-tab="stu"><span>👥</span>O'quvchilar</button>${salTab}</div>`;
 }
 const STU_VIEWS = {groups: viewStuGroups, list: viewStuList, form: viewStuForm, detail: viewStuDetail, gform: viewStuGroupForm};
 function render() {
@@ -585,6 +658,7 @@ function render() {
   if (S.view === 'att') html = S.att.done ? viewDone() : (viewAtt() + tabs());
   else if (S.view === 'dash') html = viewDash() + tabs();
   else if (S.view === 'stu') html = STU_VIEWS[S.stu.view]() + (S.stu.view === 'groups' ? tabs() : '');
+  else if (S.view === 'sal') html = viewSalary() + tabs();
   else html = viewGroups() + tabs();
   const focusEl = document.activeElement;
   const focusId = focusEl && focusEl.id;
@@ -643,6 +717,7 @@ document.addEventListener('click', e => {
     S.tab = t.dataset.tab;
     if (t.dataset.tab === 'dash') (S.dash ? (S.view = 'dash', render()) : loadDash());
     else if (t.dataset.tab === 'stu') loadStudentsTab();
+    else if (t.dataset.tab === 'sal') (S.salary.data ? (S.view = 'sal', render()) : loadSalary());
     else { S.view = 'groups'; render(); }
   }
   else if (act === 'cycle') {
@@ -678,6 +753,10 @@ document.addEventListener('click', e => {
   else if (act === 'stu-gform') { S.stu.gform = {name:'', teacher:''}; S.stu.toast = ''; S.stu.view = 'gform'; render(); }
   else if (act === 'stu-gform-back') { S.stu.view = 'groups'; render(); }
   else if (act === 'stu-gform-save') saveGroup();
+  else if (act === 'stu-debt-toggle') { S.stu.debtOnly = !S.stu.debtOnly; render(); }
+  else if (act === 'stu-hist-toggle') togglePayHistory();
+  else if (act === 'stu-pay-cancel') cancelPayment(Number(t.dataset.pid));
+  else if (act === 'sal-month') loadSalary(t.dataset.month);
 });
 document.addEventListener('change', e => {
   if (e.target.dataset && e.target.dataset.act === 'pick' && e.target.value) openGroup(S.att.group.id, e.target.value, S.att.single);
