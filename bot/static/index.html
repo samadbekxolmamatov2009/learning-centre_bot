@@ -162,7 +162,8 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open
        payHistOpen:false, payHistory:null, form:null, toast:'', gform:null},
   salary:{loading:false, data:null, month:null},
   xport:{busy:false, error:'', month:null},
-  hr:{view:'home', teachers:[], admins:[], registry:null, toast:'', tform:null, aform:null}};
+  hr:{view:'home', teachers:[], admins:[], registry:null, toast:'', tform:null, aform:null},
+  notif:{count:0, items:null, loading:false, from:null}};
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d.slice(8,10) + '.' + d.slice(5,7);
@@ -184,6 +185,7 @@ function fail(e) { $app.innerHTML = `<div class="err"><div style="font-size:48px
 async function init() {
   try {
     S.me = await api('/api/me');
+    loadNotifCount();
     if (S.me.role === 'teacher') {
       if (S.me.groups.length === 1) return openGroup(S.me.groups[0].id, null, true);
       S.view = 'groups';
@@ -192,11 +194,71 @@ async function init() {
   } catch (e) { fail(e); }
 }
 
+/* ---------- bildirishnomalar ---------- */
+async function loadNotifCount() {
+  try {
+    const d = await api('/api/notifications');
+    S.notif.count = d.count; S.notif.items = d.items;
+    if (S.view !== 'notif') render();
+  } catch (e) {}
+}
+function notifBell() {
+  const c = S.notif.count;
+  return `<button class="iconbtn" style="position:relative" data-act="notif-open" title="Bildirishnomalar">🔔${c ?
+    `<span style="position:absolute;top:-2px;right:-2px;background:var(--no);color:#fff;font-size:10px;font-weight:700;
+      border-radius:999px;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;
+      border:2px solid var(--bg)">${c > 9 ? '9+' : c}</span>` : ''}</button>`;
+}
+async function openNotif(fromView, fromTab) {
+  S.notif.from = {view: fromView, tab: fromTab};
+  S.view = 'notif'; S.notif.loading = !S.notif.items; render();
+  if (!S.notif.items) {
+    try { const d = await api('/api/notifications'); S.notif.items = d.items; S.notif.count = d.count; }
+    catch (e) { S.notif.items = []; }
+  }
+  S.notif.loading = false; render();
+}
+function notifBack() {
+  const f = S.notif.from || {view: S.me.role === 'teacher' ? 'groups' : 'dash', tab: S.me.role === 'teacher' ? 'groups' : 'dash'};
+  S.view = f.view; S.tab = f.tab; render();
+}
+const NOTIF_LABEL = {no_attendance: 'Davomat olinmagan', debtors: 'Qarzdorlar', no_price: 'Reyestr narxi'};
+function viewNotif() {
+  if (S.notif.loading) return '<div class="spin" style="margin:60px auto"></div>';
+  const items = S.notif.items || [];
+  const staff = S.me.role !== 'teacher';
+  return `<div class="top"><button class="back" data-act="notif-back">‹</button><h1>🔔 Bildirishnomalar</h1></div>
+    ${items.length ? `<div class="list" style="margin-top:12px">${items.map((it, i) => {
+        const clickable = (it.kind === 'debtors') || (it.kind === 'no_attendance' && !staff) ||
+          (it.kind === 'no_price' && S.me.role === 'director');
+        return `<div class="srow-row" ${clickable ? `data-act="notif-item" data-i="${i}" style="cursor:pointer"` : ''}>
+          <div class="who"><div class="name">${it.icon} ${esc(NOTIF_LABEL[it.kind] || '')}</div>
+            <div class="meta">${esc(it.text)}</div></div>${clickable ? '<span class="sub">▸</span>' : ''}</div>`;
+      }).join('')}</div>`
+      : `<div class="empty" style="padding:48px 8px"><div style="font-size:48px">✅</div>Hammasi joyida</div>`}`;
+}
+function notifGo(i) {
+  const it = (S.notif.items || [])[i];
+  if (!it) return;
+  if (it.kind === 'debtors' && it.group != null) {
+    S.tab = 'stu'; S.view = 'stu';
+    if (!S.stu.groups.length) loadStudentsTab().then(() => { S.stu.debtOnly = true; openStuGroup(it.group); });
+    else { S.stu.debtOnly = true; openStuGroup(it.group); }
+  } else if (it.kind === 'no_attendance' && it.group != null && S.me.role === 'teacher') {
+    openGroup(it.group);
+  } else if (it.kind === 'no_price' && it.teacher != null && S.me.role === 'director') {
+    S.tab = 'hr'; S.view = 'hr';
+    if (!S.hr.teachers.length) loadStaffTab().then(() => hrOpenTeacher(it.teacher));
+    else hrOpenTeacher(it.teacher);
+  }
+}
+
 /* ---------- guruhlar ro'yxati ---------- */
 function viewGroups() {
   const g = S.me.groups;
-  if (!g.length) return `<h1>Guruhlar</h1><div class="empty">Guruh yo'q</div>`;
-  return `<h1>Guruhni tanlang</h1><div class="sub">Bugun: ${fmtDay(S.me.today)}.${S.me.today.slice(0,4)}</div><div class="cards">` +
+  if (!g.length) return `<div class="top"><h1 style="padding-top:0">Guruhlar</h1>${notifBell()}</div><div class="empty">Guruh yo'q</div>`;
+  return `<div class="top"><h1 style="padding-top:0">Guruhni tanlang</h1>${notifBell()}</div>
+    <div class="sub" style="margin-top:-6px">Bugun: ${fmtDay(S.me.today)}.${S.me.today.slice(0,4)}</div><div class="cards">` +
     g.map(x => `<button class="gcard" data-act="open" data-id="${x.id}">
       <div><div class="t">${esc(x.name)}</div><div class="sub">${x.students} ta o'quvchi${x.time ? ' · ' + esc(x.time) : ''}</div></div>
       <span class="badge ${x.taken_today ? 'done' : ''}">${x.taken_today ? 'Bugun olingan' : 'Olinmagan'}</span></button>`).join('') + '</div>';
@@ -254,7 +316,7 @@ function viewAtt() {
   const chips = days.map(d => `<button class="dchip ${d === a.day ? 'on' : ''}" data-act="day" data-day="${d}">${d === a.today ? 'Bugun' : fmtDay(d) + ' ' + wd(d)}</button>`).join('') +
     `<label class="dchip">📅<input type="date" max="${a.today}" data-act="pick" value="${a.day}"></label>`;
   return `<div class="top">${a.single ? '' : '<button class="back" data-act="back">‹</button>'}<h1>${esc(a.group.name)}</h1>
-      <span class="sub">${fmtDay(a.day)}.${a.day.slice(0,4)}</span></div>
+      <span class="sub">${fmtDay(a.day)}.${a.day.slice(0,4)}</span>${notifBell()}</div>
     <div class="strip">${chips}</div>
     ${a.has_record ? '<div class="notice">Bu kun uchun davomat olingan. O\'zgartirib qayta yuborishingiz mumkin.</div>' : ''}
     <div class="counts"><div class="cnt ok"><b>${c.present}</b>Keldi</div><div class="cnt no"><b>${c.absent}</b>Yo'q</div>
@@ -302,7 +364,7 @@ function viewDash() {
   const diff = cur.income - prev.income;
   const dp = d.students ? Math.round(d.debtors * 100 / d.students) : 0;
   const groups = [...d.groups].sort((a, b) => b.debtors - a.debtors);
-  return `<div class="top"><h1 style="padding-top:0">Panel</h1><button class="iconbtn" style="margin-left:auto" data-act="export-open" title="Excel yuklab olish">📥</button></div>
+  return `<div class="top"><h1 style="padding-top:0">Panel</h1><span style="margin-left:auto;display:flex;gap:8px">${notifBell()}<button class="iconbtn" data-act="export-open" title="Excel yuklab olish">📥</button></span></div>
     <div class="sub" style="margin-top:-6px">${d.month}</div>
     <div class="kpis">
       <div class="kpi"><div class="l">Tushum</div><div class="v">${short(cur.income)}</div>
@@ -931,6 +993,7 @@ function render() {
   else if (S.view === 'sal') html = viewSalary() + tabs();
   else if (S.view === 'xport') html = viewExport();
   else if (S.view === 'hr') html = HR_VIEWS[S.hr.view]() + (S.hr.view === 'home' ? tabs() : '');
+  else if (S.view === 'notif') html = viewNotif();
   else html = viewGroups() + tabs();
   const focusEl = document.activeElement;
   const focusId = focusEl && focusEl.id;
@@ -944,7 +1007,7 @@ function render() {
     if (tg && tg.BackButton) {
       const canBack = (S.view === 'att' && !S.att.single && !S.att.done) ||
         (S.view === 'stu' && S.stu.view !== 'groups') || S.view === 'xport' ||
-        (S.view === 'hr' && S.hr.view !== 'home');
+        (S.view === 'hr' && S.hr.view !== 'home') || S.view === 'notif';
       canBack ? tg.BackButton.show() : tg.BackButton.hide();
     }
   } catch (e) {}
@@ -954,6 +1017,7 @@ if (tg && tg.BackButton) tg.BackButton.onClick(() => {
   else if (S.view === 'stu') stuBack();
   else if (S.view === 'xport') { S.view = 'dash'; S.tab = 'dash'; render(); }
   else if (S.view === 'hr') hrBack();
+  else if (S.view === 'notif') notifBack();
 });
 function backToGroups() { S.view = 'groups'; S.tab = 'groups'; render(); }
 function stuBack() {
@@ -1051,6 +1115,9 @@ document.addEventListener('click', e => {
   else if (act === 'hr-admin-save') hrSaveAdmin();
   else if (act === 'hr-admin-del') hrDeleteAdmin(id);
   else if (act === 'hr-reg') hrToggleRegistry(t.dataset.hide === '1');
+  else if (act === 'notif-open') openNotif(S.view, S.tab);
+  else if (act === 'notif-back') notifBack();
+  else if (act === 'notif-item') notifGo(Number(t.dataset.i));
   else if (act === 'stu-debt-toggle') { S.stu.debtOnly = !S.stu.debtOnly; render(); }
   else if (act === 'stu-hist-toggle') togglePayHistory();
   else if (act === 'stu-pay-cancel') cancelPayment(Number(t.dataset.pid));

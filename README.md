@@ -54,6 +54,8 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - Panelda **"📥"** tugmasi: qarzdorlar, barcha o'quvchilar va oylik hisobotni .xlsx qilib to'g'ridan-to'g'ri telefonga yuklab olish.
 - Guruh kartochkasidagi **"⚙️"** (admin/direktor): guruh nomini o'zgartirish, o'qituvchisini almashtirish, guruhni o'chirish.
 - Davomatda **"Hammasi ❌"** tezkor tugmasi (bayram va h.k. uchun).
+- **🔔 Bildirishnomalar**: davomat olinmagan guruhlar, qarzdorlar, reyestr narxi kiritilmagan o'qituvchilar — bitta ro'yxatda, bosib tegishli joyga o'tiladi. Belgi raqami Panel/Davomat sahifasida ko'rinadi.
+- **Tuzatilgan xato:** qarzdorlar soni (guruh kartochkasi va bildirishnomada) oyning birinchi kunlarida, hali hech kim to'lov qilmagan paytda, noto'g'ri "0" ko'rsatayotgan edi.
 - Autentifikatsiya: Telegram `initData` imzosi (BOT_TOKEN bilan HMAC), rol bazadan olinadi.
 - Menyu bo'limlarga bo'lingan (O'quvchilar, Moliya, Guruh boshqaruvi, Hisobotlar, Xodimlar), `🏠 Asosiy menyu` tugmasi.
 - Guruhlar: o'qituvchi -> guruh -> o'quvchi -> kartochka (bitta xabar tahrirlanadi), sahifalash, davomat tarixi.

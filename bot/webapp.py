@@ -73,6 +73,20 @@ async def can_access(db, uid, role, gid) -> bool:
     return await can_access_group(db, uid, gid)
 
 
+async def debtor_counts_by_group(db, paid_ids):
+    """Har guruhdagi qarzdorlar soni (reyestrsiz, to'lamagan). paid_ids bo'sh bo'lsa ham to'g'ri ishlaydi
+    ('NOT IN ()' SQL'da bo'sh ro'yxat bilan ishlamaydi, shuning uchun shart shart emas bo'lsa qo'shilmaydi)."""
+    if paid_ids:
+        ph = ",".join("?" * len(paid_ids))
+        rows = await db.fetchall(
+            f"SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 AND is_registry=0 "
+            f"AND id NOT IN ({ph}) GROUP BY group_id", tuple(paid_ids))
+    else:
+        rows = await db.fetchall(
+            "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 AND is_registry=0 GROUP BY group_id")
+    return {r["group_id"]: r["n"] for r in rows}
+
+
 def bad(msg, status=400):
     return web.json_response({"error": msg}, status=status)
 
@@ -246,9 +260,7 @@ async def api_groups(request):
         "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 GROUP BY group_id")}
     paid_ids = {r["student_id"] for r in await db.fetchall(
         "SELECT DISTINCT student_id FROM payments WHERE month=?", (D.current_month(),))}
-    debt = {r["group_id"]: r["n"] for r in await db.fetchall(
-        "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 AND is_registry=0 "
-        f"AND id NOT IN ({','.join('?' * len(paid_ids)) or 'NULL'}) GROUP BY group_id", tuple(paid_ids))}
+    debt = await debtor_counts_by_group(db, paid_ids)
     out = {"groups": [{**dict(g), "students": counts.get(g["id"], 0), "debtors": debt.get(g["id"], 0)} for g in groups]}
     if role in ("admin", "director"):
         out["teachers"] = [dict(t) for t in await db.fetchall(
@@ -741,6 +753,55 @@ async def api_export(request):
                                  "Content-Disposition": f'attachment; filename="{fname}"'})
 
 
+# ---------------- Bildirishnomalar ----------------
+WD_MAP = {"1": "Du", "2": "Se", "3": "Ch", "4": "Pa", "5": "Ju", "6": "Sh", "7": "Ya"}
+
+
+async def api_notifications(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    staff = role in ("admin", "director")
+    today = D.today_local()
+    today_iso = today.isoformat()
+    wd = str(today.isoweekday())
+    items = []
+
+    if staff:
+        groups = await db.fetchall("SELECT g.*, u.full_name AS tname FROM groups g "
+                                   "LEFT JOIN users u ON u.tg_id=g.teacher_id ORDER BY g.name")
+    else:
+        groups = await db.fetchall("SELECT * FROM groups WHERE teacher_id=? ORDER BY name", (uid,))
+
+    taken_today = {r["group_id"] for r in await db.fetchall(
+        "SELECT DISTINCT group_id FROM attendance WHERE day=?", (today_iso,))}
+    paid_ids = {r["student_id"] for r in await db.fetchall(
+        "SELECT DISTINCT student_id FROM payments WHERE month=?", (D.current_month(),))}
+    debt_counts = await debtor_counts_by_group(db, paid_ids)
+
+    for g in groups:
+        if g["lesson_days"] and wd in g["lesson_days"].split(",") and g["id"] not in taken_today:
+            items.append({"kind": "no_attendance", "icon": "⏰", "group": g["id"], "group_name": g["name"],
+                         "text": f"{g['name']}: bugungi dars ({g['lesson_time'] or '-'}) davomati hali olinmagan"})
+        n = debt_counts.get(g["id"], 0)
+        if n:
+            items.append({"kind": "debtors", "icon": "❌", "group": g["id"], "group_name": g["name"],
+                         "text": f"{g['name']}: {n} ta qarzdor"})
+
+    if staff:
+        for t in await db.fetchall(
+                "SELECT u.full_name, t.tg_id, t.registry_rate, "
+                "(SELECT COUNT(*) FROM students s JOIN groups g ON g.id=s.group_id "
+                " WHERE g.teacher_id=t.tg_id AND s.is_registry=1 AND s.hidden=0) AS n "
+                "FROM teachers t JOIN users u ON u.tg_id=t.tg_id"):
+            if t["n"] and not t["registry_rate"]:
+                items.append({"kind": "no_price", "icon": "⚠️", "group": None, "teacher": t["tg_id"],
+                             "text": f"{t['full_name']}: reyestr o'quvchilari bor, lekin dars narxi kiritilmagan"})
+
+    order = {"no_price": 0, "no_attendance": 1, "debtors": 2}
+    items.sort(key=lambda x: order.get(x["kind"], 9))
+    return web.json_response({"items": items, "count": len(items)})
+
+
 def create_app(db, bot=None) -> web.Application:
     app = web.Application(middlewares=[errors_mw])
     app["db"] = db
@@ -773,6 +834,7 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_patch("/api/groups/{gid}", api_group_patch)
     app.router.add_delete("/api/groups/{gid}", api_group_delete)
     app.router.add_get("/api/export", api_export)
+    app.router.add_get("/api/notifications", api_notifications)
     return app
 
 
