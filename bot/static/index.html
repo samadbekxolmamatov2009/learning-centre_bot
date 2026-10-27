@@ -160,7 +160,9 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open
   stu:{view:'groups', groups:[], teachers:[], students:[], searching:false, searchResults:null, q:'', debtOnly:false,
        group:null, detail:null, formBack:'groups', detailBack:'groups', payOpen:false, payAmount:'', moveOpen:false, moveTo:'',
        payHistOpen:false, payHistory:null, form:null, toast:'', gform:null},
-  salary:{loading:false, data:null, month:null}};
+  salary:{loading:false, data:null, month:null},
+  xport:{busy:false, error:'', month:null},
+  hr:{view:'home', teachers:[], admins:[], registry:null, toast:'', tform:null, aform:null}};
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d.slice(8,10) + '.' + d.slice(5,7);
@@ -257,7 +259,8 @@ function viewAtt() {
     ${a.has_record ? '<div class="notice">Bu kun uchun davomat olingan. O\'zgartirib qayta yuborishingiz mumkin.</div>' : ''}
     <div class="counts"><div class="cnt ok"><b>${c.present}</b>Keldi</div><div class="cnt no"><b>${c.absent}</b>Yo'q</div>
       <div class="cnt late"><b>${c.late}</b>Kech</div><div class="cnt exc"><b>${c.excused}</b>Sababli</div></div>
-    <div class="tools"><input id="q" placeholder="Qidirish..." value="${esc(S.q)}" autocomplete="off"><button data-act="all">Hammasi ✅</button></div>
+    <div class="tools"><input id="q" placeholder="Qidirish..." value="${esc(S.q)}" autocomplete="off">
+      <button data-act="all">Hammasi ✅</button><button data-act="all-absent" style="background:var(--no-bg);color:var(--no)">Hammasi ❌</button></div>
     <div class="list">${list.map(rowHtml).join('') || '<div class="empty">Topilmadi</div>'}</div>
     <div class="bar withtabs"><div class="info">Jami ${a.students.length} · Kelmagan: <b>${abs}</b><br>Bosing: ✅ → ❌ → 🕒 → 📝</div>
       <button class="primary" data-act="submit" ${S.busy || !a.students.length ? 'disabled' : ''}>${S.busy ? 'Yuborilmoqda…' : 'Yuborish'}</button></div>`;
@@ -299,7 +302,8 @@ function viewDash() {
   const diff = cur.income - prev.income;
   const dp = d.students ? Math.round(d.debtors * 100 / d.students) : 0;
   const groups = [...d.groups].sort((a, b) => b.debtors - a.debtors);
-  return `<h1>Panel</h1><div class="sub">${d.month}</div>
+  return `<div class="top"><h1 style="padding-top:0">Panel</h1><button class="iconbtn" style="margin-left:auto" data-act="export-open" title="Excel yuklab olish">📥</button></div>
+    <div class="sub" style="margin-top:-6px">${d.month}</div>
     <div class="kpis">
       <div class="kpi"><div class="l">Tushum</div><div class="v">${short(cur.income)}</div>
         <div class="d ${diff >= 0 ? 'up' : 'dn'}">${diff >= 0 ? '▲' : '▼'} ${short(Math.abs(diff))} o'tgan oyga nisbatan</div></div>
@@ -405,6 +409,219 @@ function viewSalary() {
           <div class="meta">${r.lessons} ta dars</div></div><div class="name">${short(r.total)}</div></div>`).join('')}` : ''}
     <div class="kpi" style="margin-top:16px"><div class="l">Jami oylik</div><div class="v" style="font-size:26px">${money(d.total)} so'm</div></div>`;
 }
+
+/* ---------- Excel yuklab olish ---------- */
+function monthsBack(n) {
+  const out = [];
+  const d = new Date();
+  for (let i = 0; i < n; i++) {
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    d.setMonth(d.getMonth() - 1);
+  }
+  return out;
+}
+function viewExport() {
+  const months = monthsBack(6);
+  const month = S.xport.month || months[0];
+  const chips = months.map(m => `<button class="dchip ${m === month ? 'on' : ''}" data-act="xp-month" data-month="${m}">${m}</button>`).join('');
+  return `<div class="top"><button class="back" data-act="xp-back">‹</button><h1>📥 Excel yuklab olish</h1></div>
+    <div class="sub" style="margin-top:4px">Fayl .xlsx formatida, telefoningizga yuklanadi</div>
+    <div class="cards">
+      <button class="gcard" data-act="xp-go" data-type="debtors"><div><div class="t">📋 Qarzdorlar</div>
+        <div class="sub">Joriy oy · ${S.me ? S.me.today.slice(0, 7) : ''}</div></div><span class="sub">⬇️</span></button>
+      <button class="gcard" data-act="xp-go" data-type="students"><div><div class="t">👥 Barcha o'quvchilar</div>
+        <div class="sub">Joriy oy to'lovlari bilan</div></div><span class="sub">⬇️</span></button>
+    </div>
+    <div class="sec">📅 Oylik hisobot (guruhlar, oyliklar, o'quvchilar)</div>
+    <div class="strip">${chips}</div>
+    <button class="primary" style="width:100%;margin-top:8px" data-act="xp-go" data-type="report" data-month="${month}"
+      ${S.xport.busy ? 'disabled' : ''}>${S.xport.busy ? 'Tayyorlanmoqda…' : `⬇️ ${month} hisobotini yuklash`}</button>
+    ${S.xport.error ? `<div class="toast" style="background:var(--no-bg);color:var(--no)">${esc(S.xport.error)}</div>` : ''}`;
+}
+async function downloadExport(type, month) {
+  S.xport.busy = true; S.xport.error = ''; render();
+  try {
+    const url = `/api/export?type=${type}` + (month ? `&month=${month}` : '');
+    const r = await fetch(url, {headers: {'X-Init-Data': (tg && tg.initData) || ''}});
+    if (!r.ok) { let d = {}; try { d = await r.json(); } catch (e) {} throw new Error(d.error || 'Yuklab bo\'lmadi'); }
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const match = /filename="([^"]+)"/.exec(cd);
+    const fname = match ? match[1] : `${type}.xlsx`;
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+    haptic('medium');
+  } catch (e) { S.xport.error = "Yuklab bo'lmadi: " + e.message; }
+  S.xport.busy = false; render();
+}
+
+/* ---------- Xodimlar (faqat direktor) ---------- */
+async function loadStaffTab() {
+  S.tab = 'hr'; S.view = 'hr';
+  if (S.hr.teachers.length || S.hr.admins.length) { S.hr.view = 'home'; render(); return; }
+  $app.innerHTML = '<div class="spin"></div>';
+  try {
+    const [t, a, r] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry')]);
+    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r;
+    S.hr.view = 'home'; render();
+  } catch (e) { fail(e); }
+}
+async function refreshStaff() {
+  try {
+    const [t, a, r] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry')]);
+    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r;
+  } catch (e) {}
+}
+function viewHrHome() {
+  const h = S.hr, r = h.registry;
+  const payHow = t => t.pay_type === 'percent' ? `${t.pay_value}%` : `${money(t.pay_value)} so'm/o'quvchi`;
+  return `<h1>👨‍🏫 Xodimlar</h1>
+    ${h.toast ? `<div class="toast">${esc(h.toast)}</div>` : ''}
+    <div class="sec">O'qituvchilar</div>
+    <div class="list">${h.teachers.map(t => `<div class="srow-row" data-act="hr-teacher-open" data-id="${t.id}">
+        <div class="who"><div class="name">${esc(t.name)}</div>
+          <div class="meta">${payHow(t)}${t.registry_rate ? ` · 🏛 ${money(t.registry_rate)}` : ''} · ${t.groups} guruh</div></div>
+        <span class="sub">▸</span></div>`).join('') || '<div class="empty">O\'qituvchilar yo\'q</div>'}</div>
+    <button class="gcard" data-act="hr-teacher-add" style="border:1.5px dashed var(--line);background:transparent;margin-top:8px">
+      <div class="t">➕ Yangi o'qituvchi</div></button>
+    <div class="sec">Adminlar</div>
+    <div class="list">${h.admins.map(a => `<div class="srow-row">
+        <div class="who"><div class="name">${esc(a.name)}</div><div class="meta">ID ${a.id}</div></div>
+        <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-admin-del" data-id="${a.id}">🗑</button>
+      </div>`).join('') || '<div class="empty">Adminlar yo\'q</div>'}</div>
+    <button class="gcard" data-act="hr-admin-add" style="border:1.5px dashed var(--line);background:transparent;margin-top:8px">
+      <div class="t">➕ Yangi admin</div></button>
+    ${r ? `<div class="sec">🏛 Reyestr sozlamasi</div>
+    <div class="gbox"><div class="hd">Reyestr o'quvchilar<span>${r.total} ta, yashirin ${r.hidden_count}</span></div>
+      <div class="sub" style="margin-top:6px">Yashirin o'quvchilar ro'yxat, davomat, qarzdor va hisobda ko'rinmaydi hamda hisoblanmaydi.</div>
+      <div class="actions2" style="grid-template-columns:1fr 1fr">
+        <button class="abtn" data-act="hr-reg" data-hide="1" ${r.hidden_mode ? 'disabled' : ''}>🙈 Hammasini yashirish</button>
+        <button class="abtn" data-act="hr-reg" data-hide="0" ${!r.hidden_mode ? 'disabled' : ''}>👁 Hammasini ochish</button>
+      </div></div>` : ''}`;
+}
+function hrBack() { S.hr.view = 'home'; render(); }
+function viewHrTeacherForm() {
+  const f = S.hr.tform, isEdit = f.mode === 'edit';
+  return `<div class="top"><button class="back" data-act="hr-back">‹</button><h1>${isEdit ? esc(f.name) : "Yangi o'qituvchi"}</h1></div>
+    ${S.hr.toast ? `<div class="toast">${esc(S.hr.toast)}</div>` : ''}
+    ${isEdit ? '' : `<div class="field"><label>Telegram ID <span class="req">*</span></label>
+      <input class="input" id="t_id" type="number" inputmode="numeric" placeholder="masalan 123456789" autocomplete="off"></div>`}
+    <div class="field"><label>Ism familiya <span class="req">*</span></label>
+      <input class="input" id="t_name" value="${esc(f.name)}" autocomplete="off"></div>
+    <div class="field"><label>Oylik turi</label>
+      <select class="input" id="t_ptype"><option value="percent" ${f.pay_type === 'percent' ? 'selected' : ''}>Foiz (%)</option>
+        <option value="per_student" ${f.pay_type === 'per_student' ? 'selected' : ''}>O'quvchi boshiga</option></select></div>
+    <div class="field"><label>Oylik qiymati</label>
+      <input class="input" id="t_pvalue" type="number" inputmode="decimal" value="${f.pay_value || ''}" placeholder="masalan 40 yoki 200000"></div>
+    <div class="field"><label>Reyestr: bitta dars narxi (so'm)</label>
+      <input class="input" id="t_reg" type="number" inputmode="numeric" value="${f.registry_rate || 0}" placeholder="0 - reyestr yo'q"></div>
+    <div class="form-actions"><button class="secondary" data-act="hr-back">Bekor qilish</button>
+      <button class="primary" data-act="hr-teacher-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : 'Saqlash'}</button></div>
+    ${isEdit ? `<button class="abtn danger" style="width:100%;margin-top:20px" data-act="hr-teacher-del" data-id="${f.id}">🗑 O'qituvchini o'chirish</button>` : ''}`;
+}
+function viewHrAdminForm() {
+  const f = S.hr.aform;
+  return `<div class="top"><button class="back" data-act="hr-back">‹</button><h1>Yangi admin</h1></div>
+    ${S.hr.toast ? `<div class="toast">${esc(S.hr.toast)}</div>` : ''}
+    <div class="field"><label>Telegram ID <span class="req">*</span></label>
+      <input class="input" id="a_id" type="number" inputmode="numeric" placeholder="masalan 123456789" value="${f.id || ''}" autocomplete="off"></div>
+    <div class="field"><label>Ism familiya <span class="req">*</span></label>
+      <input class="input" id="a_name" value="${esc(f.name || '')}" autocomplete="off"></div>
+    <div class="form-actions"><button class="secondary" data-act="hr-back">Bekor qilish</button>
+      <button class="primary" data-act="hr-admin-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : "Qo'shish"}</button></div>`;
+}
+const HR_VIEWS = {home: viewHrHome, tform: viewHrTeacherForm, aform: viewHrAdminForm};
+
+function hrOpenTeacher(id) {
+  const t = S.hr.teachers.find(x => x.id === id);
+  if (!t) return;
+  S.hr.tform = {mode:'edit', id, name:t.name, pay_type:t.pay_type, pay_value:t.pay_value, registry_rate:t.registry_rate};
+  S.hr.toast = ''; S.hr.view = 'tform'; render();
+}
+function hrNewTeacher() {
+  S.hr.tform = {mode:'add', id:null, name:'', pay_type:'percent', pay_value:'', registry_rate:0};
+  S.hr.toast = ''; S.hr.view = 'tform'; render();
+}
+async function hrSaveTeacher() {
+  const f = S.hr.tform;
+  f.name = document.getElementById('t_name').value.trim();
+  f.pay_type = document.getElementById('t_ptype').value;
+  f.pay_value = parseFloat(document.getElementById('t_pvalue').value);
+  f.registry_rate = parseInt(document.getElementById('t_reg').value || '0', 10);
+  if (f.name.length < 2) return alert('Ism familiyani to\'liq kiriting.');
+  if (!f.pay_value || f.pay_value <= 0) return alert('Oylik qiymatini kiriting.');
+  if (isNaN(f.registry_rate) || f.registry_rate < 0) return alert('Reyestr narxi noto\'g\'ri.');
+  let tid = f.id;
+  if (f.mode === 'add') {
+    tid = parseInt(document.getElementById('t_id').value, 10);
+    if (!tid) return alert('Telegram ID kiriting.');
+  }
+  S.busy = true; render();
+  try {
+    if (f.mode === 'add') {
+      await api('/api/teachers', {method:'POST', body: JSON.stringify(
+        {id:tid, name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate})});
+    } else {
+      await api(`/api/teachers/${tid}`, {method:'PATCH', body: JSON.stringify(
+        {name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate})});
+    }
+    haptic('medium');
+    await refreshStaff();
+    S.hr.view = 'home';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function hrDeleteTeacher(tid) {
+  const t = S.hr.teachers.find(x => x.id === tid);
+  const msg = `${t ? t.name : ''} o'chirilsinmi? Uning guruhlari o'qituvchisiz qoladi.`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  S.busy = true; render();
+  try {
+    await api(`/api/teachers/${tid}`, {method:'DELETE'});
+    haptic('medium');
+    await refreshStaff();
+    S.hr.view = 'home';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+function hrNewAdmin() { S.hr.aform = {id:'', name:''}; S.hr.toast = ''; S.hr.view = 'aform'; render(); }
+async function hrSaveAdmin() {
+  const id = parseInt(document.getElementById('a_id').value, 10);
+  const name = document.getElementById('a_name').value.trim();
+  if (!id) return alert('Telegram ID kiriting.');
+  if (name.length < 2) return alert('Ism familiyani to\'liq kiriting.');
+  S.busy = true; render();
+  try {
+    await api('/api/admins', {method:'POST', body: JSON.stringify({id, name})});
+    haptic('medium');
+    await refreshStaff();
+    S.hr.view = 'home';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function hrDeleteAdmin(aid) {
+  const a = S.hr.admins.find(x => x.id === aid);
+  const msg = `${a ? a.name : ''} admin ro'yxatidan o'chirilsinmi?`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  try {
+    await api(`/api/admins/${aid}`, {method:'DELETE'});
+    haptic('medium');
+    await refreshStaff();
+    render();
+  } catch (e) { alert(e.message); }
+}
+async function hrToggleRegistry(hide) {
+  try {
+    await api('/api/registry', {method:'POST', body: JSON.stringify({hide})});
+    haptic('medium');
+    await refreshStaff();
+    render();
+  } catch (e) { alert(e.message); }
+}
 async function openStuGroup(gid) {
   $app.innerHTML = '<div class="spin"></div>';
   try {
@@ -454,10 +671,10 @@ function viewStuGroups() {
     return header + body;
   }
   const groups = st.groups;
-  const cards = groups.map(g => `<button class="gcard" data-act="stu-group" data-id="${g.id}">
+  const cards = groups.map(g => `<div class="gcard" data-act="stu-group" data-id="${g.id}" style="cursor:pointer">
     <div><div class="t">${esc(g.name)}</div><div class="sub">${g.students} ta o'quvchi${g.teacher ? ' · 👨‍🏫 ' + esc(g.teacher) : ''}
       ${g.debtors ? ' · <span style="color:var(--no);font-weight:600">❌ ' + g.debtors + '</span>' : ''}</div></div>
-    <span class="sub">▸</span></button>`).join('');
+    ${staff ? `<button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="stu-gedit" data-id="${g.id}">⚙️</button>` : '<span class="sub">▸</span>'}</div>`).join('');
   const addGroup = staff ? `<button class="gcard" data-act="stu-gform" style="border:1.5px dashed var(--line);background:transparent">
     <div class="t">➕ Yangi guruh</div></button>` : '';
   return header + `<div class="cards">${cards}${addGroup}</div>` + (groups.length ? '' : (staff ? '' : '<div class="empty">Sizda guruh yo\'q</div>'));
@@ -490,7 +707,7 @@ function viewStuForm() {
     <div class="field"><label>Sinf</label>
       <input class="input" id="f_grade" placeholder="7" value="${esc(f.grade)}" autocomplete="off"></div>
     <div class="field"><label>Telefon</label>
-      <input class="input" id="f_phone" type="tel" placeholder="90 123 45 67" value="${esc(f.phone)}" autocomplete="off"></div>
+      <input class="input" id="f_phone" type="tel" inputmode="tel" placeholder="90 123 45 67" value="${esc(f.phone)}" autocomplete="tel"></div>
     <div class="field"><label>Guruh <span class="req">*</span></label>
       <select class="input" id="f_group">${!f.group ? '<option value="">— tanlang —</option>' : ''}${groups.map(g =>
         `<option value="${g.id}" ${g.id === f.group ? 'selected' : ''}>${esc(g.name)}${g.teacher ? ' · ' + esc(g.teacher) : ''}</option>`).join('')}</select></div>
@@ -641,6 +858,58 @@ async function saveGroup() {
   S.busy = false; render();
 }
 
+/* ---------- guruh sozlamalari (staff) ---------- */
+function openGroupEdit(gid) {
+  const g = S.stu.groups.find(x => x.id === gid);
+  if (!g) return;
+  S.stu.gedit = {id: gid, name: g.name, teacher: g.teacherId ?? ''};
+  S.stu.toast = '';
+  S.stu.view = 'gedit';
+  render();
+}
+function viewGroupEdit() {
+  const f = S.stu.gedit;
+  const g = S.stu.groups.find(x => x.id === f.id);
+  return `<div class="top"><button class="back" data-act="stu-gedit-back">‹</button><h1>⚙️ ${esc(g ? g.name : '')}</h1></div>
+    ${S.stu.toast ? `<div class="toast">${esc(S.stu.toast)}</div>` : ''}
+    <div class="field"><label>Guruh nomi</label>
+      <input class="input" id="ge_name" value="${esc(f.name)}" autocomplete="off"></div>
+    <div class="field"><label>O'qituvchi</label>
+      <select class="input" id="ge_teacher"><option value="">— biriktirilmagan —</option>
+        ${S.stu.teachers.map(t => `<option value="${t.id}" ${String(t.id) === String(f.teacher) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>
+    <div class="form-actions"><button class="secondary" data-act="stu-gedit-back">Bekor qilish</button>
+      <button class="primary" data-act="stu-gedit-save" ${S.busy ? 'disabled' : ''}>Saqlash</button></div>
+    <button class="abtn danger" style="width:100%;margin-top:20px" data-act="stu-gedit-delete">🗑 Guruhni o'chirish</button>`;
+}
+async function saveGroupEdit() {
+  const f = S.stu.gedit;
+  const name = document.getElementById('ge_name').value.trim();
+  const teacher = document.getElementById('ge_teacher').value;
+  if (!name) return alert('Guruh nomini kiriting.');
+  S.busy = true; render();
+  try {
+    await api(`/api/groups/${f.id}`, {method:'PATCH', body: JSON.stringify({name, teacher: teacher || null})});
+    haptic('medium');
+    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    S.stu.view = 'groups';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function deleteGroupEdit() {
+  const g = S.stu.groups.find(x => x.id === S.stu.gedit.id);
+  const msg = `${g ? g.name : ''} guruhi va undagi ${g ? g.students : ''} ta o'quvchi o'chirilsinmi? Bu amalni qaytarib bo'lmaydi.`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  S.busy = true; render();
+  try {
+    await api(`/api/groups/${S.stu.gedit.id}`, {method:'DELETE'});
+    haptic('medium');
+    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    S.stu.view = 'groups';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
 /* ---------- umumiy chizish ---------- */
 function tabs() {
   const staff = S.me.role !== 'teacher';
@@ -648,10 +917,11 @@ function tabs() {
     ? `<button class="${S.tab === 'dash' ? 'on' : ''}" data-act="tab" data-tab="dash"><span>📊</span>Panel</button>`
     : `<button class="${S.tab === 'groups' ? 'on' : ''}" data-act="tab" data-tab="groups"><span>📝</span>Davomat</button>`;
   const salTab = staff ? '' : `<button class="${S.tab === 'sal' ? 'on' : ''}" data-act="tab" data-tab="sal"><span>💰</span>Oylik</button>`;
+  const hrTab = S.me.role === 'director' ? `<button class="${S.tab === 'hr' ? 'on' : ''}" data-act="tab" data-tab="hr"><span>👨‍🏫</span>Xodimlar</button>` : '';
   return `<div class="tabs">${first}
-    <button class="${S.tab === 'stu' ? 'on' : ''}" data-act="tab" data-tab="stu"><span>👥</span>O'quvchilar</button>${salTab}</div>`;
+    <button class="${S.tab === 'stu' ? 'on' : ''}" data-act="tab" data-tab="stu"><span>👥</span>O'quvchilar</button>${salTab}${hrTab}</div>`;
 }
-const STU_VIEWS = {groups: viewStuGroups, list: viewStuList, form: viewStuForm, detail: viewStuDetail, gform: viewStuGroupForm};
+const STU_VIEWS = {groups: viewStuGroups, list: viewStuList, form: viewStuForm, detail: viewStuDetail, gform: viewStuGroupForm, gedit: viewGroupEdit};
 function render() {
   const staff = S.me.role !== 'teacher';
   let html = '';
@@ -659,6 +929,8 @@ function render() {
   else if (S.view === 'dash') html = viewDash() + tabs();
   else if (S.view === 'stu') html = STU_VIEWS[S.stu.view]() + (S.stu.view === 'groups' ? tabs() : '');
   else if (S.view === 'sal') html = viewSalary() + tabs();
+  else if (S.view === 'xport') html = viewExport();
+  else if (S.view === 'hr') html = HR_VIEWS[S.hr.view]() + (S.hr.view === 'home' ? tabs() : '');
   else html = viewGroups() + tabs();
   const focusEl = document.activeElement;
   const focusId = focusEl && focusEl.id;
@@ -671,7 +943,8 @@ function render() {
   try {
     if (tg && tg.BackButton) {
       const canBack = (S.view === 'att' && !S.att.single && !S.att.done) ||
-        (S.view === 'stu' && S.stu.view !== 'groups');
+        (S.view === 'stu' && S.stu.view !== 'groups') || S.view === 'xport' ||
+        (S.view === 'hr' && S.hr.view !== 'home');
       canBack ? tg.BackButton.show() : tg.BackButton.hide();
     }
   } catch (e) {}
@@ -679,11 +952,13 @@ function render() {
 if (tg && tg.BackButton) tg.BackButton.onClick(() => {
   if (S.view === 'att') backToGroups();
   else if (S.view === 'stu') stuBack();
+  else if (S.view === 'xport') { S.view = 'dash'; S.tab = 'dash'; render(); }
+  else if (S.view === 'hr') hrBack();
 });
 function backToGroups() { S.view = 'groups'; S.tab = 'groups'; render(); }
 function stuBack() {
   const v = S.stu.view;
-  if (v === 'list' || v === 'gform') S.stu.view = 'groups';
+  if (v === 'list' || v === 'gform' || v === 'gedit') S.stu.view = 'groups';
   else if (v === 'form') S.stu.view = S.stu.formBack;
   else if (v === 'detail') S.stu.view = S.stu.detailBack;
   render();
@@ -718,6 +993,7 @@ document.addEventListener('click', e => {
     if (t.dataset.tab === 'dash') (S.dash ? (S.view = 'dash', render()) : loadDash());
     else if (t.dataset.tab === 'stu') loadStudentsTab();
     else if (t.dataset.tab === 'sal') (S.salary.data ? (S.view = 'sal', render()) : loadSalary());
+    else if (t.dataset.tab === 'hr') loadStaffTab();
     else { S.view = 'groups'; render(); }
   }
   else if (act === 'cycle') {
@@ -726,6 +1002,11 @@ document.addEventListener('click', e => {
     haptic(); render();
   }
   else if (act === 'all') { S.att.students.forEach(s => S.att.statuses[s.id] = 'present'); haptic('medium'); render(); }
+  else if (act === 'all-absent') {
+    const msg = `${S.att.students.length} ta o'quvchining hammasi "kelmadi" deb belgilansinmi?`;
+    const go = tg && tg.showConfirm ? p => tg.showConfirm(msg, p) : p => p(confirm(msg));
+    go(ok => { if (ok) { S.att.students.forEach(s => S.att.statuses[s.id] = 'absent'); haptic('medium'); render(); } });
+  }
   else if (act === 'more') { S.open.has(id) ? S.open.delete(id) : S.open.add(id); render(); }
   else if (act === 'day') openGroup(S.att.group.id, t.dataset.day, S.att.single);
   else if (act === 'submit') submit();
@@ -753,6 +1034,23 @@ document.addEventListener('click', e => {
   else if (act === 'stu-gform') { S.stu.gform = {name:'', teacher:''}; S.stu.toast = ''; S.stu.view = 'gform'; render(); }
   else if (act === 'stu-gform-back') { S.stu.view = 'groups'; render(); }
   else if (act === 'stu-gform-save') saveGroup();
+  else if (act === 'stu-gedit') openGroupEdit(id);
+  else if (act === 'stu-gedit-back') { S.stu.view = 'groups'; render(); }
+  else if (act === 'stu-gedit-save') saveGroupEdit();
+  else if (act === 'stu-gedit-delete') deleteGroupEdit();
+  else if (act === 'export-open') { S.xport = {busy:false, error:'', month: monthsBack(6)[0]}; S.view = 'xport'; render(); }
+  else if (act === 'xp-back') { S.view = 'dash'; S.tab = 'dash'; render(); }
+  else if (act === 'xp-month') { S.xport.month = t.dataset.month; render(); }
+  else if (act === 'xp-go') downloadExport(t.dataset.type, t.dataset.month || S.xport.month);
+  else if (act === 'hr-back') hrBack();
+  else if (act === 'hr-teacher-open') hrOpenTeacher(id);
+  else if (act === 'hr-teacher-add') hrNewTeacher();
+  else if (act === 'hr-teacher-save') hrSaveTeacher();
+  else if (act === 'hr-teacher-del') hrDeleteTeacher(Number(t.dataset.id));
+  else if (act === 'hr-admin-add') hrNewAdmin();
+  else if (act === 'hr-admin-save') hrSaveAdmin();
+  else if (act === 'hr-admin-del') hrDeleteAdmin(id);
+  else if (act === 'hr-reg') hrToggleRegistry(t.dataset.hide === '1');
   else if (act === 'stu-debt-toggle') { S.stu.debtOnly = !S.stu.debtOnly; render(); }
   else if (act === 'stu-hist-toggle') togglePayHistory();
   else if (act === 'stu-pay-cancel') cancelPayment(Number(t.dataset.pid));

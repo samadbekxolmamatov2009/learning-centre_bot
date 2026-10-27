@@ -6,6 +6,7 @@ rol bazadan olinadi. Hech qanday parol yoki alohida login yo'q.
 import asyncio
 import hashlib
 import hmac
+import io
 import json
 import logging
 import time
@@ -239,8 +240,8 @@ async def api_groups(request):
     if role == "teacher":
         groups = await db.fetchall("SELECT id, name FROM groups WHERE teacher_id=? ORDER BY name", (uid,))
     else:
-        groups = await db.fetchall("SELECT g.id, g.name, u.full_name AS teacher FROM groups g "
-                                   "LEFT JOIN users u ON u.tg_id=g.teacher_id ORDER BY g.name")
+        groups = await db.fetchall("SELECT g.id, g.name, g.teacher_id AS teacherId, u.full_name AS teacher "
+                                   "FROM groups g LEFT JOIN users u ON u.tg_id=g.teacher_id ORDER BY g.name")
     counts = {r["group_id"]: r["n"] for r in await db.fetchall(
         "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 GROUP BY group_id")}
     paid_ids = {r["student_id"] for r in await db.fetchall(
@@ -482,6 +483,264 @@ async def api_salary(request):
         "registry": [{"group": n, "lessons": l, "total": t} for n, l, t in reg], "total": round(total)})
 
 
+# ---------------- Xodimlar (faqat direktor): o'qituvchilar, adminlar, reyestr sozlamasi ----------------
+def teacher_out(t):
+    return {"id": t["tg_id"], "name": t["full_name"], "pay_type": t["pay_type"], "pay_value": t["pay_value"],
+            "registry_rate": t["registry_rate"], "groups": t.get("groups", 0)}
+
+
+async def api_teachers(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    rows = await db.fetchall(
+        "SELECT u.tg_id, u.full_name, t.pay_type, t.pay_value, t.registry_rate, "
+        "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id) AS groups "
+        "FROM users u JOIN teachers t ON t.tg_id=u.tg_id ORDER BY u.full_name")
+    return web.json_response({"teachers": [teacher_out(r) for r in rows]})
+
+
+async def api_teacher_post(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        body = await request.json()
+        tid = int(body["id"])
+        name = clean_text(body.get("name"), 80)
+        pay_type = body.get("pay_type")
+        pay_value = float(body.get("pay_value"))
+        reg_rate = int(body.get("registry_rate") or 0)
+        assert pay_type in ("percent", "per_student") and pay_value > 0 and reg_rate >= 0
+    except Exception:
+        return bad("Ma'lumotlar noto'g'ri")
+    if len(name) < 2:
+        return bad("Ism familiyani to'liq kiriting")
+    if await db.fetchone("SELECT 1 FROM users WHERE tg_id=?", (tid,)):
+        return bad("Bu ID allaqachon ro'yxatda bor")
+    await db.batch([
+        ("INSERT INTO users(tg_id,full_name,role) VALUES(?,?,'teacher')", (tid, name)),
+        ("INSERT INTO teachers(tg_id,pay_type,pay_value,registry_rate) VALUES(?,?,?,?)",
+         (tid, pay_type, pay_value, reg_rate))])
+    return web.json_response({"ok": True})
+
+
+async def api_teacher_patch(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        tid = int(request.match_info["tid"])
+        body = await request.json()
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    t = await db.fetchone("SELECT * FROM teachers WHERE tg_id=?", (tid,))
+    if not t:
+        return bad("Topilmadi", 404)
+    if "name" in body:
+        name = clean_text(body["name"], 80)
+        if len(name) < 2:
+            return bad("Ism familiyani to'liq kiriting")
+        await db.execute("UPDATE users SET full_name=? WHERE tg_id=?", (name, tid))
+    if "pay_type" in body or "pay_value" in body:
+        pt = body.get("pay_type", t["pay_type"])
+        try:
+            pv = float(body.get("pay_value", t["pay_value"]))
+            assert pt in ("percent", "per_student") and pv > 0
+        except Exception:
+            return bad("Oylik qiymati noto'g'ri")
+        await db.execute("UPDATE teachers SET pay_type=?, pay_value=? WHERE tg_id=?", (pt, pv, tid))
+    if "registry_rate" in body:
+        try:
+            rr = int(body["registry_rate"])
+            assert rr >= 0
+        except Exception:
+            return bad("Reyestr narxi noto'g'ri")
+        await db.execute("UPDATE teachers SET registry_rate=? WHERE tg_id=?", (rr, tid))
+    row = await db.fetchone(
+        "SELECT u.tg_id, u.full_name, t.pay_type, t.pay_value, t.registry_rate, "
+        "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id) AS groups "
+        "FROM users u JOIN teachers t ON t.tg_id=u.tg_id WHERE u.tg_id=?", (tid,))
+    return web.json_response({"ok": True, "teacher": teacher_out(row)})
+
+
+async def api_teacher_delete(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        tid = int(request.match_info["tid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    t = await db.fetchone("SELECT full_name FROM users WHERE tg_id=? AND role='teacher'", (tid,))
+    if not t:
+        return bad("Topilmadi", 404)
+    await db.batch([("UPDATE groups SET teacher_id=NULL WHERE teacher_id=?", (tid,)),
+                    ("DELETE FROM teachers WHERE tg_id=?", (tid,)),
+                    ("DELETE FROM users WHERE tg_id=?", (tid,))])
+    return web.json_response({"ok": True})
+
+
+async def api_admins(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    rows = await db.fetchall("SELECT tg_id, full_name FROM users WHERE role='admin' ORDER BY full_name")
+    return web.json_response({"admins": [{"id": r["tg_id"], "name": r["full_name"]} for r in rows]})
+
+
+async def api_admin_post(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        body = await request.json()
+        aid = int(body["id"])
+        name = clean_text(body.get("name"), 80)
+    except Exception:
+        return bad("Ma'lumotlar noto'g'ri")
+    if len(name) < 2:
+        return bad("Ism familiyani to'liq kiriting")
+    if await db.fetchone("SELECT 1 FROM users WHERE tg_id=?", (aid,)):
+        return bad("Bu ID allaqachon ro'yxatda bor")
+    await db.execute("INSERT INTO users(tg_id,full_name,role) VALUES(?,?,'admin')", (aid, name))
+    return web.json_response({"ok": True})
+
+
+async def api_admin_delete(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        aid = int(request.match_info["aid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    a = await db.fetchone("SELECT full_name FROM users WHERE tg_id=? AND role='admin'", (aid,))
+    if not a:
+        return bad("Topilmadi", 404)
+    await db.execute("DELETE FROM users WHERE tg_id=? AND role='admin'", (aid,))
+    return web.json_response({"ok": True})
+
+
+async def api_registry_get(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    r = await db.fetchone("SELECT COUNT(*) n, COALESCE(SUM(hidden),0) h FROM students WHERE is_registry=1")
+    hidden = await D.get_setting(db, "registry_hidden") == "1"
+    return web.json_response({"total": r["n"], "hidden_count": r["h"], "hidden_mode": hidden})
+
+
+async def api_registry_post(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        body = await request.json()
+        hide = bool(body["hide"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    await db.batch([("UPDATE students SET hidden=? WHERE is_registry=1", (int(hide),)),
+                    ("INSERT INTO settings(key,value) VALUES('registry_hidden',?) "
+                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value", ("1" if hide else "0",))])
+    return web.json_response({"ok": True})
+
+
+# ---------------- Guruhni boshqarish (o'qituvchi almashtirish, o'chirish) ----------------
+async def api_group_patch(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        gid = int(request.match_info["gid"])
+        body = await request.json()
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    g = await db.fetchone("SELECT * FROM groups WHERE id=?", (gid,))
+    if not g:
+        return bad("Topilmadi", 404)
+    if "teacher" in body:
+        tid = body["teacher"]
+        tid = int(tid) if tid else None
+        if tid and not await db.fetchone("SELECT 1 FROM teachers WHERE tg_id=?", (tid,)):
+            return bad("O'qituvchi topilmadi")
+        await db.execute("UPDATE groups SET teacher_id=? WHERE id=?", (tid, gid))
+    if "name" in body:
+        name = clean_text(body["name"], 40)
+        if not name:
+            return bad("Guruh nomini kiriting")
+        if await db.fetchone("SELECT 1 FROM groups WHERE name=? AND id<>?", (name, gid)):
+            return bad("Bunday nomli guruh bor")
+        await db.execute("UPDATE groups SET name=? WHERE id=?", (name, gid))
+    return web.json_response({"ok": True})
+
+
+async def api_group_delete(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        gid = int(request.match_info["gid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    g = await db.fetchone("SELECT name FROM groups WHERE id=?", (gid,))
+    if not g:
+        return bad("Topilmadi", 404)
+    await db.batch([("DELETE FROM students WHERE group_id=?", (gid,)), ("DELETE FROM groups WHERE id=?", (gid,))])
+    return web.json_response({"ok": True})
+
+
+# ---------------- Excel eksport ----------------
+async def api_export(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    from .extras import _sheet, _students_rows, STUD_HEAD
+    from openpyxl import Workbook
+    kind = request.query.get("type")
+    mo = request.query.get("month") or D.current_month()
+    wb = Workbook()
+    if kind in ("debtors", "students"):
+        debt = kind == "debtors"
+        _sheet(wb, "Qarzdorlar" if debt else "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, debt), True)
+        fname = f"{'qarzdorlar' if debt else 'oquvchilar'}_{mo}.xlsx"
+    elif kind == "report":
+        grows = []
+        for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
+            studs = await D.group_students(db, g["id"], mo)
+            reg = sum(1 for s in studs if s["is_registry"])
+            paid = sum(1 for s in studs if s["paid"]) - reg
+            grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, len(studs) - paid - reg])
+        _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Reyestr", "Qarzdorlar"], grows, True)
+        trows = []
+        for t in await db.fetchall("SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
+                                   "ORDER BY u.full_name"):
+            pt, pv, _, total = await D.teacher_salary(db, t["tg_id"], mo)
+            trows.append([t["full_name"], "Foiz" if pt == "percent" else "O'quvchi boshiga", pv, round(total)])
+        _sheet(wb, "Oyliklar", ["O'qituvchi", "Turi", "Qiymat", "Oylik"], trows)
+        _sheet(wb, "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, False))
+        fname = f"hisobot_{mo}.xlsx"
+    else:
+        return bad("Noto'g'ri turi")
+    buf = io.BytesIO()
+    wb.save(buf)
+    return web.Response(body=buf.getvalue(),
+                        headers={"Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                 "Content-Disposition": f'attachment; filename="{fname}"'})
+
+
 def create_app(db, bot=None) -> web.Application:
     app = web.Application(middlewares=[errors_mw])
     app["db"] = db
@@ -502,6 +761,18 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_get("/api/payments", api_payments_get)
     app.router.add_delete("/api/payments/{pid}", api_payment_delete)
     app.router.add_get("/api/salary", api_salary)
+    app.router.add_get("/api/teachers", api_teachers)
+    app.router.add_post("/api/teachers", api_teacher_post)
+    app.router.add_patch("/api/teachers/{tid}", api_teacher_patch)
+    app.router.add_delete("/api/teachers/{tid}", api_teacher_delete)
+    app.router.add_get("/api/admins", api_admins)
+    app.router.add_post("/api/admins", api_admin_post)
+    app.router.add_delete("/api/admins/{aid}", api_admin_delete)
+    app.router.add_get("/api/registry", api_registry_get)
+    app.router.add_post("/api/registry", api_registry_post)
+    app.router.add_patch("/api/groups/{gid}", api_group_patch)
+    app.router.add_delete("/api/groups/{gid}", api_group_delete)
+    app.router.add_get("/api/export", api_export)
     return app
 
 
