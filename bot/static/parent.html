@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Farzandim</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{
+  --bg:var(--tg-theme-bg-color,#ffffff);
+  --text:var(--tg-theme-text-color,#111827);
+  --hint:var(--tg-theme-hint-color,#6b7280);
+  --link:var(--tg-theme-link-color,#2563eb);
+  --card:var(--tg-theme-secondary-bg-color,#f3f4f6);
+  --line:color-mix(in srgb,var(--hint) 25%,transparent);
+  --ok:#16a34a; --no:#dc2626; --late:#d97706; --exc:#2563eb;
+  --ok-bg:color-mix(in srgb,var(--ok) 16%,transparent);
+  --no-bg:color-mix(in srgb,var(--no) 16%,transparent);
+  --late-bg:color-mix(in srgb,var(--late) 18%,transparent);
+  --exc-bg:color-mix(in srgb,var(--exc) 16%,transparent);
+  --r:14px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+body{padding:0 16px 32px}
+h1{font-size:20px;margin:16px 0 4px}
+.sub{color:var(--hint);font-size:14px}
+.card{background:var(--card);border-radius:var(--r);padding:16px;margin-top:14px}
+.card .nm{font-size:19px;font-weight:700}
+.card .ln{margin-top:6px;font-size:14px;color:var(--hint)}
+.card .ln b{color:var(--text);font-weight:600}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;margin-top:10px}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.badge.no{background:var(--no-bg);color:var(--no)}
+.badge.reg{background:var(--late-bg);color:var(--late)}
+.hist{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.h{font-size:12px;padding:4px 9px;border-radius:8px;background:var(--bg);font-weight:600}
+.h.absent,.h.excused{background:var(--no-bg);color:var(--no)}
+.h.late{background:var(--late-bg);color:var(--late)}
+.h.present{background:var(--ok-bg);color:var(--ok)}
+.h.none{color:var(--hint);font-weight:400}
+.warnt{margin-top:8px;font-size:13px;color:var(--no);font-weight:600}
+.empty,.err{text-align:center;padding:60px 12px;color:var(--hint)}
+.empty .big,.err .big{font-size:56px;margin-bottom:12px}
+.err{color:var(--no)}
+.spin{margin:100px auto;width:34px;height:34px;border:4px solid var(--line);border-top-color:var(--link);border-radius:50%;animation:s 1s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="app"><div class="spin"></div></div>
+<script>
+const tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const $app = document.getElementById('app');
+const ST = {present:{i:'✅',n:'Keldi'}, absent:{i:'❌',n:"Kelmadi"}, late:{i:'🕒',n:'Kechikdi'}, excused:{i:'📝',n:'Sababli'}};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDay = d => d ? d.slice(8,10) + '.' + d.slice(5,7) : '';
+const money = n => Math.round(n).toLocaleString('ru-RU').replace(/ /g,' ');
+
+async function load() {
+  try {
+    const r = await fetch('/api/parent/me', {headers: {'X-Init-Data': (tg && tg.initData) || ''}});
+    let data = {};
+    try { data = await r.json(); } catch (e) {}
+    if (!r.ok) throw new Error(data.error || 'Xatolik');
+    render(data);
+  } catch (e) {
+    $app.innerHTML = `<div class="err"><div class="big">⚠️</div><p>${esc(e.message)}</p>
+      <p class="sub">Botni Telegram orqali qayta oching.</p></div>`;
+  }
+}
+
+function childCard(c) {
+  const badge = c.is_registry ? `<span class="badge reg">🏛 Reyestr (davlat to'laydi)</span>`
+    : c.paid ? `<span class="badge ok">✅ ${esc(c.month)}: to'langan — ${money(c.paid_sum)} so'm</span>`
+             : `<span class="badge no">❌ ${esc(c.month)}: hali to'lanmagan</span>`;
+  const missed = c.history.filter(h => h.status === 'absent' || h.status === 'excused').map(h => fmtDay(h.day));
+  const hist = c.history.map(h => h.status
+    ? `<span class="h ${h.status}">${fmtDay(h.day)} ${ST[h.status].i}</span>`
+    : `<span class="h none">${fmtDay(h.day)} ▫️</span>`).join('');
+  return `<div class="card">
+    <div class="nm">${esc(c.name)}</div>
+    <div class="ln">🏫 <b>${esc(c.grade)}-sinf</b> · 📚 <b>${esc(c.group)}</b>${c.teacher ? ` · 👨‍🏫 ${esc(c.teacher)}` : ''}</div>
+    ${badge}
+    <div class="sub" style="margin-top:14px">Oxirgi darslar</div>
+    <div class="hist">${hist || '<span class="sub">Hali davomat olinmagan</span>'}</div>
+    ${missed.length ? `<div class="warnt">⚠️ Kelmagan kunlar: ${missed.join(', ')}</div>` : ''}
+  </div>`;
+}
+
+function render(data) {
+  if (!data.linked || !data.children.length) {
+    $app.innerHTML = `<div class="empty"><div class="big">👪</div>
+      <p>Siz hali hech qaysi o'quvchi bilan bog'lanmagansiz.</p>
+      <p class="sub">Farzandingiz o'qiydigan markazdan havola so'rang — o'qituvchi yoki admin sizga maxsus havola yuboradi,
+      shu havolani bosib botni oching.</p></div>`;
+    return;
+  }
+  $app.innerHTML = `<h1>👪 Farzandim</h1><div class="sub">Faqat ko'rish uchun</div>` +
+    data.children.map(childCard).join('');
+}
+load();
+</script>
+</body>
+</html>

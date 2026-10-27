@@ -61,3 +61,9 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - Guruhlar: o'qituvchi -> guruh -> o'quvchi -> kartochka (bitta xabar tahrirlanadi), sahifalash, davomat tarixi.
 - **Dars jadvali** (🗓): dars kunlari va vaqti; davomat olinmasa o'qituvchiga (20 daqiqadan keyin) va adminga (2 soatdan keyin) eslatma.
 - Vaqt Toshkent bo'yicha (`TZ_OFFSET=5`).
+
+## Ota-onalar uchun (faqat ko'rish)
+O'quvchi kartochkasida (chatda "📚 Guruhlar" -> o'quvchi, yoki Mini App'da "👪 Ota-onaga havola") maxsus havola
+yaratiladi. Ota-ona shu havolani bosib botni ochsa, `/parent` Mini App sahifasida farzandining sinfi, guruhi,
+shu oy to'lov holati va oxirgi darslar davomati ko'rinadi — hech narsani o'zgartira olmaydi. Bir nechta farzand
+bo'lsa, hammasi ro'yxatda chiqadi. Havola doimiy ishlaydi (muddati tugamaydi), istalgan vaqt qayta yuborilishi mumkin.

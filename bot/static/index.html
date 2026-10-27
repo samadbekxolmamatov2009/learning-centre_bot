@@ -159,7 +159,8 @@ const WD = ['Ya','Du','Se','Ch','Pa','Ju','Sh'];
 const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open:new Set(), busy:false,
   stu:{view:'groups', groups:[], teachers:[], students:[], searching:false, searchResults:null, q:'', debtOnly:false,
        group:null, detail:null, formBack:'groups', detailBack:'groups', payOpen:false, payAmount:'', moveOpen:false, moveTo:'',
-       payHistOpen:false, payHistory:null, form:null, toast:'', gform:null},
+       payHistOpen:false, payHistory:null, parentOpen:false, parentLink:null, parentLoading:false, parentCopied:false,
+       form:null, toast:'', gform:null},
   salary:{loading:false, data:null, month:null},
   xport:{busy:false, error:'', month:null},
   hr:{view:'home', teachers:[], admins:[], registry:null, toast:'', tform:null, aform:null},
@@ -418,8 +419,27 @@ function goStuDetail(student) {
   S.stu.detailBack = S.stu.view === 'detail' ? S.stu.detailBack : S.stu.view;
   S.stu.detail = student; S.stu.payOpen = false; S.stu.payAmount = ''; S.stu.moveOpen = false; S.stu.moveTo = '';
   S.stu.payHistOpen = false; S.stu.payHistory = null;
+  S.stu.parentOpen = false; S.stu.parentLink = null; S.stu.parentCopied = false;
   S.stu.view = 'detail';
   render();
+}
+async function toggleParentLink() {
+  S.stu.parentOpen = !S.stu.parentOpen; S.stu.parentCopied = false;
+  if (S.stu.parentOpen && !S.stu.parentLink) {
+    S.stu.parentLoading = true; render();
+    try { S.stu.parentLink = await api(`/api/students/${S.stu.detail.id}/parent-link`, {method:'POST'}); }
+    catch (e) { S.stu.parentOpen = false; alert(e.message); }
+    S.stu.parentLoading = false;
+  }
+  render();
+}
+async function copyParentLink() {
+  try {
+    await navigator.clipboard.writeText(S.stu.parentLink.url);
+  } catch (e) {
+    const el = document.getElementById('parentUrl'); el.select(); document.execCommand('copy');
+  }
+  S.stu.parentCopied = true; haptic('light'); render();
 }
 async function togglePayHistory() {
   S.stu.payHistOpen = !S.stu.payHistOpen;
@@ -734,9 +754,9 @@ function viewStuGroups() {
   }
   const groups = st.groups;
   const cards = groups.map(g => `<div class="gcard" data-act="stu-group" data-id="${g.id}" style="cursor:pointer">
-    <div><div class="t">${esc(g.name)}</div><div class="sub">${g.students} ta o'quvchi${g.teacher ? ' · 👨‍🏫 ' + esc(g.teacher) : ''}
+    <div style="flex:1;min-width:0"><div class="t">${esc(g.name)}</div><div class="sub">${g.students} ta o'quvchi${g.teacher ? ' · 👨‍🏫 ' + esc(g.teacher) : ''}
       ${g.debtors ? ' · <span style="color:var(--no);font-weight:600">❌ ' + g.debtors + '</span>' : ''}</div></div>
-    ${staff ? `<button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="stu-gedit" data-id="${g.id}">⚙️</button>` : '<span class="sub">▸</span>'}</div>`).join('');
+    ${staff ? `<button class="iconbtn" style="width:40px;height:40px;font-size:16px;flex:none" data-act="stu-gedit" data-id="${g.id}">⚙️</button>` : '<span class="sub">▸</span>'}</div>`).join('');
   const addGroup = staff ? `<button class="gcard" data-act="stu-gform" style="border:1.5px dashed var(--line);background:transparent">
     <div class="t">➕ Yangi guruh</div></button>` : '';
   return header + `<div class="cards">${cards}${addGroup}</div>` + (groups.length ? '' : (staff ? '' : '<div class="empty">Sizda guruh yo\'q</div>'));
@@ -801,8 +821,21 @@ function viewStuDetail() {
           <option value="">— guruh —</option>${otherGroups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select>
         <button class="primary" style="flex:none" data-act="stu-move-send" ${S.busy ? 'disabled' : ''}>Ko'chir</button></div>` : ''}
     </div>
+    <button class="abtn" style="width:100%;margin-top:10px" data-act="stu-parent-toggle">👪 Ota-onaga havola</button>
+    ${st.parentOpen ? viewParentLink() : ''}
     <button class="abtn" style="width:100%;margin-top:10px" data-act="stu-hist-toggle">📜 To'lovlar tarixi ${st.payHistOpen ? '▴' : '▾'}</button>
     ${st.payHistOpen ? viewPayHistory(staff) : ''}`;
+}
+function viewParentLink() {
+  const st = S.stu;
+  if (st.parentLoading) return '<div class="spin" style="margin:20px auto"></div>';
+  if (!st.parentLink) return '';
+  return `<div class="card-detail" style="margin-top:8px">
+    <div class="sub">Shu havolani ota-onaga yuboring. Bosib botni ochsa, faqat ko'rish uchun sahifa ochiladi.</div>
+    <div class="srow" style="margin-top:8px"><input class="input" id="parentUrl" value="${esc(st.parentLink.url)}" readonly>
+      <button class="iconbtn" data-act="stu-parent-copy" title="Nusxalash">📋</button></div>
+    ${st.parentCopied ? '<div class="toast" style="margin-top:8px">✅ Nusxalandi</div>' : ''}
+  </div>`;
 }
 function viewPayHistory(staff) {
   const h = S.stu.payHistory;
@@ -1120,6 +1153,8 @@ document.addEventListener('click', e => {
   else if (act === 'notif-item') notifGo(Number(t.dataset.i));
   else if (act === 'stu-debt-toggle') { S.stu.debtOnly = !S.stu.debtOnly; render(); }
   else if (act === 'stu-hist-toggle') togglePayHistory();
+  else if (act === 'stu-parent-toggle') toggleParentLink();
+  else if (act === 'stu-parent-copy') copyParentLink();
   else if (act === 'stu-pay-cancel') cancelPayment(Number(t.dataset.pid));
   else if (act === 'sal-month') loadSalary(t.dataset.month);
 });

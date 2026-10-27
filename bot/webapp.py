@@ -69,6 +69,15 @@ async def auth(request):
     return user["id"], row["role"], row["full_name"]
 
 
+async def auth_any(request):
+    """Faqat Telegram imzosini tekshiradi, users jadvalida bo'lishi shart emas (ota-ona sahifasi uchun)."""
+    user = verify_init_data(request.headers.get("X-Init-Data", ""), BOT_TOKEN)
+    if not user:
+        raise web.HTTPUnauthorized(text=json.dumps({"error": "Telegram orqali qayta oching"}),
+                                   content_type="application/json")
+    return user["id"]
+
+
 async def can_access(db, uid, role, gid) -> bool:
     return await can_access_group(db, uid, gid)
 
@@ -94,6 +103,10 @@ def bad(msg, status=400):
 # ---------------- sahifa ----------------
 async def index(request):
     return web.FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-store"})
+
+
+async def parent_index(request):
+    return web.FileResponse(STATIC / "parent.html", headers={"Cache-Control": "no-store"})
 
 
 async def health(request):
@@ -802,6 +815,49 @@ async def api_notifications(request):
     return web.json_response({"items": items, "count": len(items)})
 
 
+# ---------------- Ota-ona (faqat ko'rish) ----------------
+async def api_parent_link_post(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        sid = int(request.match_info["sid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    s = await db.fetchone("SELECT last_name, first_name, group_id FROM students WHERE id=?", (sid,))
+    if not s or not await can_access(db, uid, role, s["group_id"]):
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    from . import config as CFG
+    from .ptoken import make
+    if not CFG.BOT_USERNAME:
+        return bad("Bot nomi hali aniqlanmadi, birozdan keyin urinib ko'ring")
+    return web.json_response({"url": f"https://t.me/{CFG.BOT_USERNAME}?start={make(sid)}",
+                              "name": f"{s['last_name']} {s['first_name']}"})
+
+
+async def api_parent_me(request):
+    uid = await auth_any(request)
+    db = request.app["db"]
+    rows = await db.fetchall(
+        "SELECT s.*, g.name AS gname, g.id AS gid, u.full_name AS tname FROM parent_links pl "
+        "JOIN students s ON s.id=pl.student_id JOIN groups g ON g.id=s.group_id "
+        "LEFT JOIN users u ON u.tg_id=g.teacher_id WHERE pl.parent_tg_id=? ORDER BY s.last_name", (uid,))
+    if not rows:
+        return web.json_response({"linked": False})
+    mo = D.current_month()
+    children = []
+    for s in rows:
+        paid = await db.fetchone("SELECT COALESCE(SUM(amount),0) t, COUNT(*) n FROM payments "
+                                 "WHERE student_id=? AND month=?", (s["id"], mo))
+        days, hist = await A.history(db, s["gid"], n=8)
+        mine = hist.get(s["id"], {})
+        children.append({
+            "id": s["id"], "name": f"{s['last_name']} {s['first_name']}", "grade": s["grade"],
+            "group": s["gname"], "teacher": s["tname"], "is_registry": bool(s["is_registry"]),
+            "paid": bool(s["is_registry"]) or paid["n"] > 0, "paid_sum": paid["t"], "month": mo,
+            "history": [{"day": d, "status": mine.get(d, "")} for d in days]})
+    return web.json_response({"linked": True, "children": children})
+
+
 def create_app(db, bot=None) -> web.Application:
     app = web.Application(middlewares=[errors_mw])
     app["db"] = db
@@ -835,6 +891,9 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_delete("/api/groups/{gid}", api_group_delete)
     app.router.add_get("/api/export", api_export)
     app.router.add_get("/api/notifications", api_notifications)
+    app.router.add_post("/api/students/{sid}/parent-link", api_parent_link_post)
+    app.router.add_get("/parent", parent_index)
+    app.router.add_get("/api/parent/me", api_parent_me)
     return app
 
 
