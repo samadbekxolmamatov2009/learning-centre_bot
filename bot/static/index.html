@@ -166,7 +166,9 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open
   xport:{busy:false, error:'', month:null},
   hr:{view:'home', teachers:[], admins:[], registry:null, toast:'', tform:null, aform:null},
   notif:{count:0, items:null, loading:false, from:null},
-  exam:{view:'list', groupId:null, groupName:'', list:[], loading:false, form:null, detail:null, students:[], scores:{}, toast:''}};
+  exam:{view:'list', groupId:null, groupName:'', list:[], loading:false, form:null, detail:null, students:[], scores:{}, toast:''},
+  cert:{view:'groups', groups:[], group:null, students:[], subjects:[], grades:[], detail:null, detailCerts:[],
+        has189:false, pickSubject:null, detailBack:'list', graduated:null}};
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d.slice(8,10) + '.' + d.slice(5,7);
@@ -288,13 +290,19 @@ function histChips(s, days3) {
     return st ? `<span class="h ${st}">${fmtDay(d)} ${ST[st].i}</span>` : `<span class="h none">${fmtDay(d)} ▫️</span>`;
   }).join('');
 }
+function daysWithin(days, today, n) {
+  const cutoff = new Date(today + 'T00:00:00'); cutoff.setDate(cutoff.getDate() - n);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  return days.filter(d => d >= cutoffStr);
+}
 function rowHtml(s) {
   const a = S.att, days3 = a.hist_days.slice(-3);
-  const miss3 = days3.filter(d => ['absent','excused'].includes(s.hist[d])).length;
+  const recent2w = daysWithin(a.hist_days, a.today, 14);
+  const miss2w = recent2w.filter(d => ['absent','excused'].includes(s.hist[d])).length;
   const cur = a.statuses[s.id];
   const open = S.open.has(s.id);
   const allMiss = a.hist_days.filter(d => ['absent','excused'].includes(s.hist[d])).map(fmtDay);
-  return `<div class="row ${miss3 >= 2 ? 'warn' : ''}" data-id="${s.id}">
+  return `<div class="row ${miss2w >= 2 ? 'warn' : ''}" data-id="${s.id}">
     <div class="main">
       <div class="who" data-act="more" data-id="${s.id}">
         <div class="name">${esc(s.name)}</div>
@@ -303,7 +311,7 @@ function rowHtml(s) {
       <button class="st ${cur}" data-act="cycle" data-id="${s.id}"><i>${ST[cur].i}</i>${ST[cur].n}</button>
     </div>
     ${days3.length ? `<div class="hist" data-act="more" data-id="${s.id}">${histChips(s, days3)}
-      ${miss3 >= 2 ? `<span class="warnt">⚠ ${miss3} marta yo'q</span>` : ''}<span class="more">${open ? 'yopish ▴' : 'batafsil ▾'}</span></div>` : ''}
+      ${miss2w >= 2 ? `<span class="warnt">⚠ ${miss2w} marta yo'q (2 hafta)</span>` : ''}<span class="more">${open ? 'yopish ▴' : 'batafsil ▾'}</span></div>` : ''}
     ${open ? `<div class="detail"><b>Oxirgi ${a.hist_days.length} ta dars:</b>
       <div class="grid">${a.hist_days.length ? [...a.hist_days].reverse().map(d => { const st = s.hist[d];
         return `<span class="h ${st || 'none'}">${fmtDay(d)} ${wd(d)} ${st ? ST[st].i : '▫️'}</span>`; }).join('') : "Hali davomat yo'q"}</div>
@@ -1177,6 +1185,123 @@ function examBack() {
 }
 const EXAM_VIEWS = {list: viewExamList, form: viewExamForm, entry: viewExamEntry};
 
+/* ---------- sertifikatlar ---------- */
+async function loadCertTab() {
+  S.tab = 'cert'; S.view = 'cert'; S.cert.view = 'groups';
+  if (S.cert.groups.length) { render(); return; }
+  $app.innerHTML = '<div class="spin"></div>';
+  try { const d = await api('/api/groups'); S.cert.groups = d.groups; } catch (e) {}
+  render();
+}
+function certBadge(s) {
+  if (s.has_189) return `<span class="pay-badge" style="background:#fde68a;color:#92400e">🏆 189</span>`;
+  if (s.cert_count) return `<span class="pay-badge ok">🎓 ${s.cert_count}</span>`;
+  return `<span class="pay-badge" style="background:var(--card);color:var(--hint)">—</span>`;
+}
+function viewCertGroups() {
+  const groups = S.cert.groups;
+  return `<h1>🎓 Sertifikatlar</h1>
+    <div class="sub">Guruhni tanlang</div>
+    <button class="gcard" data-act="cert-graduated" style="border:1.5px dashed var(--line);background:transparent;margin-top:12px">
+      <div class="t">🏅 Bitirganlar</div><div class="sub">189 ball yoki sertifikat olib ketganlar</div></button>
+    <div class="cards">${groups.map(g => `<button class="gcard" data-act="cert-group" data-id="${g.id}">
+      <div><div class="t">${esc(g.name)}</div><div class="sub">${g.students} ta o'quvchi</div></div><span class="sub">▸</span></button>`).join('')
+      || '<div class="empty">Guruh yo\'q</div>'}</div>`;
+}
+async function openCertGroup(gid) {
+  $app.innerHTML = '<div class="spin"></div>';
+  try {
+    const d = await api(`/api/certificates?group=${gid}`);
+    S.cert.students = d.students; S.cert.subjects = d.subjects; S.cert.grades = d.grades;
+    S.cert.group = S.cert.groups.find(g => g.id === gid) || {id: gid, name: ''};
+    S.cert.view = 'list'; render();
+  } catch (e) { fail(e); }
+}
+function viewCertList() {
+  const st = S.cert;
+  return `<div class="top"><button class="back" data-act="cert-back">‹</button><h1>${esc(st.group.name)}</h1></div>
+    <div class="sub">${st.students.length} o'quvchi</div>
+    <div class="list" style="margin-top:8px">${st.students.map(s => `<div class="srow-row" data-act="cert-open" data-id="${s.id}">
+        <div class="who"><div class="name">${esc(s.name)}</div><div class="meta">${esc(s.grade)}-sinf</div></div>
+        ${certBadge(s)}</div>`).join('') || '<div class="empty">O\'quvchi yo\'q</div>'}</div>`;
+}
+async function openCertDetail(sid, backView) {
+  $app.innerHTML = '<div class="spin"></div>';
+  S.cert.detailBack = backView || 'list';
+  try {
+    const d = await api(`/api/students/${sid}/certificates`);
+    const pool = backView === 'graduated' ? (S.cert.graduated || []) : S.cert.students;
+    const base = pool.find(x => x.id === sid);
+    S.cert.detail = {id: sid, name: base ? base.name : '', grade: base ? base.grade : ''};
+    S.cert.detailCerts = d.certificates; S.cert.has189 = d.has_189;
+    S.cert.subjects = d.subjects; S.cert.grades = d.grades; S.cert.pickSubject = null;
+    S.cert.view = 'detail'; render();
+  } catch (e) { fail(e); }
+}
+function certFor(subject) { return S.cert.detailCerts.find(c => c.subject === subject); }
+function viewCertDetail() {
+  const st = S.cert;
+  return `<div class="top"><button class="back" data-act="cert-detail-back">‹</button><h1>${esc(st.detail.name)}</h1></div>
+    <div class="sub">${esc(st.detail.grade)}-sinf</div>
+    <button class="abtn" style="width:100%;margin-top:14px;font-weight:700;${st.has189 ? 'background:#fde68a;color:#92400e;border-color:#f59e0b' : ''}"
+      data-act="cert-189-toggle">🏆 189 bormi?${st.has189 ? ' — HA' : ''}</button>
+    <div class="sec">Fanlar (bosib daraja belgilang)</div>
+    <div class="cards">${st.subjects.map(sub => {
+      const c = certFor(sub), open = st.pickSubject === sub;
+      return `<div><button class="gcard" data-act="cert-pick" data-sub="${esc(sub)}" style="${c ? 'background:var(--ok-bg)' : ''}">
+          <div class="t">${esc(sub)}</div>${c ? `<span class="badge done">${esc(c.grade)}</span>` : '<span class="sub">▸</span>'}</button>
+        ${open ? `<div class="strip">${st.grades.map(g => `<button class="dchip ${c && c.grade === g ? 'on' : ''}"
+            data-act="cert-grade" data-sub="${esc(sub)}" data-grade="${g}">${g}</button>`).join('')}
+          ${c ? `<button class="dchip" style="color:var(--no)" data-act="cert-grade" data-sub="${esc(sub)}" data-grade="">❌ olib tashlash</button>` : ''}</div>` : ''}
+        </div>`;
+    }).join('')}</div>`;
+}
+async function toggleCert189() {
+  S.busy = true; render();
+  try {
+    const val = !S.cert.has189;
+    await api(`/api/students/${S.cert.detail.id}/cert189`, {method:'POST', body: JSON.stringify({has_189: val})});
+    haptic('medium');
+    S.cert.has189 = val;
+    const row = S.cert.students.find(x => x.id === S.cert.detail.id);
+    if (row) row.has_189 = val;
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function setCertGrade(subject, grade) {
+  try {
+    await api(`/api/students/${S.cert.detail.id}/certificates`, {method:'POST', body: JSON.stringify({subject, grade})});
+    haptic('medium');
+    S.cert.detailCerts = S.cert.detailCerts.filter(c => c.subject !== subject);
+    if (grade) S.cert.detailCerts.push({subject, grade});
+    S.cert.pickSubject = null;
+    const row = S.cert.students.find(x => x.id === S.cert.detail.id);
+    if (row) row.cert_count = S.cert.detailCerts.length;
+  } catch (e) { alert(e.message); }
+  render();
+}
+async function openGraduated() {
+  $app.innerHTML = '<div class="spin"></div>';
+  try {
+    const d = await api('/api/certificates/graduated');
+    S.cert.graduated = d.students; S.cert.subjects = d.subjects; S.cert.grades = d.grades;
+    S.cert.view = 'graduated'; render();
+  } catch (e) { fail(e); }
+}
+function viewCertGraduated() {
+  const list = S.cert.graduated || [];
+  return `<div class="top"><button class="back" data-act="cert-back">‹</button><h1>🏅 Bitirganlar</h1></div>
+    <div class="sub">Guruhdan chiqqan, sertifikat/189 ball bo'lgan o'quvchilar</div>
+    <div class="list" style="margin-top:8px">${list.map(s => `<div class="srow-row" data-act="cert-open-grad" data-id="${s.id}">
+        <div class="who"><div class="name">${esc(s.name)}</div><div class="meta">${esc(s.grade)}-sinf · ${esc(s.group_name)}</div></div>
+        ${certBadge(s)}</div>`).join('') || '<div class="empty">Hali yo\'q</div>'}</div>`;
+}
+function certBack() {
+  if (S.cert.view === 'detail') { S.cert.view = S.cert.detailBack; render(); }
+  else { S.cert.view = 'groups'; render(); }
+}
+const CERT_VIEWS = {groups: viewCertGroups, list: viewCertList, detail: viewCertDetail, graduated: viewCertGraduated};
+
 /* ---------- umumiy chizish ---------- */
 function tabs() {
   const staff = S.me.role !== 'teacher';
@@ -1185,8 +1310,9 @@ function tabs() {
     : `<button class="${S.tab === 'groups' ? 'on' : ''}" data-act="tab" data-tab="groups"><span>📝</span>Davomat</button>`;
   const salTab = staff ? '' : `<button class="${S.tab === 'sal' ? 'on' : ''}" data-act="tab" data-tab="sal"><span>💰</span>Oylik</button>`;
   const hrTab = S.me.role === 'director' ? `<button class="${S.tab === 'hr' ? 'on' : ''}" data-act="tab" data-tab="hr"><span>👨‍🏫</span>Xodimlar</button>` : '';
+  const certTab = `<button class="${S.tab === 'cert' ? 'on' : ''}" data-act="tab" data-tab="cert"><span>🎓</span>Sertifikat</button>`;
   return `<div class="tabs">${first}
-    <button class="${S.tab === 'stu' ? 'on' : ''}" data-act="tab" data-tab="stu"><span>👥</span>O'quvchilar</button>${salTab}${hrTab}</div>`;
+    <button class="${S.tab === 'stu' ? 'on' : ''}" data-act="tab" data-tab="stu"><span>👥</span>O'quvchilar</button>${certTab}${salTab}${hrTab}</div>`;
 }
 const STU_VIEWS = {groups: viewStuGroups, list: viewStuList, form: viewStuForm, detail: viewStuDetail, gform: viewStuGroupForm, gedit: viewGroupEdit};
 function render() {
@@ -1200,6 +1326,7 @@ function render() {
   else if (S.view === 'hr') html = HR_VIEWS[S.hr.view]() + (S.hr.view === 'home' ? tabs() : '');
   else if (S.view === 'notif') html = viewNotif();
   else if (S.view === 'exam') html = EXAM_VIEWS[S.exam.view]();
+  else if (S.view === 'cert') html = CERT_VIEWS[S.cert.view]() + (S.cert.view === 'groups' ? tabs() : '');
   else html = viewGroups() + tabs();
   const focusEl = document.activeElement;
   const focusId = focusEl && focusEl.id;
@@ -1213,7 +1340,8 @@ function render() {
     if (tg && tg.BackButton) {
       const canBack = (S.view === 'att' && !S.att.single && !S.att.done) ||
         (S.view === 'stu' && S.stu.view !== 'groups') || S.view === 'xport' ||
-        (S.view === 'hr' && S.hr.view !== 'home') || S.view === 'notif' || S.view === 'exam';
+        (S.view === 'hr' && S.hr.view !== 'home') || S.view === 'notif' || S.view === 'exam' ||
+        (S.view === 'cert' && S.cert.view !== 'groups');
       canBack ? tg.BackButton.show() : tg.BackButton.hide();
     }
   } catch (e) {}
@@ -1225,6 +1353,7 @@ if (tg && tg.BackButton) tg.BackButton.onClick(() => {
   else if (S.view === 'hr') hrBack();
   else if (S.view === 'notif') notifBack();
   else if (S.view === 'exam') examBack();
+  else if (S.view === 'cert') certBack();
 });
 function backToGroups() { S.view = 'groups'; S.tab = 'groups'; render(); }
 function stuBack() {
@@ -1265,6 +1394,7 @@ document.addEventListener('click', e => {
     else if (t.dataset.tab === 'stu') loadStudentsTab();
     else if (t.dataset.tab === 'sal') (S.salary.data ? (S.view = 'sal', render()) : loadSalary());
     else if (t.dataset.tab === 'hr') loadStaffTab();
+    else if (t.dataset.tab === 'cert') loadCertTab();
     else { S.view = 'groups'; render(); }
   }
   else if (act === 'cycle') {
@@ -1344,6 +1474,15 @@ document.addEventListener('click', e => {
   else if (act === 'exam-entry-back') { S.exam.view = 'list'; render(); }
   else if (act === 'exam-scores-save') saveExamScores();
   else if (act === 'exam-delete') deleteExam();
+  else if (act === 'cert-group') openCertGroup(id);
+  else if (act === 'cert-back') certBack();
+  else if (act === 'cert-open') openCertDetail(id, 'list');
+  else if (act === 'cert-open-grad') openCertDetail(id, 'graduated');
+  else if (act === 'cert-detail-back') certBack();
+  else if (act === 'cert-189-toggle') toggleCert189();
+  else if (act === 'cert-pick') { S.cert.pickSubject = S.cert.pickSubject === t.dataset.sub ? null : t.dataset.sub; render(); }
+  else if (act === 'cert-grade') setCertGrade(t.dataset.sub, t.dataset.grade);
+  else if (act === 'cert-graduated') openGraduated();
 });
 document.addEventListener('change', e => {
   if (e.target.dataset && e.target.dataset.act === 'pick' && e.target.value) openGroup(S.att.group.id, e.target.value, S.att.single);

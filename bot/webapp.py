@@ -150,7 +150,7 @@ async def api_attendance_get(request):
         return bad("Sana noto'g'ri")
     g = await db.fetchone("SELECT id, name FROM groups WHERE id=?", (gid,))
     studs = await D.group_students(db, gid)
-    days, hist = await A.history(db, gid, before=day.isoformat(), n=10)
+    days, hist = await A.history(db, gid, before=day.isoformat(), n=20)
     existing = await A.day_statuses(db, gid, day.isoformat())
     recent = await A.lesson_days(db, gid, 8)
     return web.json_response({
@@ -428,7 +428,7 @@ async def api_student_delete(request):
     s = await _student_access(db, uid, role, sid)
     if not s:
         return bad("Topilmadi yoki ruxsat yo'q", 404)
-    await db.execute("DELETE FROM students WHERE id=?", (sid,))
+    await D.archive_or_delete_student(db, sid)
     return web.json_response({"ok": True})
 
 
@@ -654,6 +654,113 @@ async def api_student_exams_get(request):
     return web.json_response({"exams": [dict(r) for r in rows]})
 
 
+# ---------------- Sertifikatlar ----------------
+def cert_student_out(s, certs):
+    return {"id": s["id"], "name": f"{s['last_name']} {s['first_name']}", "grade": s["grade"],
+            "has_189": bool(s["has_189"]), "cert_count": len(certs),
+            "certificates": [{"subject": c["subject"], "grade": c["grade"]} for c in certs]}
+
+
+async def api_certificates_get(request):
+    """Guruh bo'yicha faol (arxivlanmagan) o'quvchilar + ularning sertifikatlari."""
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        gid = int(request.query["group"])
+    except Exception:
+        return bad("group kerak")
+    if not await can_access(db, uid, role, gid):
+        return bad("Bu sizning guruhingiz emas", 403)
+    studs = await db.fetchall("SELECT * FROM students WHERE group_id=? AND hidden=0 "
+                              "ORDER BY last_name, first_name", (gid,))
+    out = []
+    for s in studs:
+        certs = await db.fetchall("SELECT subject, grade FROM certificates WHERE student_id=? ORDER BY subject",
+                                  (s["id"],))
+        out.append(cert_student_out(s, certs))
+    return web.json_response({"students": out, "subjects": D.CERT_SUBJECTS, "grades": D.CERT_GRADES})
+
+
+async def api_certificates_graduated(request):
+    """Guruhdan chiqarilgan (arxivlangan), lekin sertifikat/189 belgisi tufayli saqlangan o'quvchilar."""
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    sql = ("SELECT s.*, g.name AS gname FROM students s LEFT JOIN groups g ON g.id=s.group_id "
+          "WHERE s.archived=1")
+    args = []
+    if role == "teacher":
+        sql += " AND s.group_id IN (SELECT id FROM groups WHERE teacher_id=?)"
+        args.append(uid)
+    sql += " ORDER BY s.last_name, s.first_name"
+    studs = await db.fetchall(sql, tuple(args))
+    out = []
+    for s in studs:
+        certs = await db.fetchall("SELECT subject, grade FROM certificates WHERE student_id=? ORDER BY subject",
+                                  (s["id"],))
+        row = cert_student_out(s, certs)
+        row["group_name"] = s["gname"] or "(guruh o'chirilgan)"
+        out.append(row)
+    return web.json_response({"students": out, "subjects": D.CERT_SUBJECTS, "grades": D.CERT_GRADES})
+
+
+async def api_student_certificates_get(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        sid = int(request.match_info["sid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    s = await _student_access(db, uid, role, sid)
+    if not s:
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    certs = await db.fetchall("SELECT subject, grade FROM certificates WHERE student_id=? ORDER BY subject", (sid,))
+    return web.json_response({"certificates": [{"subject": c["subject"], "grade": c["grade"]} for c in certs],
+                              "has_189": bool(s["has_189"]), "subjects": D.CERT_SUBJECTS, "grades": D.CERT_GRADES})
+
+
+async def api_student_certificate_post(request):
+    """body: {subject, grade} - grade bo'sh/yo'q bo'lsa sertifikat olib tashlanadi."""
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        sid = int(request.match_info["sid"])
+        body = await request.json()
+        subject = clean_text(body.get("subject"), 40)
+        grade = clean_text(body.get("grade"), 4)
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    if subject not in D.CERT_SUBJECTS:
+        return bad("Fan noto'g'ri")
+    s = await _student_access(db, uid, role, sid)
+    if not s:
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    if not grade:
+        await db.execute("DELETE FROM certificates WHERE student_id=? AND subject=?", (sid, subject))
+    else:
+        if grade not in D.CERT_GRADES:
+            return bad("Daraja noto'g'ri")
+        await db.execute(
+            "INSERT INTO certificates(student_id, subject, grade) VALUES(?,?,?) "
+            "ON CONFLICT(student_id, subject) DO UPDATE SET grade=excluded.grade", (sid, subject, grade))
+    return web.json_response({"ok": True})
+
+
+async def api_student_cert189_post(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        sid = int(request.match_info["sid"])
+        body = await request.json()
+        has = bool(body["has_189"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    s = await _student_access(db, uid, role, sid)
+    if not s:
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    await db.execute("UPDATE students SET has_189=? WHERE id=?", (int(has), sid))
+    return web.json_response({"ok": True})
+
+
 # ---------------- Xodimlar (faqat direktor): o'qituvchilar, adminlar, reyestr sozlamasi ----------------
 def teacher_out(t):
     return {"id": t["tg_id"], "name": t["full_name"], "pay_type": t["pay_type"], "pay_value": t["pay_value"],
@@ -805,7 +912,7 @@ async def api_registry_get(request):
     if role != "director":
         return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
-    r = await db.fetchone("SELECT COUNT(*) n, COALESCE(SUM(hidden),0) h FROM students WHERE is_registry=1")
+    r = await db.fetchone("SELECT COUNT(*) n, COALESCE(SUM(hidden),0) h FROM students WHERE is_registry=1 AND archived=0")
     hidden = await D.get_setting(db, "registry_hidden") == "1"
     return web.json_response({"total": r["n"], "hidden_count": r["h"], "hidden_mode": hidden})
 
@@ -820,7 +927,7 @@ async def api_registry_post(request):
         hide = bool(body["hide"])
     except Exception:
         return bad("So'rov noto'g'ri")
-    await db.batch([("UPDATE students SET hidden=? WHERE is_registry=1", (int(hide),)),
+    await db.batch([("UPDATE students SET hidden=? WHERE is_registry=1 AND archived=0", (int(hide),)),
                     ("INSERT INTO settings(key,value) VALUES('registry_hidden',?) "
                      "ON CONFLICT(key) DO UPDATE SET value=excluded.value", ("1" if hide else "0",))])
     return web.json_response({"ok": True})
@@ -883,7 +990,8 @@ async def api_group_delete(request):
     g = await db.fetchone("SELECT name FROM groups WHERE id=?", (gid,))
     if not g:
         return bad("Topilmadi", 404)
-    await db.batch([("DELETE FROM students WHERE group_id=?", (gid,)), ("DELETE FROM groups WHERE id=?", (gid,))])
+    await D.archive_or_delete_group_students(db, gid)
+    await db.execute("DELETE FROM groups WHERE id=?", (gid,))
     return web.json_response({"ok": True})
 
 
@@ -1063,6 +1171,11 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_post("/api/exams/{eid}/scores", api_exam_scores_post)
     app.router.add_delete("/api/exams/{eid}", api_exam_delete)
     app.router.add_get("/api/students/{sid}/exams", api_student_exams_get)
+    app.router.add_get("/api/certificates", api_certificates_get)
+    app.router.add_get("/api/certificates/graduated", api_certificates_graduated)
+    app.router.add_get("/api/students/{sid}/certificates", api_student_certificates_get)
+    app.router.add_post("/api/students/{sid}/certificates", api_student_certificate_post)
+    app.router.add_post("/api/students/{sid}/cert189", api_student_cert189_post)
     app.router.add_post("/api/students/{sid}/parent-link", api_parent_link_post)
     app.router.add_get("/parent", parent_index)
     app.router.add_get("/api/parent/me", api_parent_me)

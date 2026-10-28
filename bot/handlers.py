@@ -326,7 +326,7 @@ async def xs_do(c: CallbackQuery, db):
     s = await _student_if_allowed(db, c.from_user.id, int(c.data[4:]))
     if not s:
         return await c.answer("Ruxsat yo'q yoki topilmadi", show_alert=True)
-    await db.execute("DELETE FROM students WHERE id=?", (s["id"],))
+    await D.archive_or_delete_student(db, s["id"])
     await db.commit()
     await c.message.edit_text(f"🗑 {s['last_name']} {s['first_name']} o'chirildi.")
     await c.answer()
@@ -355,8 +355,8 @@ async def xgr_do(c: CallbackQuery, db):
     g = await D.fetchone(db, "SELECT name FROM groups WHERE id=?", (gid,))
     if not g:
         return await c.answer("Topilmadi", show_alert=True)
-    await db.batch([("DELETE FROM students WHERE group_id=?", (gid,)),
-                    ("DELETE FROM groups WHERE id=?", (gid,))])
+    await D.archive_or_delete_group_students(db, gid)
+    await db.execute("DELETE FROM groups WHERE id=?", (gid,))
     await c.message.edit_text(f"🗑 Guruh {g['name']} o'chirildi.")
     await c.answer()
 

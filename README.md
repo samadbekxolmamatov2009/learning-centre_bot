@@ -39,8 +39,10 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 
 ## Mini App va yangi interfeys
 - **Davomat Mini App** (o'qituvchi): "✅ Davomat" -> sahifa ochiladi. Har o'quvchi yonida oxirgi 3 ta dars (sana + belgi),
-  qaysi kunlari kelmagani, 2 marta kelmagan bo'lsa ogohlantirish, telefon qo'ng'irog'i tugmasi. Holatlar:
-  ✅ keldi, ❌ kelmadi, 🕒 kechikdi, 📝 sababli. O'tgan kun davomatini ham tuzatish mumkin. Saqlanganda adminga PDF boradi.
+  qaysi kunlari kelmagani, telefon qo'ng'irog'i tugmasi. Oxirgi **2 hafta** ichida 2 yoki undan ko'p marta kelmagan bo'lsa
+  ogohlantirish chiqadi (faqat oxirgi 3 ta darsga emas, 2 haftalik davrga qarab). "Batafsil" tugmasi orqali oxirgi 20 tagacha
+  dars (taxminan 1 oy) ko'rinadi. Holatlar: ✅ keldi, ❌ kelmadi, 🕒 kechikdi, 📝 sababli. O'tgan kun davomatini ham
+  tuzatish mumkin. Saqlanganda adminga PDF boradi.
 - **Panel** (admin/direktor): tushum, qarzdorlar, davomat, 6 oylik grafik, guruhlar bo'yicha ko'rsatkichlar.
 - **O'quvchilar bo'limi (Mini App)** (hamma, pastki "O'quvchilar" tab): guruh tanlab yoki qidirib o'quvchini topish,
   **bitta formada** yangi o'quvchi qo'shish (ism, familiya, sinf, telefon, guruh, admin/direktorga reyestr belgisi),
@@ -63,6 +65,16 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - Guruhlar: o'qituvchi -> guruh -> o'quvchi -> kartochka (bitta xabar tahrirlanadi), sahifalash, davomat tarixi.
 - **Dars jadvali** (🗓): dars kunlari va vaqti; davomat olinmasa o'qituvchiga (20 daqiqadan keyin) va adminga (2 soatdan keyin) eslatma.
 - Vaqt Toshkent bo'yicha (`TZ_OFFSET=5`).
+
+## Sertifikatlar
+Pastki **"🎓 Sertifikat"** tab (hamma rollar). Guruhni tanlab, o'quvchini oching — har bir fan bo'yicha
+(Matematika, Fizika, Kimyo, Biologiya, Ona tili va adabiyot, Ingliz tili, Rus tili, Tarix, Geografiya, Informatika)
+sertifikat belgilanadi: fan nomini bosib, darajasini tanlang (A+, A, B+, B, C+, C). O'qituvchi o'quvchi kartochkasida
+qaysi fanlardan sertifikati borligini darhol ko'radi (ro'yxatda 🎓 belgisi bilan). Alohida **"🏆 189 bormi?"** tugmasi —
+bosilganda o'quvchi 189 ball (milliy sertifikat) olgan deb belgilanadi, ro'yxatda boshqacha (oltin) rangda ajralib turadi.
+189 ball olgan yoki sertifikati bor o'quvchi guruhdan o'chirilsa (kursdan ketsa) ham, uning ma'lumotlari **o'chmaydi** —
+yashirin holatda saqlanadi va "🏅 Bitirganlar" ro'yxatida (Sertifikat tab'ining yuqorisida) yil oxirida hisob-kitob
+qilish uchun ko'rinib turadi. Sertifikati yo'q oddiy o'quvchi o'chirilsa, odatdagidek butunlay o'chiriladi.
 
 ## Ota-onalar uchun (faqat ko'rish)
 O'quvchi kartochkasida (chatda "📚 Guruhlar" -> o'quvchi, yoki Mini App'da "👪 Ota-onaga havola") maxsus havola
