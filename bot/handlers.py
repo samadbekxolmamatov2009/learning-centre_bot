@@ -69,6 +69,11 @@ SECTION_TITLES = {
 
 
 def main_menu(role: str):
+    if WEBAPP_URL:
+        # Mini App ichida davomat, o'quvchilar, oylik, xodimlar - hammasi bitta joyda.
+        # Chatdagi eski tugmalar (to'liq funksiyalar) WEBAPP_URL o'rnatilmagan holatda pastda ishlaydi.
+        return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(
+            text="📱 Ilovani ochish", web_app=WebAppInfo(url=f"{WEBAPP_URL}/app"))]], resize_keyboard=True)
     if role == "teacher":
         return kb([["✅ Davomat", "📚 Guruhlarim"], ["📋 Qarzdorlarni ko'rish", "💰 Oylikni ko'rish"],
                    ["👥 O'quvchilar"]])
@@ -663,7 +668,7 @@ async def p_student(c: CallbackQuery, state: FSMContext):
 
 
 @router.message(Pay.amount)
-async def p_amount(m: Message, db, state: FSMContext):
+async def p_amount(m: Message, db, state: FSMContext, bot: Bot):
     try:
         amt = int(m.text.replace(" ", ""))
         assert amt > 0
@@ -671,12 +676,17 @@ async def p_amount(m: Message, db, state: FSMContext):
         return await m.answer("Musbat butun son kiriting.")
     sid = (await state.get_data())["student_id"]
     s = await D.fetchone(db, "SELECT * FROM students WHERE id=?", (sid,))
+    mo = D.current_month()
     await db.execute("INSERT INTO payments(student_id,group_id,amount,month) VALUES(?,?,?,?)",
-                     (sid, s["group_id"], amt, D.current_month()))
-    await db.commit()
+                     (sid, s["group_id"], amt, mo))
     await state.clear()
     await m.answer(f"✅ {s['last_name']} {s['first_name']}: {money(amt)} qabul qilindi. "
                    f"Bu oy uchun qarzdor emas.")
+    row = await D.fetchone(db, "SELECT id FROM payments WHERE student_id=? AND month=? ORDER BY id DESC LIMIT 1",
+                           (sid, mo))
+    if row:
+        from .receipts import send_receipt
+        await send_receipt(bot, db, row["id"], m.from_user.id)
 
 
 # ---------------- Qarzdorlar / hisob ----------------

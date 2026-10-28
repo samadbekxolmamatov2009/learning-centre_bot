@@ -50,6 +50,8 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - O'quvchi kartochkasida **to'lovlar tarixi** (oxirgi 10 ta) va admin/direktor uchun **to'lovni bekor qilish**.
 - Guruh va qidiruv ro'yxatlarida **"❌ Faqat qarzdorlar"** filtri, guruh kartochkasida qarzdorlar soni darhol ko'rinadi.
 - O'qituvchi uchun pastki **"💰 Oylik"** tab: oy tanlab (oxirgi 6 oy), guruh-guruh tushum/to'laganlar, reyestr va jami oylik.
+  Har bir guruh uchun qarzdorlar foizi va davomat foizi taqqoslab ko'rsatiladi,
+  "eng yaxshi davomat" va "eng ko'p qarzdor" guruh alohida ajratib chiqariladi.
 - Direktorga pastki **"👨‍🏫 Xodimlar"** tab: o'qituvchi qo'shish/tahrirlash/o'chirish, admin qo'shish/o'chirish, reyestr yashirish/ochish.
 - Panelda **"📥"** tugmasi: qarzdorlar, barcha o'quvchilar va oylik hisobotni .xlsx qilib to'g'ridan-to'g'ri telefonga yuklab olish.
 - Guruh kartochkasidagi **"⚙️"** (admin/direktor): guruh nomini o'zgartirish, o'qituvchisini almashtirish, guruhni o'chirish.
@@ -67,3 +69,26 @@ O'quvchi kartochkasida (chatda "📚 Guruhlar" -> o'quvchi, yoki Mini App'da "�
 yaratiladi. Ota-ona shu havolani bosib botni ochsa, `/parent` Mini App sahifasida farzandining sinfi, guruhi,
 shu oy to'lov holati va oxirgi darslar davomati ko'rinadi — hech narsani o'zgartira olmaydi. Bir nechta farzand
 bo'lsa, hammasi ro'yxatda chiqadi. Havola doimiy ishlaydi (muddati tugamaydi), istalgan vaqt qayta yuborilishi mumkin.
+Havolani **kim bossa, o'sha ota-ona sifatida bog'lanadi** — tizim bu kishi haqiqiy ota-ona ekanligini tekshirmaydi,
+shuning uchun havolani faqat haqiqiy ota-onaga yuborish kerak. Buning uchun havola yonida **"📤 Telegramda ulashish"**
+(Telegramning o'z ulashish oynasi orqali to'g'ridan-to'g'ri kerakli kishiga yuboriladi) va, agar o'quvchining telefon
+raqami kiritilgan bo'lsa, **"💬 WhatsApp'da yuborish"** tugmalari bor (WhatsApp'da shu raqamga tayyor xabar bilan ochiladi).
+
+## Chat menyusi (WEBAPP_URL o'rnatilganda)
+Mini App to'liq ishlayotgan bo'lsa, chat menyusi bitta tugmaga qisqaradi: **"📱 Ilovani ochish"**.
+Hamma funksiya (davomat, o'quvchilar, moliya, xodimlar, dars jadvali) Mini App ichida.
+`WEBAPP_URL` o'rnatilmagan bo'lsa (Background Worker holatida), bot avtomatik eski, to'liq chat menyusiga qaytadi -
+hech narsa buzilmaydi, faqat qulaylik yo'qoladi.
+
+## Nazorat/sinov natijalari
+O'quvchilar bo'limida guruh ichida **"📝"** tugmasi (nazorat natijalari). O'qituvchi/admin/direktor
+yangi nazorat yaratadi (nomi, maksimal ball, sana), so'ng shu guruhdagi hamma o'quvchiga baho kiritadi
+(bitta ekranda, ketma-ket). Har bir nazorat uchun guruh o'rtacha balli ko'rinadi. O'quvchi kartochkasida
+oxirgi 10 ta nazorat natijasi ko'rinadi. Ota-ona sahifasida ham farzandining oxirgi 5 ta nazorat
+natijasi chiqadi.
+
+## To'lov cheki
+Har bir to'lov kiritilganda (chatda ham, Mini App'da ham) avtomatik PDF chek yaratiladi: markaz nomi, o'quvchi,
+sinf, guruh, oy, sana, kim qabul qildi, summa. Chek kiritgan admin/o'qituvchiga va o'sha o'quvchiga bog'langan
+barcha ota-onalarga yuboriladi. Markaz nomini `CENTER_NAME` muhit o'zgaruvchisi orqali o'zgartirish mumkin
+(standart: "O'quv markazi").

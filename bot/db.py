@@ -44,6 +44,16 @@ CREATE TABLE IF NOT EXISTS parent_links(
     id INTEGER PRIMARY KEY AUTOINCREMENT, parent_tg_id INTEGER NOT NULL,
     student_id INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(parent_tg_id, student_id));
+CREATE TABLE IF NOT EXISTS exams(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER NOT NULL,
+    title TEXT NOT NULL, max_score INTEGER NOT NULL, day TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS exam_scores(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, exam_id INTEGER NOT NULL,
+    student_id INTEGER NOT NULL, score REAL NOT NULL,
+    UNIQUE(exam_id, student_id));
+CREATE INDEX IF NOT EXISTS idx_exams_group ON exams(group_id);
+CREATE INDEX IF NOT EXISTS idx_exam_scores_student ON exam_scores(student_id);
 """
 
 

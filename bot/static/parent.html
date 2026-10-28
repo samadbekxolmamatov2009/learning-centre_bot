@@ -41,6 +41,9 @@ h1{font-size:20px;margin:16px 0 4px}
 .h.present{background:var(--ok-bg);color:var(--ok)}
 .h.none{color:var(--hint);font-weight:400}
 .warnt{margin-top:8px;font-size:13px;color:var(--no);font-weight:600}
+.exrow{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.exrow:first-child{border-top:0}
+.exrow .sc{font-weight:700}
 .empty,.err{text-align:center;padding:60px 12px;color:var(--hint)}
 .empty .big,.err .big{font-size:56px;margin-bottom:12px}
 .err{color:var(--no)}
@@ -87,6 +90,10 @@ function childCard(c) {
     <div class="sub" style="margin-top:14px">Oxirgi darslar</div>
     <div class="hist">${hist || '<span class="sub">Hali davomat olinmagan</span>'}</div>
     ${missed.length ? `<div class="warnt">⚠️ Kelmagan kunlar: ${missed.join(', ')}</div>` : ''}
+    ${c.exams && c.exams.length ? `<div class="sub" style="margin-top:14px">📝 Nazorat natijalari</div>
+      <div style="margin-top:6px">${c.exams.map(x => `<div class="exrow">
+          <span>${esc(x.title)} <span class="sub">${fmtDay(x.day)}</span></span>
+          <span class="sc">${x.score}/${x.max_score}</span></div>`).join('')}</div>` : ''}
   </div>`;
 }
 
