@@ -68,20 +68,29 @@ SECTION_TITLES = {
 }
 
 
-def main_menu(role: str):
-    if WEBAPP_URL:
-        # Mini App ichida davomat, o'quvchilar, oylik, xodimlar - hammasi bitta joyda.
-        # Chatdagi eski tugmalar (to'liq funksiyalar) WEBAPP_URL o'rnatilmagan holatda pastda ishlaydi.
-        return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(
-            text="📱 Ilovani ochish", web_app=WebAppInfo(url=f"{WEBAPP_URL}/app"))]], resize_keyboard=True)
+def _full_menu_rows(role: str):
+    """Mini App bo'lmagan holatdagi to'liq chat menyusi (WEBAPP_URL o'rnatilmaganda ishlatiladi,
+    shuningdek Mini App'da takrorlangan buyruqlarni aniqlash uchun ham kerak)."""
     if role == "teacher":
-        return kb([["✅ Davomat", "📚 Guruhlarim"], ["📋 Qarzdorlarni ko'rish", "💰 Oylikni ko'rish"],
-                   ["👥 O'quvchilar"]])
+        return [["✅ Davomat", "📚 Guruhlarim"], ["📋 Qarzdorlarni ko'rish", "💰 Oylikni ko'rish"],
+                ["👥 O'quvchilar"]]
     rows = [["📚 Guruhlar", "🔎 Qidirish"], ["👥 O'quvchilar", "💰 Moliya"],
             ["🏫 Guruh boshqaruvi", "📊 Hisobotlar"]]
     if role == "director":
         rows.append(["👨‍🏫 Xodimlar"])
-    return kb(rows)
+    return rows
+
+
+def main_menu(role: str):
+    if WEBAPP_URL:
+        # Mini App ichida davomat, o'quvchilar, oylik, xodimlar - hammasi bitta joyda.
+        # Faqat Mini App'da hali yo'q funksiyalar (fayldan yuklash, statistika) chatda qoladi.
+        rows = [[KeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=f"{WEBAPP_URL}/app"))],
+                [KeyboardButton(text="📤 Fayldan yuklash")]]
+        if role == "director":
+            rows[-1].append(KeyboardButton(text="📈 Statistika"))
+        return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
+    return kb(_full_menu_rows(role))
 
 
 def section_menu(role: str, section: str):
@@ -120,6 +129,14 @@ MENU_TEXTS = {b.text for r in ("admin", "director", "teacher")
               for m in [main_menu(r)] + [section_menu(r, sec) for sec in SECTION_TITLES]
               for row in m.keyboard for b in row} | {"🖥 Panel", "🗓 Dars jadvali"}
 
+# Mini App ichida takrorlangan eski chat buyruqlari (WEBAPP_URL o'rnatilganda butunlay o'chiriladi).
+# Mini App'da hali yo'q funksiyalar (Fayldan yuklash, Statistika) va Asosiy menyu bundan mustasno.
+_EXEMPT_LEGACY = {"📤 Fayldan yuklash", "📈 Statistika", HOME}
+LEGACY_DUPLICATED = ({t for r in ("admin", "director", "teacher") for row in _full_menu_rows(r) for t in row} |
+                     {b.text for r in ("admin", "director", "teacher") for sec in SECTION_TITLES
+                      for row in section_menu(r, sec).keyboard for b in row} |
+                     {"🖥 Panel", "🗓 Dars jadvali"}) - _EXEMPT_LEGACY
+
 
 @router.message.outer_middleware()
 async def menu_resets_state(handler, event: Message, data):
@@ -127,6 +144,9 @@ async def menu_resets_state(handler, event: Message, data):
     (aks holda tugma matni ism/guruh nomi sifatida saqlanib qoladi)."""
     if event.text in MENU_TEXTS and data.get("state"):
         await data["state"].clear()
+    if WEBAPP_URL and event.text in LEGACY_DUPLICATED:
+        await event.answer('Bu funksiya endi Mini App ichida. Pastdagi "📱 Ilovani ochish" tugmasini bosing.')
+        return
     return await handler(event, data)
 
 

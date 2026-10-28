@@ -75,8 +75,11 @@ shuning uchun havolani faqat haqiqiy ota-onaga yuborish kerak. Buning uchun havo
 raqami kiritilgan bo'lsa, **"💬 WhatsApp'da yuborish"** tugmalari bor (WhatsApp'da shu raqamga tayyor xabar bilan ochiladi).
 
 ## Chat menyusi (WEBAPP_URL o'rnatilganda)
-Mini App to'liq ishlayotgan bo'lsa, chat menyusi bitta tugmaga qisqaradi: **"📱 Ilovani ochish"**.
-Hamma funksiya (davomat, o'quvchilar, moliya, xodimlar, dars jadvali) Mini App ichida.
+Mini App to'liq ishlayotgan bo'lsa, chat menyusi ikki tugmaga qisqaradi: **"📱 Ilovani ochish"** va
+**"📤 Fayldan yuklash"** (direktorga qo'shimcha **"📈 Statistika"**). Hamma boshqa funksiya (davomat, o'quvchilar,
+moliya, xodimlar, dars jadvali, to'lov, qarzdorlar) Mini App ichida. Eski chat buyruqlari (masalan "📚 Guruhlar",
+"🔎 Qidirish" va h.k.) — ularning matnini kimdir yuborsa ham (eski klaviatura keshi, odat bo'yicha yozish) —
+Mini App'da bor bo'lgani uchun endi ishlamaydi, o'rniga "Mini App'dan foydalaning" deb javob qaytaradi.
 `WEBAPP_URL` o'rnatilmagan bo'lsa (Background Worker holatida), bot avtomatik eski, to'liq chat menyusiga qaytadi -
 hech narsa buzilmaydi, faqat qulaylik yo'qoladi.
 
