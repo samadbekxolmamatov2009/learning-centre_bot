@@ -984,14 +984,14 @@ async def api_parent_link_post(request):
         sid = int(request.match_info["sid"])
     except Exception:
         return bad("So'rov noto'g'ri")
-    s = await db.fetchone("SELECT last_name, first_name, group_id FROM students WHERE id=?", (sid,))
+    s = await db.fetchone("SELECT last_name, first_name, phone, group_id FROM students WHERE id=?", (sid,))
     if not s or not await can_access(db, uid, role, s["group_id"]):
         return bad("Topilmadi yoki ruxsat yo'q", 404)
     from . import config as CFG
     from .ptoken import make
     if not CFG.BOT_USERNAME:
         return bad("Bot nomi hali aniqlanmadi, birozdan keyin urinib ko'ring")
-    return web.json_response({"url": f"https://t.me/{CFG.BOT_USERNAME}?start={make(sid)}",
+    return web.json_response({"url": f"https://t.me/{CFG.BOT_USERNAME}?start={make(sid)}", "phone": s["phone"],
                               "name": f"{s['last_name']} {s['first_name']}"})
 
 

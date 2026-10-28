@@ -217,7 +217,7 @@ async def student_card(db, uid, sid, page):
 async def gl_parent_link(c: CallbackQuery, db):
     parts = c.data.split(":")
     sid, page = int(parts[2]), int(parts[3]) if len(parts) > 3 else 0
-    s = await db.fetchone("SELECT first_name, last_name, group_id FROM students WHERE id=?", (sid,))
+    s = await db.fetchone("SELECT first_name, last_name, phone, group_id FROM students WHERE id=?", (sid,))
     if not s or not await can_access_group(db, c.from_user.id, s["group_id"]):
         return await c.answer("Ruxsat yo'q", show_alert=True)
     from .config import BOT_USERNAME
@@ -225,10 +225,15 @@ async def gl_parent_link(c: CallbackQuery, db):
     if not BOT_USERNAME:
         return await c.answer("Bot nomi aniqlanmadi, birozdan keyin urinib ko'ring.", show_alert=True)
     link = f"https://t.me/{BOT_USERNAME}?start={make(sid)}"
-    await c.message.answer(
-        f"👪 <b>{e(s['last_name'])} {e(s['first_name'])}</b> ota-onasiga shu havolani yuboring:\n\n{link}\n\n"
-        "Ota-ona shu havolani bosib botni ochsa, farzandining davomati va to'lov holatini ko'ra oladi "
-        "(faqat ko'rish, o'zgartira olmaydi).", parse_mode="HTML")
+    text = (f"👪 <b>{e(s['last_name'])} {e(s['first_name'])}</b> ota-onasiga shu havolani yuboring:\n\n{link}\n\n"
+            "Ota-ona shu havolani bosib botni ochsa, farzandining davomati va to'lov holatini ko'ra oladi "
+            "(faqat ko'rish, o'zgartira olmaydi).")
+    if s["phone"]:
+        wa_phone = "".join(ch for ch in s["phone"] if ch.isdigit())
+        wa_text = f"{s['last_name']} {s['first_name']} haqida ma'lumotlar uchun havola: {link}"
+        import urllib.parse as _up
+        text += f"\n\n💬 WhatsApp'da to'g'ridan-to'g'ri yuborish: https://wa.me/{wa_phone}?text={_up.quote(wa_text)}"
+    await c.message.answer(text, parse_mode="HTML")
     await c.answer()
 
 

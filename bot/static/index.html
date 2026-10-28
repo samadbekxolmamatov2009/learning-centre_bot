@@ -868,12 +868,35 @@ function viewParentLink() {
   const st = S.stu;
   if (st.parentLoading) return '<div class="spin" style="margin:20px auto"></div>';
   if (!st.parentLink) return '';
+  const phone = st.parentLink.phone;
   return `<div class="card-detail" style="margin-top:8px">
     <div class="sub">Shu havolani ota-onaga yuboring. Bosib botni ochsa, faqat ko'rish uchun sahifa ochiladi.</div>
     <div class="srow" style="margin-top:8px"><input class="input" id="parentUrl" value="${esc(st.parentLink.url)}" readonly>
       <button class="iconbtn" data-act="stu-parent-copy" title="Nusxalash">📋</button></div>
+    <div class="actions2" style="margin-top:10px">
+      <button class="abtn" data-act="stu-parent-share">📤 Telegramda ulashish</button>
+      ${phone ? `<button class="abtn" data-act="stu-parent-wa">💬 WhatsApp'da yuborish</button>`
+              : `<span class="sub" style="display:flex;align-items:center">Telefon kiritilmagan, WhatsApp orqali yuborib bo'lmaydi</span>`}
+    </div>
     ${st.parentCopied ? '<div class="toast" style="margin-top:8px">✅ Nusxalandi</div>' : ''}
   </div>`;
+}
+function openExternal(url) {
+  if (tg && tg.openTelegramLink && url.startsWith('https://t.me/')) tg.openTelegramLink(url);
+  else if (tg && tg.openLink) tg.openLink(url);
+  else window.open(url, '_blank');
+}
+function shareParentLink() {
+  const link = S.stu.parentLink, s = S.stu.detail;
+  const msg = `${s.last} ${s.first} haqida ma'lumotlar uchun havolani bosing:`;
+  openExternal(`https://t.me/share/url?url=${encodeURIComponent(link.url)}&text=${encodeURIComponent(msg)}`);
+}
+function whatsappParentLink() {
+  const link = S.stu.parentLink, s = S.stu.detail;
+  const phone = (link.phone || '').replace(/\D/g, '');
+  if (!phone) return;
+  const msg = `${s.last} ${s.first} haqida ma'lumotlar uchun havola: ${link.url}`;
+  openExternal(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`);
 }
 function viewPayHistory(staff) {
   const h = S.stu.payHistory;
@@ -1307,6 +1330,8 @@ document.addEventListener('click', e => {
   else if (act === 'stu-hist-toggle') togglePayHistory();
   else if (act === 'stu-parent-toggle') toggleParentLink();
   else if (act === 'stu-parent-copy') copyParentLink();
+  else if (act === 'stu-parent-share') shareParentLink();
+  else if (act === 'stu-parent-wa') whatsappParentLink();
   else if (act === 'stu-pay-cancel') cancelPayment(Number(t.dataset.pid));
   else if (act === 'stu-exam-toggle') toggleExamHistory();
   else if (act === 'sal-month') loadSalary(t.dataset.month);
