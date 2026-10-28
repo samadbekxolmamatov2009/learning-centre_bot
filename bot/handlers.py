@@ -85,11 +85,13 @@ def main_menu(role: str):
     if WEBAPP_URL:
         # Mini App ichida davomat, o'quvchilar, oylik, xodimlar - hammasi bitta joyda.
         # Faqat Mini App'da hali yo'q funksiyalar (fayldan yuklash, statistika) chatda qoladi.
-        rows = [[KeyboardButton(text="📱 Ilovani ochish", web_app=WebAppInfo(url=f"{WEBAPP_URL}/app"))],
-                [KeyboardButton(text="📤 Fayldan yuklash")]]
+        # "📱 Ilovani ochish" oddiy matn tugma - bosilganda webapp_markup() bilan inline tugma yuboriladi
+        # (doimiy klaviaturadagi web_app tugmasi ba'zi Telegram mijozlarida eskirgan/noto'g'ri initData
+        # berishi mumkin, inline tugma esa har safar yangi va ishonchli).
+        row = ["📱 Ilovani ochish", "📤 Fayldan yuklash"]
         if role == "director":
-            rows[-1].append(KeyboardButton(text="📈 Statistika"))
-        return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
+            row.append("📈 Statistika")
+        return kb([row])
     return kb(_full_menu_rows(role))
 
 
@@ -811,6 +813,13 @@ async def my_salary_month(c: CallbackQuery, db):
 def webapp_markup(text="📝 Davomatni ochish", path=""):
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=text, web_app=WebAppInfo(url=f"{WEBAPP_URL}/app{path}"))]])
+
+
+@router.message(F.text == "📱 Ilovani ochish", ANYONE)
+async def open_app(m: Message):
+    if not WEBAPP_URL:
+        return
+    await m.answer("👇 Tugmani bosing:", reply_markup=webapp_markup("📱 Ilovani ochish"))
 
 
 @router.message(F.text == "✅ Davomat", TEACHER)
