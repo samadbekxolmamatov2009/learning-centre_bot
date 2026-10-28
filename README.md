@@ -67,3 +67,9 @@ O'quvchi kartochkasida (chatda "📚 Guruhlar" -> o'quvchi, yoki Mini App'da "�
 yaratiladi. Ota-ona shu havolani bosib botni ochsa, `/parent` Mini App sahifasida farzandining sinfi, guruhi,
 shu oy to'lov holati va oxirgi darslar davomati ko'rinadi — hech narsani o'zgartira olmaydi. Bir nechta farzand
 bo'lsa, hammasi ro'yxatda chiqadi. Havola doimiy ishlaydi (muddati tugamaydi), istalgan vaqt qayta yuborilishi mumkin.
+
+## Chat menyusi (WEBAPP_URL o'rnatilganda)
+Mini App to'liq ishlayotgan bo'lsa, chat menyusi bitta tugmaga qisqaradi: **"📱 Ilovani ochish"**.
+Hamma funksiya (davomat, o'quvchilar, moliya, xodimlar, dars jadvali) Mini App ichida.
+`WEBAPP_URL` o'rnatilmagan bo'lsa (Background Worker holatida), bot avtomatik eski, to'liq chat menyusiga qaytadi -
+hech narsa buzilmaydi, faqat qulaylik yo'qoladi.

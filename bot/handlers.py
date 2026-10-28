@@ -69,6 +69,11 @@ SECTION_TITLES = {
 
 
 def main_menu(role: str):
+    if WEBAPP_URL:
+        # Mini App ichida davomat, o'quvchilar, oylik, xodimlar - hammasi bitta joyda.
+        # Chatdagi eski tugmalar (to'liq funksiyalar) WEBAPP_URL o'rnatilmagan holatda pastda ishlaydi.
+        return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(
+            text="📱 Ilovani ochish", web_app=WebAppInfo(url=f"{WEBAPP_URL}/app"))]], resize_keyboard=True)
     if role == "teacher":
         return kb([["✅ Davomat", "📚 Guruhlarim"], ["📋 Qarzdorlarni ko'rish", "💰 Oylikni ko'rish"],
                    ["👥 O'quvchilar"]])

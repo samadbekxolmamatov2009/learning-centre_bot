@@ -265,10 +265,12 @@ async def api_groups(request):
     uid, role, _ = await auth(request)
     db = request.app["db"]
     if role == "teacher":
-        groups = await db.fetchall("SELECT id, name FROM groups WHERE teacher_id=? ORDER BY name", (uid,))
+        groups = await db.fetchall("SELECT id, name, lesson_days, lesson_time FROM groups "
+                                   "WHERE teacher_id=? ORDER BY name", (uid,))
     else:
-        groups = await db.fetchall("SELECT g.id, g.name, g.teacher_id AS teacherId, u.full_name AS teacher "
-                                   "FROM groups g LEFT JOIN users u ON u.tg_id=g.teacher_id ORDER BY g.name")
+        groups = await db.fetchall("SELECT g.id, g.name, g.teacher_id AS teacherId, u.full_name AS teacher, "
+                                   "g.lesson_days, g.lesson_time FROM groups g "
+                                   "LEFT JOIN users u ON u.tg_id=g.teacher_id ORDER BY g.name")
     counts = {r["group_id"]: r["n"] for r in await db.fetchall(
         "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 GROUP BY group_id")}
     paid_ids = {r["student_id"] for r in await db.fetchall(
@@ -707,6 +709,21 @@ async def api_group_patch(request):
         if await db.fetchone("SELECT 1 FROM groups WHERE name=? AND id<>?", (name, gid)):
             return bad("Bunday nomli guruh bor")
         await db.execute("UPDATE groups SET name=? WHERE id=?", (name, gid))
+    if "lesson_days" in body:
+        days = body["lesson_days"] or ""
+        if not all(d in "1234567" for d in days.replace(",", "")):
+            return bad("Dars kunlari noto'g'ri")
+        await db.execute("UPDATE groups SET lesson_days=? WHERE id=?", (days, gid))
+    if "lesson_time" in body:
+        t = (body["lesson_time"] or "").strip()
+        if t:
+            try:
+                hh, mm = t.split(":")
+                assert 0 <= int(hh) < 24 and 0 <= int(mm) < 60
+                t = f"{int(hh):02d}:{int(mm):02d}"
+            except Exception:
+                return bad("Dars vaqti noto'g'ri (masalan 15:00)")
+        await db.execute("UPDATE groups SET lesson_time=? WHERE id=?", (t, gid))
     return web.json_response({"ok": True})
 
 

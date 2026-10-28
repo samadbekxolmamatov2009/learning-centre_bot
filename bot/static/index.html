@@ -954,10 +954,12 @@ async function saveGroup() {
 }
 
 /* ---------- guruh sozlamalari (staff) ---------- */
+const WD_SHORT = [['1','Du'],['2','Se'],['3','Ch'],['4','Pa'],['5','Ju'],['6','Sh'],['7','Ya']];
 function openGroupEdit(gid) {
   const g = S.stu.groups.find(x => x.id === gid);
   if (!g) return;
-  S.stu.gedit = {id: gid, name: g.name, teacher: g.teacherId ?? ''};
+  S.stu.gedit = {id: gid, name: g.name, teacher: g.teacherId ?? '',
+    days: new Set((g.lesson_days || '').split(',').filter(Boolean)), time: g.lesson_time || ''};
   S.stu.toast = '';
   S.stu.view = 'gedit';
   render();
@@ -965,6 +967,8 @@ function openGroupEdit(gid) {
 function viewGroupEdit() {
   const f = S.stu.gedit;
   const g = S.stu.groups.find(x => x.id === f.id);
+  const dayChips = WD_SHORT.map(([n, label]) =>
+    `<button class="dchip ${f.days.has(n) ? 'on' : ''}" data-act="ge-day" data-d="${n}">${label}</button>`).join('');
   return `<div class="top"><button class="back" data-act="stu-gedit-back">‹</button><h1>⚙️ ${esc(g ? g.name : '')}</h1></div>
     ${S.stu.toast ? `<div class="toast">${esc(S.stu.toast)}</div>` : ''}
     <div class="field"><label>Guruh nomi</label>
@@ -972,6 +976,10 @@ function viewGroupEdit() {
     <div class="field"><label>O'qituvchi</label>
       <select class="input" id="ge_teacher"><option value="">— biriktirilmagan —</option>
         ${S.stu.teachers.map(t => `<option value="${t.id}" ${String(t.id) === String(f.teacher) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>
+    <div class="field"><label>🗓 Dars kunlari (ixtiyoriy)</label><div class="strip" style="padding-top:0">${dayChips}</div></div>
+    <div class="field"><label>⏰ Dars vaqti</label>
+      <input class="input" id="ge_time" type="time" value="${esc(f.time)}"></div>
+    <div class="sub">Dars vaqtidan 20 daqiqa o'tib davomat olinmasa, o'qituvchiga eslatma boradi.</div>
     <div class="form-actions"><button class="secondary" data-act="stu-gedit-back">Bekor qilish</button>
       <button class="primary" data-act="stu-gedit-save" ${S.busy ? 'disabled' : ''}>Saqlash</button></div>
     <button class="abtn danger" style="width:100%;margin-top:20px" data-act="stu-gedit-delete">🗑 Guruhni o'chirish</button>`;
@@ -980,10 +988,12 @@ async function saveGroupEdit() {
   const f = S.stu.gedit;
   const name = document.getElementById('ge_name').value.trim();
   const teacher = document.getElementById('ge_teacher').value;
+  const time = document.getElementById('ge_time').value;
   if (!name) return alert('Guruh nomini kiriting.');
   S.busy = true; render();
   try {
-    await api(`/api/groups/${f.id}`, {method:'PATCH', body: JSON.stringify({name, teacher: teacher || null})});
+    await api(`/api/groups/${f.id}`, {method:'PATCH', body: JSON.stringify(
+      {name, teacher: teacher || null, lesson_days: [...f.days].sort().join(','), lesson_time: time})});
     haptic('medium');
     const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
     S.stu.view = 'groups';
@@ -1134,6 +1144,7 @@ document.addEventListener('click', e => {
   else if (act === 'stu-gedit') openGroupEdit(id);
   else if (act === 'stu-gedit-back') { S.stu.view = 'groups'; render(); }
   else if (act === 'stu-gedit-save') saveGroupEdit();
+  else if (act === 'ge-day') { const d = t.dataset.d; S.stu.gedit.days.has(d) ? S.stu.gedit.days.delete(d) : S.stu.gedit.days.add(d); render(); }
   else if (act === 'stu-gedit-delete') deleteGroupEdit();
   else if (act === 'export-open') { S.xport = {busy:false, error:'', month: monthsBack(6)[0]}; S.view = 'xport'; render(); }
   else if (act === 'xp-back') { S.view = 'dash'; S.tab = 'dash'; render(); }
