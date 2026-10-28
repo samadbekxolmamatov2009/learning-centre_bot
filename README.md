@@ -73,3 +73,9 @@ Mini App to'liq ishlayotgan bo'lsa, chat menyusi bitta tugmaga qisqaradi: **"ðŸ“
 Hamma funksiya (davomat, o'quvchilar, moliya, xodimlar, dars jadvali) Mini App ichida.
 `WEBAPP_URL` o'rnatilmagan bo'lsa (Background Worker holatida), bot avtomatik eski, to'liq chat menyusiga qaytadi -
 hech narsa buzilmaydi, faqat qulaylik yo'qoladi.
+
+## To'lov cheki
+Har bir to'lov kiritilganda (chatda ham, Mini App'da ham) avtomatik PDF chek yaratiladi: markaz nomi, o'quvchi,
+sinf, guruh, oy, sana, kim qabul qildi, summa. Chek kiritgan admin/o'qituvchiga va o'sha o'quvchiga bog'langan
+barcha ota-onalarga yuboriladi. Markaz nomini `CENTER_NAME` muhit o'zgaruvchisi orqali o'zgartirish mumkin
+(standart: "O'quv markazi").

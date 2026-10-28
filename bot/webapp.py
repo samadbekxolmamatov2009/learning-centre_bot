@@ -445,8 +445,14 @@ async def api_payment_post(request):
     s = await _student_access(db, uid, role, sid)
     if not s:
         return bad("Topilmadi yoki ruxsat yo'q", 404)
+    mo = D.current_month()
     await db.execute("INSERT INTO payments(student_id,group_id,amount,month) VALUES(?,?,?,?)",
-                     (sid, s["group_id"], amount, D.current_month()))
+                     (sid, s["group_id"], amount, mo))
+    row = await db.fetchone("SELECT id FROM payments WHERE student_id=? AND month=? ORDER BY id DESC LIMIT 1",
+                            (sid, mo))
+    if row:
+        from .receipts import send_receipt
+        await send_receipt(request.app.get("bot"), db, row["id"], uid)
     return web.json_response({"ok": True})
 
 
