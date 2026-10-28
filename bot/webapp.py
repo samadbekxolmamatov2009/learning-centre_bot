@@ -510,9 +510,23 @@ async def api_salary(request):
         m -= 1
         if m == 0:
             y, m = y - 1, 12
+
+    groups_out = []
+    for g in await db.fetchall("SELECT * FROM groups WHERE teacher_id=? ORDER BY name", (target,)):
+        studs = await D.group_students(db, g["id"], month)
+        reg_cnt = sum(1 for s in studs if s["is_registry"])
+        paid = sum(1 for s in studs if s["paid"]) - reg_cnt
+        income = await D.group_income(db, g["id"], month)
+        att = await db.fetchone("SELECT COALESCE(SUM(present),0) p, COUNT(*) n FROM attendance "
+                                "WHERE group_id=? AND day LIKE ?", (g["id"], month + "-%"))
+        groups_out.append({
+            "name": g["name"], "income": income, "paid": paid, "students": len(studs),
+            "debtors": len(studs) - paid - reg_cnt,
+            "att": round(att["p"] * 100 / att["n"]) if att["n"] else None})
+
     return web.json_response({
         "pay_type": pay_type, "pay_value": pay_value, "month": month, "months": list(reversed(months)),
-        "groups": [{"name": n, "income": i, "paid": c} for n, i, c in rows],
+        "groups": groups_out,
         "registry": [{"group": n, "lessons": l, "total": t} for n, l, t in reg], "total": round(total)})
 
 

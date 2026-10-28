@@ -480,11 +480,26 @@ function viewSalary() {
   if (S.salary.loading || !d) return '<div class="spin" style="margin:60px auto"></div>';
   const how = d.pay_type === 'percent' ? `${d.pay_value}% (to'lovdan)` : `${money(d.pay_value)} so'm / o'quvchi`;
   const chips = d.months.map(m => `<button class="dchip ${m === d.month ? 'on' : ''}" data-act="sal-month" data-month="${m}">${m}</button>`).join('');
+  const gs = d.groups;
+  let best = '';
+  if (gs.length > 1) {
+    const withAtt = gs.filter(g => g.att !== null);
+    const bestAtt = withAtt.length ? withAtt.reduce((a, b) => b.att > a.att ? b : a) : null;
+    const worstDebt = [...gs].sort((a, b) => (b.students ? b.debtors / b.students : 0) - (a.students ? a.debtors / a.students : 0))[0];
+    const tips = [];
+    if (bestAtt) tips.push(`🏆 Eng yaxshi davomat: <b>${esc(bestAtt.name)}</b> (${bestAtt.att}%)`);
+    if (worstDebt && worstDebt.debtors > 0) tips.push(`⚠️ Eng ko'p qarzdor: <b>${esc(worstDebt.name)}</b> (${worstDebt.debtors} ta)`);
+    if (tips.length) best = `<div class="notice" style="background:var(--card)">${tips.join('<br>')}</div>`;
+  }
   return `<h1>💰 Oylik</h1><div class="sub">${esc(d.month)} · ${esc(how)}</div>
     <div class="strip">${chips}</div>
+    ${best}
     <div class="sec">Guruhlar</div>
-    ${d.groups.map(g => `<div class="srow-row"><div class="who"><div class="name">${esc(g.name)}</div>
-        <div class="meta">To'lagan: ${g.paid} ta</div></div><div class="name">${short(g.income)}</div></div>`).join('')
+    ${gs.map(g => { const dp = g.students ? Math.round(g.debtors * 100 / g.students) : 0;
+      return `<div class="gbox"><div class="hd">${esc(g.name)}<span>${short(g.income)}</span></div>
+      <div class="sub" style="margin-top:2px">${g.students} o'quvchi · to'lagan ${g.paid} ta</div>
+      ${pctBar('Qarzdor', dp, 'var(--no)', g.debtors + ' ta')}
+      ${pctBar('Davomat', g.att, 'var(--ok)', g.att === null ? '—' : g.att + '%')}</div>`; }).join('')
       || '<div class="empty">Guruh yo\'q</div>'}
     ${d.registry.length ? `<div class="sec">🏛 Reyestr (100%)</div>
       ${d.registry.map(r => `<div class="srow-row"><div class="who"><div class="name">${esc(r.group)}</div>
