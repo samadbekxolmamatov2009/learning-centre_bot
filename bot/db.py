@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS students(
     id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT NOT NULL,
     last_name TEXT NOT NULL, grade TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '',
     is_registry INTEGER NOT NULL DEFAULT 0, reg_rate INTEGER NOT NULL DEFAULT 0,
-    hidden INTEGER NOT NULL DEFAULT 0,
+    hidden INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
+    has_189 INTEGER NOT NULL DEFAULT 0,
     group_id INTEGER NOT NULL REFERENCES groups(id));
 CREATE TABLE IF NOT EXISTS payments(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,7 +55,17 @@ CREATE TABLE IF NOT EXISTS exam_scores(
     UNIQUE(exam_id, student_id));
 CREATE INDEX IF NOT EXISTS idx_exams_group ON exams(group_id);
 CREATE INDEX IF NOT EXISTS idx_exam_scores_student ON exam_scores(student_id);
+CREATE TABLE IF NOT EXISTS certificates(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL,
+    subject TEXT NOT NULL, grade TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(student_id, subject));
+CREATE INDEX IF NOT EXISTS idx_certificates_student ON certificates(student_id);
 """
+
+CERT_SUBJECTS = ["Matematika", "Fizika", "Kimyo", "Biologiya", "Ona tili va adabiyot",
+                 "Ingliz tili", "Rus tili", "Tarix", "Geografiya", "Informatika"]
+CERT_GRADES = ["A+", "A", "B+", "B", "C+", "C"]
 
 
 class Database:
@@ -113,6 +124,9 @@ class Database:
             await self.execute("ALTER TABLE attendance ADD COLUMN rate INTEGER NOT NULL DEFAULT 0")
         if "phone" not in cols:  # eski bazani yangilash
             await self.execute("ALTER TABLE students ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
+        for col in ("archived", "has_189"):
+            if col not in cols:
+                await self.execute(f"ALTER TABLE students ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
 
     async def close(self):
         pass
@@ -275,6 +289,25 @@ async def group_students(db, group_id, month=None):
              ON p.student_id=s.id AND p.month=?
         WHERE s.group_id=? AND s.hidden=0 GROUP BY s.id ORDER BY s.last_name, s.first_name
     """, (month, group_id))
+
+
+async def archive_or_delete_student(db, sid):
+    """O'quvchini o'chiradi - lekin agar unda sertifikat yoki 189 ball belgisi bo'lsa,
+    butunlay o'chirilmaydi, balki yashirin/arxivlangan holatda saqlanadi
+    (yil oxirida sertifikatlar bo'yicha hisob-kitob uchun)."""
+    s = await fetchone(db, "SELECT has_189 FROM students WHERE id=?", (sid,))
+    if not s:
+        return
+    has_cert = await fetchone(db, "SELECT 1 FROM certificates WHERE student_id=?", (sid,))
+    if s["has_189"] or has_cert:
+        await db.execute("UPDATE students SET archived=1, hidden=1 WHERE id=?", (sid,))
+    else:
+        await db.execute("DELETE FROM students WHERE id=?", (sid,))
+
+
+async def archive_or_delete_group_students(db, group_id):
+    for r in await fetchall(db, "SELECT id FROM students WHERE group_id=?", (group_id,)):
+        await archive_or_delete_student(db, r["id"])
 
 
 async def get_setting(db, key, default=""):
