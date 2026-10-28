@@ -530,6 +530,130 @@ async def api_salary(request):
         "registry": [{"group": n, "lessons": l, "total": t} for n, l, t in reg], "total": round(total)})
 
 
+# ---------------- Nazorat/sinov natijalari ----------------
+def exam_out(e, avg=None, count=None):
+    return {"id": e["id"], "group": e["group_id"], "title": e["title"], "max_score": e["max_score"],
+            "day": e["day"], "avg": avg, "count": count}
+
+
+async def api_exams_get(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        gid = int(request.query["group"])
+    except Exception:
+        return bad("group kerak")
+    if not await can_access(db, uid, role, gid):
+        return bad("Bu sizning guruhingiz emas", 403)
+    exams = await db.fetchall("SELECT * FROM exams WHERE group_id=? ORDER BY day DESC, id DESC", (gid,))
+    out = []
+    for e in exams:
+        agg = await db.fetchone("SELECT AVG(score) a, COUNT(*) n FROM exam_scores WHERE exam_id=?", (e["id"],))
+        out.append(exam_out(e, round(agg["a"], 1) if agg["a"] is not None else None, agg["n"]))
+    return web.json_response({"exams": out})
+
+
+async def api_exam_post(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        body = await request.json()
+        gid = int(body["group"])
+        title = clean_text(body.get("title"), 60)
+        max_score = int(body["max_score"])
+        day = clean_text(body.get("day"), 10) or D.today_local().isoformat()
+        assert max_score > 0
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    if not title:
+        return bad("Nazorat nomini kiriting")
+    if not await can_access(db, uid, role, gid):
+        return bad("Bu sizning guruhingiz emas", 403)
+    await db.execute("INSERT INTO exams(group_id, title, max_score, day) VALUES(?,?,?,?)",
+                     (gid, title, max_score, day))
+    e = await db.fetchone("SELECT id FROM exams WHERE group_id=? ORDER BY id DESC LIMIT 1", (gid,))
+    return web.json_response({"ok": True, "id": e["id"]})
+
+
+async def api_exam_get(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        eid = int(request.match_info["eid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    e = await db.fetchone("SELECT * FROM exams WHERE id=?", (eid,))
+    if not e or not await can_access(db, uid, role, e["group_id"]):
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    studs = await D.group_students(db, e["group_id"])
+    scores = {r["student_id"]: r["score"] for r in await db.fetchall(
+        "SELECT student_id, score FROM exam_scores WHERE exam_id=?", (eid,))}
+    return web.json_response({
+        "exam": exam_out(e),
+        "students": [{"id": s["id"], "name": f"{s['last_name']} {s['first_name']}",
+                      "score": scores.get(s["id"])} for s in studs]})
+
+
+async def api_exam_scores_post(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        eid = int(request.match_info["eid"])
+        body = await request.json()
+        scores = body["scores"]
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    e = await db.fetchone("SELECT * FROM exams WHERE id=?", (eid,))
+    if not e or not await can_access(db, uid, role, e["group_id"]):
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    stmts = []
+    for sid, sc in scores.items():
+        try:
+            sid = int(sid)
+            if sc is None or sc == "":
+                continue
+            sc = float(sc)
+            assert 0 <= sc <= e["max_score"]
+        except Exception:
+            return bad("Baho noto'g'ri")
+        stmts.append(("INSERT INTO exam_scores(exam_id, student_id, score) VALUES(?,?,?) "
+                      "ON CONFLICT(exam_id, student_id) DO UPDATE SET score=excluded.score", (eid, sid, sc)))
+    if stmts:
+        await db.batch(stmts)
+    return web.json_response({"ok": True})
+
+
+async def api_exam_delete(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        eid = int(request.match_info["eid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    e = await db.fetchone("SELECT * FROM exams WHERE id=?", (eid,))
+    if not e or not await can_access(db, uid, role, e["group_id"]):
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    await db.execute("DELETE FROM exam_scores WHERE exam_id=?", (eid,))
+    await db.execute("DELETE FROM exams WHERE id=?", (eid,))
+    return web.json_response({"ok": True})
+
+
+async def api_student_exams_get(request):
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        sid = int(request.match_info["sid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    s = await _student_access(db, uid, role, sid)
+    if not s:
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    rows = await db.fetchall(
+        "SELECT e.id, e.title, e.max_score, e.day, es.score FROM exam_scores es "
+        "JOIN exams e ON e.id=es.exam_id WHERE es.student_id=? ORDER BY e.day DESC, e.id DESC LIMIT 10", (sid,))
+    return web.json_response({"exams": [dict(r) for r in rows]})
+
+
 # ---------------- Xodimlar (faqat direktor): o'qituvchilar, adminlar, reyestr sozlamasi ----------------
 def teacher_out(t):
     return {"id": t["tg_id"], "name": t["full_name"], "pay_type": t["pay_type"], "pay_value": t["pay_value"],
@@ -887,11 +1011,16 @@ async def api_parent_me(request):
                                  "WHERE student_id=? AND month=?", (s["id"], mo))
         days, hist = await A.history(db, s["gid"], n=8)
         mine = hist.get(s["id"], {})
+        exams = await db.fetchall(
+            "SELECT e.title, e.max_score, e.day, es.score FROM exam_scores es "
+            "JOIN exams e ON e.id=es.exam_id WHERE es.student_id=? ORDER BY e.day DESC, e.id DESC LIMIT 5",
+            (s["id"],))
         children.append({
             "id": s["id"], "name": f"{s['last_name']} {s['first_name']}", "grade": s["grade"],
             "group": s["gname"], "teacher": s["tname"], "is_registry": bool(s["is_registry"]),
             "paid": bool(s["is_registry"]) or paid["n"] > 0, "paid_sum": paid["t"], "month": mo,
-            "history": [{"day": d, "status": mine.get(d, "")} for d in days]})
+            "history": [{"day": d, "status": mine.get(d, "")} for d in days],
+            "exams": [dict(x) for x in exams]})
     return web.json_response({"linked": True, "children": children})
 
 
@@ -928,6 +1057,12 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_delete("/api/groups/{gid}", api_group_delete)
     app.router.add_get("/api/export", api_export)
     app.router.add_get("/api/notifications", api_notifications)
+    app.router.add_get("/api/exams", api_exams_get)
+    app.router.add_post("/api/exams", api_exam_post)
+    app.router.add_get("/api/exams/{eid}", api_exam_get)
+    app.router.add_post("/api/exams/{eid}/scores", api_exam_scores_post)
+    app.router.add_delete("/api/exams/{eid}", api_exam_delete)
+    app.router.add_get("/api/students/{sid}/exams", api_student_exams_get)
     app.router.add_post("/api/students/{sid}/parent-link", api_parent_link_post)
     app.router.add_get("/parent", parent_index)
     app.router.add_get("/api/parent/me", api_parent_me)

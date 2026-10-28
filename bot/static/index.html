@@ -160,11 +160,13 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open
   stu:{view:'groups', groups:[], teachers:[], students:[], searching:false, searchResults:null, q:'', debtOnly:false,
        group:null, detail:null, formBack:'groups', detailBack:'groups', payOpen:false, payAmount:'', moveOpen:false, moveTo:'',
        payHistOpen:false, payHistory:null, parentOpen:false, parentLink:null, parentLoading:false, parentCopied:false,
+       examHistOpen:false, examHistory:null,
        form:null, toast:'', gform:null},
   salary:{loading:false, data:null, month:null},
   xport:{busy:false, error:'', month:null},
   hr:{view:'home', teachers:[], admins:[], registry:null, toast:'', tform:null, aform:null},
-  notif:{count:0, items:null, loading:false, from:null}};
+  notif:{count:0, items:null, loading:false, from:null},
+  exam:{view:'list', groupId:null, groupName:'', list:[], loading:false, form:null, detail:null, students:[], scores:{}, toast:''}};
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d.slice(8,10) + '.' + d.slice(5,7);
@@ -420,6 +422,7 @@ function goStuDetail(student) {
   S.stu.detail = student; S.stu.payOpen = false; S.stu.payAmount = ''; S.stu.moveOpen = false; S.stu.moveTo = '';
   S.stu.payHistOpen = false; S.stu.payHistory = null;
   S.stu.parentOpen = false; S.stu.parentLink = null; S.stu.parentCopied = false;
+  S.stu.examHistOpen = false; S.stu.examHistory = null;
   S.stu.view = 'detail';
   render();
 }
@@ -447,6 +450,15 @@ async function togglePayHistory() {
     render();
     try { const d = await api(`/api/payments?student=${S.stu.detail.id}`); S.stu.payHistory = d.payments; }
     catch (e) { S.stu.payHistory = []; }
+  }
+  render();
+}
+async function toggleExamHistory() {
+  S.stu.examHistOpen = !S.stu.examHistOpen;
+  if (S.stu.examHistOpen && !S.stu.examHistory) {
+    render();
+    try { const d = await api(`/api/students/${S.stu.detail.id}/exams`); S.stu.examHistory = d.exams; }
+    catch (e) { S.stu.examHistory = []; }
   }
   render();
 }
@@ -786,7 +798,8 @@ function viewStuList() {
   return `<div class="top"><button class="back" data-act="stu-back">‹</button><h1>${esc(st.group.name)}</h1></div>
     <div class="sub">${st.students.length} o'quvchi${debt ? ' · ❌ ' + debt + ' qarzdor' : ''}</div>
     <div class="srow"><input class="input" id="stuq" placeholder="Shu guruhda qidirish..." value="${esc(st.q)}" autocomplete="off">
-      <button class="iconbtn" data-act="stu-add-group" title="Yangi o'quvchi">➕</button></div>
+      <button class="iconbtn" data-act="stu-add-group" title="Yangi o'quvchi">➕</button>
+      <button class="iconbtn" data-act="exam-open-list" title="Nazorat natijalari">📝</button></div>
     ${debt ? `<div class="strip">${debtChip()}</div>` : ''}
     <div class="list" style="margin-top:4px">${list.map(s => stuRow(s, false)).join('') || '<div class="empty">Topilmadi</div>'}</div>`;
 }
@@ -839,7 +852,17 @@ function viewStuDetail() {
     <button class="abtn" style="width:100%;margin-top:10px" data-act="stu-parent-toggle">👪 Ota-onaga havola</button>
     ${st.parentOpen ? viewParentLink() : ''}
     <button class="abtn" style="width:100%;margin-top:10px" data-act="stu-hist-toggle">📜 To'lovlar tarixi ${st.payHistOpen ? '▴' : '▾'}</button>
-    ${st.payHistOpen ? viewPayHistory(staff) : ''}`;
+    ${st.payHistOpen ? viewPayHistory(staff) : ''}
+    <button class="abtn" style="width:100%;margin-top:10px" data-act="stu-exam-toggle">📝 Nazorat natijalari ${st.examHistOpen ? '▴' : '▾'}</button>
+    ${st.examHistOpen ? viewExamHistory() : ''}`;
+}
+function viewExamHistory() {
+  const h = S.stu.examHistory;
+  if (!h) return '<div class="spin" style="margin:30px auto"></div>';
+  if (!h.length) return '<div class="empty" style="padding:20px 8px">Hali nazorat natijalari yo\'q</div>';
+  return `<div class="list" style="margin-top:8px">${h.map(x => `<div class="srow-row">
+      <div class="who"><div class="name">${esc(x.title)}</div><div class="meta">${esc(x.day)}</div></div>
+      <div class="name">${x.score}/${x.max_score}</div></div>`).join('')}</div>`;
 }
 function viewParentLink() {
   const st = S.stu;
@@ -1030,6 +1053,107 @@ async function deleteGroupEdit() {
   S.busy = false; render();
 }
 
+/* ---------- nazorat/sinov natijalari ---------- */
+async function openExamList(gid, gname) {
+  S.exam.groupId = gid; S.exam.groupName = gname; S.exam.view = 'list'; S.exam.loading = true;
+  S.view = 'exam'; render();
+  try { const d = await api(`/api/exams?group=${gid}`); S.exam.list = d.exams; }
+  catch (e) { S.exam.list = []; }
+  S.exam.loading = false; render();
+}
+function viewExamList() {
+  const e = S.exam;
+  if (e.loading) return '<div class="spin" style="margin:60px auto"></div>';
+  return `<div class="top"><button class="back" data-act="exam-back">‹</button><h1>📝 ${esc(e.groupName)}</h1></div>
+    <div class="sub">Nazorat/sinov natijalari</div>
+    <button class="gcard" data-act="exam-new" style="border:1.5px dashed var(--line);background:transparent">
+      <div class="t">➕ Yangi nazorat</div></button>
+    <div class="list" style="margin-top:10px">${e.list.map(x => `<div class="srow-row" data-act="exam-open" data-id="${x.id}">
+        <div class="who"><div class="name">${esc(x.title)}</div>
+          <div class="meta">${esc(x.day)} · max ${x.max_score}${x.count ? ` · o'rtacha ${x.avg}` : " · hali baholanmagan"}</div></div>
+        <span class="sub">▸</span></div>`).join('') || '<div class="empty">Hali nazorat yo\'q</div>'}</div>`;
+}
+function viewExamForm() {
+  const f = S.exam.form;
+  return `<div class="top"><button class="back" data-act="exam-form-back">‹</button><h1>Yangi nazorat</h1></div>
+    ${S.exam.toast ? `<div class="toast">${esc(S.exam.toast)}</div>` : ''}
+    <div class="field"><label>Nomi <span class="req">*</span></label>
+      <input class="input" id="ex_title" placeholder="1-chorak nazorat" value="${esc(f.title)}" autocomplete="off"></div>
+    <div class="field"><label>Maksimal ball <span class="req">*</span></label>
+      <input class="input" id="ex_max" type="number" inputmode="numeric" value="${f.max_score || ''}" placeholder="50"></div>
+    <div class="field"><label>Sana</label>
+      <input class="input" id="ex_day" type="date" max="${S.me.today}" value="${f.day}"></div>
+    <div class="form-actions"><button class="secondary" data-act="exam-form-back">Bekor qilish</button>
+      <button class="primary" data-act="exam-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : "Yaratish"}</button></div>`;
+}
+async function saveExam() {
+  const f = S.exam.form;
+  f.title = document.getElementById('ex_title').value.trim();
+  f.max_score = parseInt(document.getElementById('ex_max').value, 10);
+  f.day = document.getElementById('ex_day').value || S.me.today;
+  if (f.title.length < 2) return alert('Nazorat nomini kiriting.');
+  if (!f.max_score || f.max_score <= 0) return alert('Maksimal ballni kiriting.');
+  S.busy = true; render();
+  try {
+    const r = await api('/api/exams', {method:'POST', body: JSON.stringify(
+      {group: S.exam.groupId, title: f.title, max_score: f.max_score, day: f.day})});
+    haptic('medium');
+    await openExamEntry(r.id);
+  } catch (e) { alert(e.message); S.busy = false; render(); }
+}
+async function openExamEntry(eid) {
+  S.exam.view = 'entry'; S.exam.loading = true; S.busy = false; S.exam.toast = ''; render();
+  try {
+    const d = await api(`/api/exams/${eid}`);
+    S.exam.detail = d.exam; S.exam.students = d.students;
+    S.exam.scores = Object.fromEntries(d.students.map(s => [s.id, s.score == null ? '' : s.score]));
+  } catch (e) { fail(e); return; }
+  S.exam.loading = false; render();
+}
+function viewExamEntry() {
+  const e = S.exam;
+  if (e.loading || !e.detail) return '<div class="spin" style="margin:60px auto"></div>';
+  const ex = e.detail;
+  return `<div class="top"><button class="back" data-act="exam-entry-back">‹</button><h1>${esc(ex.title)}</h1></div>
+    <div class="sub">${esc(ex.day)} · max ${ex.max_score}</div>
+    ${e.toast ? `<div class="toast">${esc(e.toast)}</div>` : ''}
+    <div class="list" style="margin-top:10px">${e.students.map(s => `<div class="srow-row">
+        <div class="who"><div class="name">${esc(s.name)}</div></div>
+        <input class="input" style="width:80px;text-align:center" type="number" inputmode="decimal" min="0" max="${ex.max_score}"
+          data-exam-score="${s.id}" value="${e.scores[s.id] ?? ''}" placeholder="—"></div>`).join('')}</div>
+    <div class="bar"><div class="info">Jami ${e.students.length} o'quvchi</div>
+      <button class="primary" data-act="exam-scores-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : 'Saqlash'}</button></div>
+    <button class="abtn danger" style="width:100%;margin:20px 0 90px" data-act="exam-delete">🗑 Nazoratni o'chirish</button>`;
+}
+async function saveExamScores() {
+  S.busy = true; render();
+  try {
+    await api(`/api/exams/${S.exam.detail.id}/scores`, {method:'POST', body: JSON.stringify({scores: S.exam.scores})});
+    haptic('medium');
+    S.exam.toast = '✅ Saqlandi';
+    const d = await api(`/api/exams?group=${S.exam.groupId}`); S.exam.list = d.exams;
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function deleteExam() {
+  const msg = `${S.exam.detail.title} o'chirilsinmi? Barcha baholar ham o'chadi.`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  S.busy = true; render();
+  try {
+    await api(`/api/exams/${S.exam.detail.id}`, {method:'DELETE'});
+    haptic('medium');
+    const d = await api(`/api/exams?group=${S.exam.groupId}`); S.exam.list = d.exams;
+    S.exam.view = 'list';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+function examBack() {
+  if (S.exam.view === 'list') { S.view = 'stu'; S.stu.view = 'list'; render(); }
+  else { S.exam.view = 'list'; render(); }
+}
+const EXAM_VIEWS = {list: viewExamList, form: viewExamForm, entry: viewExamEntry};
+
 /* ---------- umumiy chizish ---------- */
 function tabs() {
   const staff = S.me.role !== 'teacher';
@@ -1052,6 +1176,7 @@ function render() {
   else if (S.view === 'xport') html = viewExport();
   else if (S.view === 'hr') html = HR_VIEWS[S.hr.view]() + (S.hr.view === 'home' ? tabs() : '');
   else if (S.view === 'notif') html = viewNotif();
+  else if (S.view === 'exam') html = EXAM_VIEWS[S.exam.view]();
   else html = viewGroups() + tabs();
   const focusEl = document.activeElement;
   const focusId = focusEl && focusEl.id;
@@ -1065,7 +1190,7 @@ function render() {
     if (tg && tg.BackButton) {
       const canBack = (S.view === 'att' && !S.att.single && !S.att.done) ||
         (S.view === 'stu' && S.stu.view !== 'groups') || S.view === 'xport' ||
-        (S.view === 'hr' && S.hr.view !== 'home') || S.view === 'notif';
+        (S.view === 'hr' && S.hr.view !== 'home') || S.view === 'notif' || S.view === 'exam';
       canBack ? tg.BackButton.show() : tg.BackButton.hide();
     }
   } catch (e) {}
@@ -1076,6 +1201,7 @@ if (tg && tg.BackButton) tg.BackButton.onClick(() => {
   else if (S.view === 'xport') { S.view = 'dash'; S.tab = 'dash'; render(); }
   else if (S.view === 'hr') hrBack();
   else if (S.view === 'notif') notifBack();
+  else if (S.view === 'exam') examBack();
 });
 function backToGroups() { S.view = 'groups'; S.tab = 'groups'; render(); }
 function stuBack() {
@@ -1182,12 +1308,23 @@ document.addEventListener('click', e => {
   else if (act === 'stu-parent-toggle') toggleParentLink();
   else if (act === 'stu-parent-copy') copyParentLink();
   else if (act === 'stu-pay-cancel') cancelPayment(Number(t.dataset.pid));
+  else if (act === 'stu-exam-toggle') toggleExamHistory();
   else if (act === 'sal-month') loadSalary(t.dataset.month);
+  else if (act === 'exam-open-list') openExamList(S.stu.group.id, S.stu.group.name);
+  else if (act === 'exam-back') examBack();
+  else if (act === 'exam-new') { S.exam.form = {title:'', max_score:'', day: S.me.today}; S.exam.toast = ''; S.exam.view = 'form'; render(); }
+  else if (act === 'exam-form-back') { S.exam.view = 'list'; render(); }
+  else if (act === 'exam-save') saveExam();
+  else if (act === 'exam-open') openExamEntry(id);
+  else if (act === 'exam-entry-back') { S.exam.view = 'list'; render(); }
+  else if (act === 'exam-scores-save') saveExamScores();
+  else if (act === 'exam-delete') deleteExam();
 });
 document.addEventListener('change', e => {
   if (e.target.dataset && e.target.dataset.act === 'pick' && e.target.value) openGroup(S.att.group.id, e.target.value, S.att.single);
 });
 document.addEventListener('input', e => {
+  if (e.target.dataset && e.target.dataset.examScore) { S.exam.scores[Number(e.target.dataset.examScore)] = e.target.value; return; }
   if (e.target.id === 'q') { S.q = e.target.value; render(); }
   else if (e.target.id === 'stuq') {
     S.stu.q = e.target.value; render();

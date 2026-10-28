@@ -76,6 +76,13 @@ Hamma funksiya (davomat, o'quvchilar, moliya, xodimlar, dars jadvali) Mini App i
 `WEBAPP_URL` o'rnatilmagan bo'lsa (Background Worker holatida), bot avtomatik eski, to'liq chat menyusiga qaytadi -
 hech narsa buzilmaydi, faqat qulaylik yo'qoladi.
 
+## Nazorat/sinov natijalari
+O'quvchilar bo'limida guruh ichida **"📝"** tugmasi (nazorat natijalari). O'qituvchi/admin/direktor
+yangi nazorat yaratadi (nomi, maksimal ball, sana), so'ng shu guruhdagi hamma o'quvchiga baho kiritadi
+(bitta ekranda, ketma-ket). Har bir nazorat uchun guruh o'rtacha balli ko'rinadi. O'quvchi kartochkasida
+oxirgi 10 ta nazorat natijasi ko'rinadi. Ota-ona sahifasida ham farzandining oxirgi 5 ta nazorat
+natijasi chiqadi.
+
 ## To'lov cheki
 Har bir to'lov kiritilganda (chatda ham, Mini App'da ham) avtomatik PDF chek yaratiladi: markaz nomi, o'quvchi,
 sinf, guruh, oy, sana, kim qabul qildi, summa. Chek kiritgan admin/o'qituvchiga va o'sha o'quvchiga bog'langan
