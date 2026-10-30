@@ -102,7 +102,10 @@ O'quvchilar bo'limida guruh ichida **"📝"** tugmasi (nazorat natijalari). O'qi
 yangi nazorat yaratadi (nomi, maksimal ball, sana), so'ng shu guruhdagi hamma o'quvchiga baho kiritadi
 (bitta ekranda, ketma-ket). Har bir nazorat uchun guruh o'rtacha balli ko'rinadi. O'quvchi kartochkasida
 oxirgi 10 ta nazorat natijasi ko'rinadi. Ota-ona sahifasida ham farzandining oxirgi 5 ta nazorat
-natijasi chiqadi.
+natijasi chiqadi. Baholarni saqlagandan keyin **"👪 Ota-onalarga yuborish"** tugmasi: shu nazorat natijasi
+ulangan har bir o'quvchining ota-onasiga avtomatik xabar qilib yuboriladi (fan/nazorat nomi, bali, sana).
+Ota-onasi hali ulanmagan o'quvchilar bo'lsa, ularning ismi o'qituvchiga shu yerning o'zida ko'rsatiladi —
+shulardan "👪 Ota-onaga havola" orqali ulanish mumkin.
 
 ## To'lov cheki
 Har bir to'lov kiritilganda (chatda ham, Mini App'da ham) avtomatik PDF chek yaratiladi: markaz nomi, o'quvchi,
