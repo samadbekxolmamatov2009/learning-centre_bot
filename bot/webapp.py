@@ -6,6 +6,7 @@ rol bazadan olinadi. Hech qanday parol yoki alohida login yo'q.
 import asyncio
 import hashlib
 import hmac
+import html
 import io
 import json
 import logging
@@ -623,6 +624,42 @@ async def api_exam_scores_post(request):
     return web.json_response({"ok": True})
 
 
+async def api_exam_notify_parents(request):
+    """Shu nazorat natijasini ulangan ota-onalarga yuboradi.
+    Ota-onasi ulanmagan o'quvchilar ro'yxati qaytariladi (o'qituvchiga ko'rsatish uchun)."""
+    uid, role, _ = await auth(request)
+    db = request.app["db"]
+    try:
+        eid = int(request.match_info["eid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    e = await db.fetchone("SELECT * FROM exams WHERE id=?", (eid,))
+    if not e or not await can_access(db, uid, role, e["group_id"]):
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    rows = await db.fetchall(
+        "SELECT es.student_id, es.score, s.first_name, s.last_name FROM exam_scores es "
+        "JOIN students s ON s.id=es.student_id WHERE es.exam_id=? ORDER BY s.last_name, s.first_name", (eid,))
+    bot = request.app.get("bot")
+    sent, not_linked = 0, []
+    for r in rows:
+        name = f"{r['last_name']} {r['first_name']}"
+        parents = await db.fetchall("SELECT parent_tg_id FROM parent_links WHERE student_id=?", (r["student_id"],))
+        if not parents:
+            not_linked.append(name)
+            continue
+        if not bot:
+            continue
+        text = (f"📝 <b>{html.escape(name)}</b> natijasi\n"
+               f"{html.escape(e['title'])}: <b>{r['score']:g}/{e['max_score']}</b>\n{e['day']}")
+        for p in parents:
+            try:
+                await bot.send_message(p["parent_tg_id"], text, parse_mode="HTML")
+                sent += 1
+            except Exception:
+                log.warning("Ota-onaga natija yuborilmadi: %s", p["parent_tg_id"], exc_info=True)
+    return web.json_response({"ok": True, "sent": sent, "not_linked": not_linked})
+
+
 async def api_exam_delete(request):
     uid, role, _ = await auth(request)
     db = request.app["db"]
@@ -1169,6 +1206,7 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_post("/api/exams", api_exam_post)
     app.router.add_get("/api/exams/{eid}", api_exam_get)
     app.router.add_post("/api/exams/{eid}/scores", api_exam_scores_post)
+    app.router.add_post("/api/exams/{eid}/notify-parents", api_exam_notify_parents)
     app.router.add_delete("/api/exams/{eid}", api_exam_delete)
     app.router.add_get("/api/students/{sid}/exams", api_student_exams_get)
     app.router.add_get("/api/certificates", api_certificates_get)

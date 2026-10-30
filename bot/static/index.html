@@ -166,7 +166,7 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open
   xport:{busy:false, error:'', month:null},
   hr:{view:'home', teachers:[], admins:[], registry:null, toast:'', tform:null, aform:null},
   notif:{count:0, items:null, loading:false, from:null},
-  exam:{view:'list', groupId:null, groupName:'', list:[], loading:false, form:null, detail:null, students:[], scores:{}, toast:''},
+  exam:{view:'list', groupId:null, groupName:'', list:[], loading:false, form:null, detail:null, students:[], scores:{}, toast:'', notLinked:null},
   cert:{view:'groups', groups:[], group:null, students:[], subjects:[], grades:[], detail:null, detailCerts:[],
         has189:false, pickSubject:null, detailBack:'list', graduated:null}};
 
@@ -1133,13 +1133,23 @@ async function saveExam() {
   } catch (e) { alert(e.message); S.busy = false; render(); }
 }
 async function openExamEntry(eid) {
-  S.exam.view = 'entry'; S.exam.loading = true; S.busy = false; S.exam.toast = ''; render();
+  S.exam.view = 'entry'; S.exam.loading = true; S.busy = false; S.exam.toast = ''; S.exam.notLinked = null; render();
   try {
     const d = await api(`/api/exams/${eid}`);
     S.exam.detail = d.exam; S.exam.students = d.students;
     S.exam.scores = Object.fromEntries(d.students.map(s => [s.id, s.score == null ? '' : s.score]));
   } catch (e) { fail(e); return; }
   S.exam.loading = false; render();
+}
+async function notifyExamParents() {
+  S.busy = true; render();
+  try {
+    const r = await api(`/api/exams/${S.exam.detail.id}/notify-parents`, {method:'POST'});
+    haptic('medium');
+    S.exam.toast = r.sent ? `✅ ${r.sent} ta ota-onaga yuborildi` : "Hech kimga yuborilmadi — avval 'Saqlash' bilan natijalarni kiriting.";
+    S.exam.notLinked = r.not_linked;
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
 }
 function viewExamEntry() {
   const e = S.exam;
@@ -1152,6 +1162,11 @@ function viewExamEntry() {
         <div class="who"><div class="name">${esc(s.name)}</div></div>
         <input class="input" style="width:80px;text-align:center" type="number" inputmode="decimal" min="0" max="${ex.max_score}"
           data-exam-score="${s.id}" value="${e.scores[s.id] ?? ''}" placeholder="—"></div>`).join('')}</div>
+    <button class="abtn" style="width:100%;margin-top:14px" data-act="exam-notify-parents" ${S.busy ? 'disabled' : ''}>
+      👪 Ota-onalarga yuborish</button>
+    ${e.notLinked && e.notLinked.length ? `<div class="notice" style="background:var(--no-bg);color:var(--no)">
+      ⚠️ Bu o'quvchilarning ota-onasi hali ulanmagan, natija yuborilmadi: <b>${e.notLinked.map(esc).join(', ')}</b>.
+      O'quvchi kartochkasida "👪 Ota-onaga havola" orqali ulang.</div>` : ''}
     <div class="bar"><div class="info">Jami ${e.students.length} o'quvchi</div>
       <button class="primary" data-act="exam-scores-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : 'Saqlash'}</button></div>
     <button class="abtn danger" style="width:100%;margin:20px 0 90px" data-act="exam-delete">🗑 Nazoratni o'chirish</button>`;
@@ -1473,6 +1488,7 @@ document.addEventListener('click', e => {
   else if (act === 'exam-open') openExamEntry(id);
   else if (act === 'exam-entry-back') { S.exam.view = 'list'; render(); }
   else if (act === 'exam-scores-save') saveExamScores();
+  else if (act === 'exam-notify-parents') notifyExamParents();
   else if (act === 'exam-delete') deleteExam();
   else if (act === 'cert-group') openCertGroup(id);
   else if (act === 'cert-back') certBack();
