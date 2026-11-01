@@ -85,6 +85,9 @@ Havolani **kim bossa, o'sha ota-ona sifatida bog'lanadi** — tizim bu kishi haq
 shuning uchun havolani faqat haqiqiy ota-onaga yuborish kerak. Buning uchun havola yonida **"📤 Telegramda ulashish"**
 (Telegramning o'z ulashish oynasi orqali to'g'ridan-to'g'ri kerakli kishiga yuboriladi) va, agar o'quvchining telefon
 raqami kiritilgan bo'lsa, **"💬 WhatsApp'da yuborish"** tugmalari bor (WhatsApp'da shu raqamga tayyor xabar bilan ochiladi).
+Qaysi o'quvchining ota-onasi ulangan-ulanmaganini **o'qituvchi, admin va direktor hammasi** ko'radi: o'quvchilar
+ro'yxatida har bir ism yonida 👪✅ (ulangan) yoki 👪❌ (ulanmagan) belgisi, o'quvchi kartochkasida esa to'liq
+"Ota-ona ulangan / ulanmagan" yozuvi chiqadi.
 
 ## Chat menyusi (WEBAPP_URL o'rnatilganda)
 Mini App to'liq ishlayotgan bo'lsa, chat menyusi ikki tugmaga qisqaradi: **"📱 Ilovani ochish"** (bosilganda

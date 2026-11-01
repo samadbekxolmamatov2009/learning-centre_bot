@@ -254,7 +254,12 @@ def student_out(s, gname=None, paid=None):
         paid = bool(s["is_registry"]) or bool(s.get("paid"))
     return {"id": s["id"], "last": s["last_name"], "first": s["first_name"], "grade": s["grade"],
             "phone": s["phone"], "is_registry": bool(s["is_registry"]), "group": s["group_id"],
-            "group_name": gname or s.get("gname"), "hidden": bool(s["hidden"]), "paid": paid}
+            "group_name": gname or s.get("gname"), "hidden": bool(s["hidden"]), "paid": paid,
+            "parent_linked": bool(s.get("parent_count", 0))}
+
+
+PARENT_COUNT_SQL = "(SELECT COUNT(*) FROM parent_links pl WHERE pl.student_id = s.id) AS parent_count"
+PARENT_COUNT_SQL_PLAIN = "(SELECT COUNT(*) FROM parent_links pl WHERE pl.student_id = students.id) AS parent_count"
 
 
 def clean_text(v, maxlen=60):
@@ -323,7 +328,8 @@ async def api_students_get(request):
         return web.json_response({"students": [student_out(s, g["name"], bool(s["paid"])) for s in studs]})
     if not q or len(q) < 2:
         return bad("Qidiruv uchun kamida 2 ta belgi kerak")
-    sql = ("SELECT s.*, g.name AS gname FROM students s JOIN groups g ON g.id=s.group_id WHERE s.hidden=0")
+    sql = (f"SELECT s.*, g.name AS gname, {PARENT_COUNT_SQL} FROM students s "
+          "JOIN groups g ON g.id=s.group_id WHERE s.hidden=0")
     args = []
     if role == "teacher":
         sql += " AND g.teacher_id=?"
@@ -415,7 +421,7 @@ async def api_student_patch(request):
         return bad("O'zgartiriladigan narsa yo'q")
     args.append(sid)
     await db.execute(f"UPDATE students SET {', '.join(sets)} WHERE id=?", tuple(args))
-    row = await db.fetchone("SELECT * FROM students WHERE id=?", (sid,))
+    row = await db.fetchone(f"SELECT *, {PARENT_COUNT_SQL_PLAIN} FROM students WHERE id=?", (sid,))
     return web.json_response({"ok": True, "student": student_out(row)})
 
 
