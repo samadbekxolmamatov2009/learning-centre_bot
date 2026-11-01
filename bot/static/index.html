@@ -766,7 +766,8 @@ function payBadge(s) {
 function stuRow(s, showGroup) {
   return `<div class="srow-row" data-act="stu-open" data-sid="${s.id}">
     <div class="who"><div class="name">${esc(s.last)} ${esc(s.first)}</div>
-      <div class="meta">${esc(s.grade)}-sinf${showGroup ? ' · ' + esc(s.group_name || groupName(s.group)) : ''}${s.phone ? ' · 📞 ' + esc(s.phone) : ''}</div></div>
+      <div class="meta">${esc(s.grade)}-sinf${showGroup ? ' · ' + esc(s.group_name || groupName(s.group)) : ''}${s.phone ? ' · 📞 ' + esc(s.phone) : ''}
+        · ${s.parent_linked ? '👪✅' : '<span style="color:var(--hint)">👪❌</span>'}</div></div>
     ${payBadge(s)}</div>`;
 }
 function debtChip() {
@@ -843,7 +844,9 @@ function viewStuDetail() {
       <div class="nm">${esc(s.last)} ${esc(s.first)}</div>
       <div class="ln">🏫 <b>${esc(s.grade)}-sinf</b> · 📚 <b>${esc(s.group_name || groupName(s.group))}</b></div>
       <div class="ln">${s.phone ? `📞 <a href="tel:${esc(s.phone)}">${esc(s.phone)}</a>` : '📞 raqam kiritilmagan'}</div>
-      <div class="ln" style="margin-top:10px">${payBadge(s)}</div>
+      <div class="ln" style="margin-top:10px">${payBadge(s)}
+        <span class="pay-badge ${s.parent_linked ? 'ok' : 'no'}" style="margin-left:6px">
+          ${s.parent_linked ? '👪✅ Ota-ona ulangan' : '👪❌ Ota-ona ulanmagan'}</span></div>
       <div class="actions2">
         <button class="abtn" data-act="stu-pay-toggle">💵 To'lov kiritish</button>
         <button class="abtn" data-act="stu-edit">✏️ Tahrirlash</button>

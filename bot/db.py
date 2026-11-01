@@ -284,7 +284,8 @@ async def group_students(db, group_id, month=None):
     month = month or current_month()
     return await fetchall(db, """
         SELECT s.*, COALESCE(SUM(p.amount),0) AS paid_sum,
-               (COUNT(p.id) > 0 OR s.is_registry = 1) AS paid
+               (COUNT(p.id) > 0 OR s.is_registry = 1) AS paid,
+               (SELECT COUNT(*) FROM parent_links pl WHERE pl.student_id = s.id) AS parent_count
         FROM students s LEFT JOIN payments p
              ON p.student_id=s.id AND p.month=?
         WHERE s.group_id=? AND s.hidden=0 GROUP BY s.id ORDER BY s.last_name, s.first_name
