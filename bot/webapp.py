@@ -13,7 +13,7 @@ import logging
 import time
 from datetime import date, timedelta
 from pathlib import Path
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, quote
 
 from aiohttp import web
 
@@ -1078,6 +1078,32 @@ async def api_export(request):
                                  "Content-Disposition": f'attachment; filename="{fname}"'})
 
 
+def content_disposition(name, ext):
+    safe = "".join(c if c.isalnum() or c in " _-" else "_" for c in name).strip() or "guruh"
+    return f"attachment; filename=\"{safe}.{ext}\"; filename*=UTF-8''{quote(name)}.{ext}"
+
+
+async def api_export_group_roster(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        gid = int(request.query["group"])
+    except Exception:
+        return bad("group kerak")
+    g = await db.fetchone("SELECT g.*, u.full_name AS tname FROM groups g "
+                          "LEFT JOIN users u ON u.tg_id=g.teacher_id WHERE g.id=?", (gid,))
+    if not g:
+        return bad("Topilmadi", 404)
+    studs = await D.group_students(db, gid)
+    from .docgen import group_roster_docx
+    data = group_roster_docx(g["name"], g["tname"], g["lesson_days"], g["lesson_time"], studs)
+    return web.Response(body=data, headers={
+        "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "Content-Disposition": content_disposition(g["name"], "docx")})
+
+
 # ---------------- Bildirishnomalar ----------------
 WD_MAP = {"1": "Du", "2": "Se", "3": "Ch", "4": "Pa", "5": "Ju", "6": "Sh", "7": "Ya"}
 
@@ -1207,6 +1233,7 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_patch("/api/groups/{gid}", api_group_patch)
     app.router.add_delete("/api/groups/{gid}", api_group_delete)
     app.router.add_get("/api/export", api_export)
+    app.router.add_get("/api/export-group-roster", api_export_group_roster)
     app.router.add_get("/api/notifications", api_notifications)
     app.router.add_get("/api/exams", api_exams_get)
     app.router.add_post("/api/exams", api_exam_post)
