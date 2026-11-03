@@ -555,20 +555,15 @@ function viewExport() {
       ${S.xport.busy ? 'disabled' : ''}>${S.xport.busy ? 'Tayyorlanmoqda…' : `⬇️ ${month} hisobotini yuklash`}</button>
     ${S.xport.error ? `<div class="toast" style="background:var(--no-bg);color:var(--no)">${esc(S.xport.error)}</div>` : ''}`;
 }
+async function openDownload(path) {
+  const d = await api('/api/dl-token');
+  const sep = path.includes('?') ? '&' : '?';
+  openExternal(location.origin + path + sep + 'dl=' + encodeURIComponent(d.token));
+}
 async function downloadExport(type, month) {
   S.xport.busy = true; S.xport.error = ''; render();
   try {
-    const url = `/api/export?type=${type}` + (month ? `&month=${month}` : '');
-    const r = await fetch(url, {headers: {'X-Init-Data': (tg && tg.initData) || ''}});
-    if (!r.ok) { let d = {}; try { d = await r.json(); } catch (e) {} throw new Error(d.error || 'Yuklab bo\'lmadi'); }
-    const blob = await r.blob();
-    const cd = r.headers.get('Content-Disposition') || '';
-    const match = /filename="([^"]+)"/.exec(cd);
-    const fname = match ? match[1] : `${type}.xlsx`;
-    const objUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = objUrl; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+    await openDownload(`/api/export?type=${type}` + (month ? `&month=${month}` : ''));
     haptic('medium');
   } catch (e) { S.xport.error = "Yuklab bo'lmadi: " + e.message; }
   S.xport.busy = false; render();
@@ -576,17 +571,7 @@ async function downloadExport(type, month) {
 async function downloadGroupRoster() {
   S.busy = true; render();
   try {
-    const url = `/api/export-group-roster?group=${S.stu.group.id}`;
-    const r = await fetch(url, {headers: {'X-Init-Data': (tg && tg.initData) || ''}});
-    if (!r.ok) { let d = {}; try { d = await r.json(); } catch (e) {} throw new Error(d.error || "Yuklab bo'lmadi"); }
-    const blob = await r.blob();
-    const cd = r.headers.get('Content-Disposition') || '';
-    const match = /filename="([^"]+)"/.exec(cd);
-    const fname = match ? match[1] : 'guruh.docx';
-    const objUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = objUrl; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+    await openDownload(`/api/export-group-roster?group=${S.stu.group.id}`);
     haptic('medium');
   } catch (e) { alert(e.message); }
   S.busy = false; render();
