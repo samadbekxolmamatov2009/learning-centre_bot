@@ -61,6 +61,9 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
   yuklab oladi — guruh nomi, o'qituvchi, dars kunlari/vaqti sarlavhada; jadvalda T/r, ism-sharifi, sinfi, telefoni
   avtomatik to'ldirilgan, "Kelgan sana", "Jami to'lov", "To'lagan summasi", "Sana" ustunlari bo'sh — qo'lda to'ldirish
   uchun (qog'ozdagi to'lov yig'ish ro'yxati o'rnini bosadi). Pastda yangi o'quvchi qo'shish uchun bir nechta bo'sh qator.
+- **Fayl yuklab olish** (Excel va Word): Telegramning ichki brauzeri oddiy havola yuklashni to'g'ri ishlatmagani uchun,
+  fayl havolasi qisqa muddatli (2 daqiqalik) token bilan alohida (tashqi) brauzerda ochiladi — shunda fayl haqiqatda
+  qurilmaga yuklanadi, "havolani ochish" deb so'ramaydi.
 - Davomatda **"Hammasi ❌"** tezkor tugmasi (bayram va h.k. uchun).
 - **🔔 Bildirishnomalar**: davomat olinmagan guruhlar, qarzdorlar, reyestr narxi kiritilmagan o'qituvchilar — bitta ro'yxatda, bosib tegishli joyga o'tiladi. Belgi raqami Panel/Davomat sahifasida ko'rinadi.
 - **Tuzatilgan xato:** qarzdorlar soni (guruh kartochkasi va bildirishnomada) oyning birinchi kunlarida, hali hech kim to'lov qilmagan paytda, noto'g'ri "0" ko'rsatayotgan edi.

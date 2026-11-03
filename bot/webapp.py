@@ -58,16 +58,29 @@ async def errors_mw(request, handler):
 
 
 async def auth(request):
-    user = verify_init_data(request.headers.get("X-Init-Data", ""), BOT_TOKEN)
-    if not user:
-        raise web.HTTPUnauthorized(text=json.dumps({"error": "Telegram orqali qayta oching"}),
-                                   content_type="application/json")
+    uid = None
+    dl = request.query.get("dl")
+    if dl:
+        from .dltoken import verify as verify_dl
+        uid = verify_dl(dl)
+    if uid is None:
+        user = verify_init_data(request.headers.get("X-Init-Data", ""), BOT_TOKEN)
+        if not user:
+            raise web.HTTPUnauthorized(text=json.dumps({"error": "Telegram orqali qayta oching"}),
+                                       content_type="application/json")
+        uid = user["id"]
     db = request.app["db"]
-    row = await db.fetchone("SELECT full_name, role FROM users WHERE tg_id=?", (user["id"],))
+    row = await db.fetchone("SELECT full_name, role FROM users WHERE tg_id=?", (uid,))
     if not row:
         raise web.HTTPForbidden(text=json.dumps({"error": "Siz ro'yxatda yo'qsiz"}),
                                 content_type="application/json")
-    return user["id"], row["role"], row["full_name"]
+    return uid, row["role"], row["full_name"]
+
+
+async def api_dl_token(request):
+    uid, _, _ = await auth(request)
+    from .dltoken import make as make_dl
+    return web.json_response({"token": make_dl(uid)})
 
 
 async def auth_any(request):
@@ -1208,6 +1221,7 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_get("/", health)
     app.router.add_get("/app", index)
     app.router.add_get("/api/me", api_me)
+    app.router.add_get("/api/dl-token", api_dl_token)
     app.router.add_get("/api/attendance", api_attendance_get)
     app.router.add_post("/api/attendance", api_attendance_post)
     app.router.add_get("/api/dashboard", api_dashboard)
