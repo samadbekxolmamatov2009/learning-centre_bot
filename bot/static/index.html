@@ -573,6 +573,24 @@ async function downloadExport(type, month) {
   } catch (e) { S.xport.error = "Yuklab bo'lmadi: " + e.message; }
   S.xport.busy = false; render();
 }
+async function downloadGroupRoster() {
+  S.busy = true; render();
+  try {
+    const url = `/api/export-group-roster?group=${S.stu.group.id}`;
+    const r = await fetch(url, {headers: {'X-Init-Data': (tg && tg.initData) || ''}});
+    if (!r.ok) { let d = {}; try { d = await r.json(); } catch (e) {} throw new Error(d.error || "Yuklab bo'lmadi"); }
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const match = /filename="([^"]+)"/.exec(cd);
+    const fname = match ? match[1] : 'guruh.docx';
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+    haptic('medium');
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
 
 /* ---------- Xodimlar (faqat direktor) ---------- */
 async function loadStaffTab() {
@@ -799,7 +817,7 @@ function viewStuGroups() {
 }
 
 function viewStuList() {
-  const st = S.stu;
+  const st = S.stu, staff = S.me.role !== 'teacher';
   const q = st.q.trim().toLowerCase();
   let list = st.students.filter(s => !q || (s.last + ' ' + s.first).toLowerCase().includes(q) || (s.phone || '').includes(q));
   const debt = st.students.filter(s => !s.paid).length;
@@ -808,7 +826,8 @@ function viewStuList() {
     <div class="sub">${st.students.length} o'quvchi${debt ? ' · ❌ ' + debt + ' qarzdor' : ''}</div>
     <div class="srow"><input class="input" id="stuq" placeholder="Shu guruhda qidirish..." value="${esc(st.q)}" autocomplete="off">
       <button class="iconbtn" data-act="stu-add-group" title="Yangi o'quvchi">➕</button>
-      <button class="iconbtn" data-act="exam-open-list" title="Nazorat natijalari">📝</button></div>
+      <button class="iconbtn" data-act="exam-open-list" title="Nazorat natijalari">📝</button>
+      ${staff ? `<button class="iconbtn" data-act="stu-word" title="Word ro'yxatini yuklash" ${S.busy ? 'disabled' : ''}>📄</button>` : ''}</div>
     ${debt ? `<div class="strip">${debtChip()}</div>` : ''}
     <div class="list" style="margin-top:4px">${list.map(s => stuRow(s, false)).join('') || '<div class="empty">Topilmadi</div>'}</div>`;
 }
@@ -1458,6 +1477,7 @@ document.addEventListener('click', e => {
   else if (act === 'stu-gedit-save') saveGroupEdit();
   else if (act === 'ge-day') { const d = t.dataset.d; S.stu.gedit.days.has(d) ? S.stu.gedit.days.delete(d) : S.stu.gedit.days.add(d); render(); }
   else if (act === 'stu-gedit-delete') deleteGroupEdit();
+  else if (act === 'stu-word') downloadGroupRoster();
   else if (act === 'export-open') { S.xport = {busy:false, error:'', month: monthsBack(6)[0]}; S.view = 'xport'; render(); }
   else if (act === 'xp-back') { S.view = 'dash'; S.tab = 'dash'; render(); }
   else if (act === 'xp-month') { S.xport.month = t.dataset.month; render(); }

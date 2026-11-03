@@ -57,6 +57,10 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - Direktorga pastki **"👨‍🏫 Xodimlar"** tab: o'qituvchi qo'shish/tahrirlash/o'chirish, admin qo'shish/o'chirish, reyestr yashirish/ochish.
 - Panelda **"📥"** tugmasi: qarzdorlar, barcha o'quvchilar va oylik hisobotni .xlsx qilib to'g'ridan-to'g'ri telefonga yuklab olish.
 - Guruh kartochkasidagi **"⚙️"** (admin/direktor): guruh nomini o'zgartirish, o'qituvchisini almashtirish, guruhni o'chirish.
+- O'quvchilar ro'yxatida (guruh ichida) **"📄"** tugmasi (faqat admin/direktor): shu guruhni **Word (.docx)** fayl qilib
+  yuklab oladi — guruh nomi, o'qituvchi, dars kunlari/vaqti sarlavhada; jadvalda T/r, ism-sharifi, sinfi, telefoni
+  avtomatik to'ldirilgan, "Kelgan sana", "Jami to'lov", "To'lagan summasi", "Sana" ustunlari bo'sh — qo'lda to'ldirish
+  uchun (qog'ozdagi to'lov yig'ish ro'yxati o'rnini bosadi). Pastda yangi o'quvchi qo'shish uchun bir nechta bo'sh qator.
 - Davomatda **"Hammasi ❌"** tezkor tugmasi (bayram va h.k. uchun).
 - **🔔 Bildirishnomalar**: davomat olinmagan guruhlar, qarzdorlar, reyestr narxi kiritilmagan o'qituvchilar — bitta ro'yxatda, bosib tegishli joyga o'tiladi. Belgi raqami Panel/Davomat sahifasida ko'rinadi.
 - **Tuzatilgan xato:** qarzdorlar soni (guruh kartochkasi va bildirishnomada) oyning birinchi kunlarida, hali hech kim to'lov qilmagan paytda, noto'g'ri "0" ko'rsatayotgan edi.
