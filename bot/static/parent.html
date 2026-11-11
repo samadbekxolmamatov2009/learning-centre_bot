@@ -93,7 +93,7 @@ function childCard(c) {
     ${c.exams && c.exams.length ? `<div class="sub" style="margin-top:14px">📝 Nazorat natijalari</div>
       <div style="margin-top:6px">${c.exams.map(x => `<div class="exrow">
           <span>${esc(x.title)} <span class="sub">${fmtDay(x.day)}</span></span>
-          <span class="sc">${x.score}/${x.max_score}</span></div>`).join('')}</div>` : ''}
+          <span class="sc">${x.score}/${x.max_score}${x.grade ? ' (' + esc(x.grade) + ')' : ''}</span></div>`).join('')}</div>` : ''}
   </div>`;
 }
 

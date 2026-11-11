@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS exams(
     created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS exam_scores(
     id INTEGER PRIMARY KEY AUTOINCREMENT, exam_id INTEGER NOT NULL,
-    student_id INTEGER NOT NULL, score REAL NOT NULL,
+    student_id INTEGER NOT NULL, score REAL NOT NULL, grade TEXT NOT NULL DEFAULT '',
     UNIQUE(exam_id, student_id));
 CREATE INDEX IF NOT EXISTS idx_exams_group ON exams(group_id);
 CREATE INDEX IF NOT EXISTS idx_exam_scores_student ON exam_scores(student_id);
@@ -127,6 +127,9 @@ class Database:
         for col in ("archived", "has_189"):
             if col not in cols:
                 await self.execute(f"ALTER TABLE students ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+        escols = [r["name"] for r in await self.fetchall("PRAGMA table_info(exam_scores)")]
+        if "grade" not in escols:
+            await self.execute("ALTER TABLE exam_scores ADD COLUMN grade TEXT NOT NULL DEFAULT ''")
 
     async def close(self):
         pass
