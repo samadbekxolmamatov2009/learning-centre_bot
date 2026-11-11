@@ -166,7 +166,7 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open
   xport:{busy:false, error:'', month:null},
   hr:{view:'home', teachers:[], admins:[], registry:null, toast:'', tform:null, aform:null},
   notif:{count:0, items:null, loading:false, from:null},
-  exam:{view:'list', groupId:null, groupName:'', list:[], loading:false, form:null, detail:null, students:[], scores:{}, toast:'', notLinked:null},
+  exam:{view:'list', groupId:null, groupName:'', list:[], loading:false, form:null, detail:null, students:[], scores:{}, grades:{}, gradeOptions:[], toast:'', notLinked:null},
   cert:{view:'groups', groups:[], group:null, students:[], subjects:[], grades:[], detail:null, detailCerts:[],
         has189:false, pickSubject:null, detailBack:'list', graduated:null}};
 
@@ -877,7 +877,7 @@ function viewExamHistory() {
   if (!h.length) return '<div class="empty" style="padding:20px 8px">Hali nazorat natijalari yo\'q</div>';
   return `<div class="list" style="margin-top:8px">${h.map(x => `<div class="srow-row">
       <div class="who"><div class="name">${esc(x.title)}</div><div class="meta">${esc(x.day)}</div></div>
-      <div class="name">${x.score}/${x.max_score}</div></div>`).join('')}</div>`;
+      <div class="name">${x.score}/${x.max_score}${x.grade ? ' (' + esc(x.grade) + ')' : ''}</div></div>`).join('')}</div>`;
 }
 function viewParentLink() {
   const st = S.stu;
@@ -1143,8 +1143,9 @@ async function openExamEntry(eid) {
   S.exam.view = 'entry'; S.exam.loading = true; S.busy = false; S.exam.toast = ''; S.exam.notLinked = null; render();
   try {
     const d = await api(`/api/exams/${eid}`);
-    S.exam.detail = d.exam; S.exam.students = d.students;
+    S.exam.detail = d.exam; S.exam.students = d.students; S.exam.gradeOptions = d.grades || [];
     S.exam.scores = Object.fromEntries(d.students.map(s => [s.id, s.score == null ? '' : s.score]));
+    S.exam.grades = Object.fromEntries(d.students.map(s => [s.id, s.grade || '']));
   } catch (e) { fail(e); return; }
   S.exam.loading = false; render();
 }
@@ -1167,8 +1168,12 @@ function viewExamEntry() {
     ${e.toast ? `<div class="toast">${esc(e.toast)}</div>` : ''}
     <div class="list" style="margin-top:10px">${e.students.map(s => `<div class="srow-row">
         <div class="who"><div class="name">${esc(s.name)}</div></div>
-        <input class="input" style="width:80px;text-align:center" type="number" inputmode="decimal" min="0" max="${ex.max_score}"
-          data-exam-score="${s.id}" value="${e.scores[s.id] ?? ''}" placeholder="—"></div>`).join('')}</div>
+        <input class="input" style="width:64px;text-align:center;flex:none" type="number" inputmode="decimal" min="0" max="${ex.max_score}"
+          data-exam-score="${s.id}" value="${e.scores[s.id] ?? ''}" placeholder="—">
+        <select class="input" style="width:72px;flex:none;margin-left:6px" data-exam-grade="${s.id}">
+          <option value="">—</option>
+          ${(e.gradeOptions || []).map(g => `<option value="${g}" ${e.grades[s.id] === g ? 'selected' : ''}>${g}</option>`).join('')}
+        </select></div>`).join('')}</div>
     <button class="abtn" style="width:100%;margin-top:14px" data-act="exam-notify-parents" ${S.busy ? 'disabled' : ''}>
       👪 Ota-onalarga yuborish</button>
     ${e.notLinked && e.notLinked.length ? `<div class="notice" style="background:var(--no-bg);color:var(--no)">
@@ -1181,7 +1186,8 @@ function viewExamEntry() {
 async function saveExamScores() {
   S.busy = true; render();
   try {
-    await api(`/api/exams/${S.exam.detail.id}/scores`, {method:'POST', body: JSON.stringify({scores: S.exam.scores})});
+    await api(`/api/exams/${S.exam.detail.id}/scores`, {method:'POST',
+      body: JSON.stringify({scores: S.exam.scores, grades: S.exam.grades})});
     haptic('medium');
     S.exam.toast = '✅ Saqlandi';
     const d = await api(`/api/exams?group=${S.exam.groupId}`); S.exam.list = d.exams;
@@ -1510,6 +1516,7 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('change', e => {
   if (e.target.dataset && e.target.dataset.act === 'pick' && e.target.value) openGroup(S.att.group.id, e.target.value, S.att.single);
+  else if (e.target.dataset && e.target.dataset.examGrade) { S.exam.grades[Number(e.target.dataset.examGrade)] = e.target.value; }
 });
 document.addEventListener('input', e => {
   if (e.target.dataset && e.target.dataset.examScore) { S.exam.scores[Number(e.target.dataset.examScore)] = e.target.value; return; }

@@ -606,12 +606,14 @@ async def api_exam_get(request):
     if not e or not await can_access(db, uid, role, e["group_id"]):
         return bad("Topilmadi yoki ruxsat yo'q", 404)
     studs = await D.group_students(db, e["group_id"])
-    scores = {r["student_id"]: r["score"] for r in await db.fetchall(
-        "SELECT student_id, score FROM exam_scores WHERE exam_id=?", (eid,))}
+    rows = {r["student_id"]: r for r in await db.fetchall(
+        "SELECT student_id, score, grade FROM exam_scores WHERE exam_id=?", (eid,))}
     return web.json_response({
         "exam": exam_out(e),
         "students": [{"id": s["id"], "name": f"{s['last_name']} {s['first_name']}",
-                      "score": scores.get(s["id"])} for s in studs]})
+                      "score": rows[s["id"]]["score"] if s["id"] in rows else None,
+                      "grade": rows[s["id"]]["grade"] if s["id"] in rows else ""} for s in studs],
+        "grades": D.CERT_GRADES})
 
 
 async def api_exam_scores_post(request):
@@ -621,6 +623,7 @@ async def api_exam_scores_post(request):
         eid = int(request.match_info["eid"])
         body = await request.json()
         scores = body["scores"]
+        grades = body.get("grades") or {}
     except Exception:
         return bad("So'rov noto'g'ri")
     e = await db.fetchone("SELECT * FROM exams WHERE id=?", (eid,))
@@ -636,8 +639,12 @@ async def api_exam_scores_post(request):
             assert 0 <= sc <= e["max_score"]
         except Exception:
             return bad("Baho noto'g'ri")
-        stmts.append(("INSERT INTO exam_scores(exam_id, student_id, score) VALUES(?,?,?) "
-                      "ON CONFLICT(exam_id, student_id) DO UPDATE SET score=excluded.score", (eid, sid, sc)))
+        gr = clean_text(grades.get(str(sid)) or "", 4)
+        if gr and gr not in D.CERT_GRADES:
+            return bad("Daraja noto'g'ri")
+        stmts.append(("INSERT INTO exam_scores(exam_id, student_id, score, grade) VALUES(?,?,?,?) "
+                      "ON CONFLICT(exam_id, student_id) DO UPDATE SET score=excluded.score, grade=excluded.grade",
+                      (eid, sid, sc, gr)))
     if stmts:
         await db.batch(stmts)
     return web.json_response({"ok": True})
@@ -656,7 +663,7 @@ async def api_exam_notify_parents(request):
     if not e or not await can_access(db, uid, role, e["group_id"]):
         return bad("Topilmadi yoki ruxsat yo'q", 404)
     rows = await db.fetchall(
-        "SELECT es.student_id, es.score, s.first_name, s.last_name FROM exam_scores es "
+        "SELECT es.student_id, es.score, es.grade, s.first_name, s.last_name FROM exam_scores es "
         "JOIN students s ON s.id=es.student_id WHERE es.exam_id=? ORDER BY s.last_name, s.first_name", (eid,))
     bot = request.app.get("bot")
     sent, not_linked = 0, []
@@ -668,8 +675,9 @@ async def api_exam_notify_parents(request):
             continue
         if not bot:
             continue
+        grade_part = f" ({html.escape(r['grade'])})" if r["grade"] else ""
         text = (f"📝 <b>{html.escape(name)}</b> natijasi\n"
-               f"{html.escape(e['title'])}: <b>{r['score']:g}/{e['max_score']}</b>\n{e['day']}")
+               f"{html.escape(e['title'])}: <b>{r['score']:g}/{e['max_score']}</b>{grade_part}\n{e['day']}")
         for p in parents:
             try:
                 await bot.send_message(p["parent_tg_id"], text, parse_mode="HTML")
@@ -705,7 +713,7 @@ async def api_student_exams_get(request):
     if not s:
         return bad("Topilmadi yoki ruxsat yo'q", 404)
     rows = await db.fetchall(
-        "SELECT e.id, e.title, e.max_score, e.day, es.score FROM exam_scores es "
+        "SELECT e.id, e.title, e.max_score, e.day, es.score, es.grade FROM exam_scores es "
         "JOIN exams e ON e.id=es.exam_id WHERE es.student_id=? ORDER BY e.day DESC, e.id DESC LIMIT 10", (sid,))
     return web.json_response({"exams": [dict(r) for r in rows]})
 
@@ -1202,7 +1210,7 @@ async def api_parent_me(request):
         days, hist = await A.history(db, s["gid"], n=8)
         mine = hist.get(s["id"], {})
         exams = await db.fetchall(
-            "SELECT e.title, e.max_score, e.day, es.score FROM exam_scores es "
+            "SELECT e.title, e.max_score, e.day, es.score, es.grade FROM exam_scores es "
             "JOIN exams e ON e.id=es.exam_id WHERE es.student_id=? ORDER BY e.day DESC, e.id DESC LIMIT 5",
             (s["id"],))
         children.append({
