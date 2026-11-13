@@ -1,5 +1,5 @@
-"""To'lov kiritilganda chek (PDF) yaratish va yuborish: kim kiritgan bo'lsa unga,
-va agar o'quvchiga bog'langan ota-onalar bo'lsa ularga ham."""
+"""To'lov kiritilganda chek (PDF) yaratish va yuborish: faqat kim kiritgan bo'lsa o'shaga
+(ota-onalarga yuborilmaydi - to'lov haqida xabar berish shart emas)."""
 import logging
 
 from aiogram.types import BufferedInputFile
@@ -30,13 +30,9 @@ async def send_receipt(bot, db, payment_id: int, entered_by_uid=None):
     fname = f"chek_{row['last_name']}_{row['month']}.pdf"
     caption = (f"🧾 To'lov cheki: {row['last_name']} {row['first_name']} — "
               f"{int(row['amount']):,}".replace(",", " ") + f" so'm ({row['month']})")
-    targets = set()
-    if entered_by_uid:
-        targets.add(entered_by_uid)
-    for p in await db.fetchall("SELECT parent_tg_id FROM parent_links WHERE student_id=?", (row["sid"],)):
-        targets.add(p["parent_tg_id"])
-    for uid in targets:
-        try:
-            await bot.send_document(uid, BufferedInputFile(pdf, fname), caption=caption)
-        except Exception:
-            log.warning("Chek yuborilmadi: %s", uid)
+    if not entered_by_uid:
+        return
+    try:
+        await bot.send_document(entered_by_uid, BufferedInputFile(pdf, fname), caption=caption)
+    except Exception:
+        log.warning("Chek yuborilmadi: %s", entered_by_uid)

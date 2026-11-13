@@ -60,7 +60,6 @@ const $app = document.getElementById('app');
 const ST = {present:{i:'✅',n:'Keldi'}, absent:{i:'❌',n:"Kelmadi"}, late:{i:'🕒',n:'Kechikdi'}, excused:{i:'📝',n:'Sababli'}};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d ? d.slice(8,10) + '.' + d.slice(5,7) : '';
-const money = n => Math.round(n).toLocaleString('ru-RU').replace(/ /g,' ');
 
 async function load() {
   try {
@@ -77,7 +76,7 @@ async function load() {
 
 function childCard(c) {
   const badge = c.is_registry ? `<span class="badge reg">🏛 Reyestr (davlat to'laydi)</span>`
-    : c.paid ? `<span class="badge ok">✅ ${esc(c.month)}: to'langan — ${money(c.paid_sum)} so'm</span>`
+    : c.paid ? `<span class="badge ok">✅ ${esc(c.month)}: to'langan</span>`
              : `<span class="badge no">❌ ${esc(c.month)}: hali to'lanmagan</span>`;
   const missed = c.history.filter(h => h.status === 'absent' || h.status === 'excused').map(h => fmtDay(h.day));
   const hist = c.history.map(h => h.status

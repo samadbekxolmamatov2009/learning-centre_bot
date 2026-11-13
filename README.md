@@ -86,8 +86,10 @@ qilish uchun ko'rinib turadi. Sertifikati yo'q oddiy o'quvchi o'chirilsa, odatda
 ## Ota-onalar uchun (faqat ko'rish)
 O'quvchi kartochkasida (chatda "📚 Guruhlar" -> o'quvchi, yoki Mini App'da "👪 Ota-onaga havola") maxsus havola
 yaratiladi. Ota-ona shu havolani bosib botni ochsa, `/parent` Mini App sahifasida farzandining sinfi, guruhi,
-shu oy to'lov holati va oxirgi darslar davomati ko'rinadi — hech narsani o'zgartira olmaydi. Bir nechta farzand
-bo'lsa, hammasi ro'yxatda chiqadi. Havola doimiy ishlaydi (muddati tugamaydi), istalgan vaqt qayta yuborilishi mumkin.
+shu oy to'lov holati (**to'langan/to'lanmagan — faqat shu, summasi ko'rsatilmaydi**) va oxirgi darslar davomati
+ko'rinadi — hech narsani o'zgartira olmaydi. To'lov summasi maxfiy saqlanadi, faqat xodimlarga (admin, direktor,
+o'qituvchi) Mini App'da ko'rinadi. Bir nechta farzand bo'lsa, hammasi ro'yxatda chiqadi. Havola doimiy ishlaydi
+(muddati tugamaydi), istalgan vaqt qayta yuborilishi mumkin.
 Havolani **kim bossa, o'sha ota-ona sifatida bog'lanadi** — tizim bu kishi haqiqiy ota-ona ekanligini tekshirmaydi,
 shuning uchun havolani faqat haqiqiy ota-onaga yuborish kerak. Buning uchun havola yonida **"📤 Telegramda ulashish"**
 (Telegramning o'z ulashish oynasi orqali to'g'ridan-to'g'ri kerakli kishiga yuboriladi) va, agar o'quvchining telefon
@@ -121,6 +123,6 @@ ulanish mumkin.
 
 ## To'lov cheki
 Har bir to'lov kiritilganda (chatda ham, Mini App'da ham) avtomatik PDF chek yaratiladi: markaz nomi, o'quvchi,
-sinf, guruh, oy, sana, kim qabul qildi, summa. Chek kiritgan admin/o'qituvchiga va o'sha o'quvchiga bog'langan
-barcha ota-onalarga yuboriladi. Markaz nomini `CENTER_NAME` muhit o'zgaruvchisi orqali o'zgartirish mumkin
-(standart: "O'quv markazi").
+sinf, guruh, oy, sana, kim qabul qildi, summa. Chek faqat **kiritgan admin/o'qituvchiga** yuboriladi — ota-onaga
+to'lov haqida alohida xabar yuborilmaydi (ota-ona to'lov holatini istalgan vaqt `/parent` sahifasida o'zi ko'rishi
+mumkin). Markaz nomini `CENTER_NAME` muhit o'zgaruvchisi orqali o'zgartirish mumkin (standart: "O'quv markazi").
