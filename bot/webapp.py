@@ -1205,7 +1205,7 @@ async def api_parent_me(request):
     mo = D.current_month()
     children = []
     for s in rows:
-        paid = await db.fetchone("SELECT COALESCE(SUM(amount),0) t, COUNT(*) n FROM payments "
+        paid = await db.fetchone("SELECT COUNT(*) n FROM payments "
                                  "WHERE student_id=? AND month=?", (s["id"], mo))
         days, hist = await A.history(db, s["gid"], n=8)
         mine = hist.get(s["id"], {})
@@ -1216,7 +1216,7 @@ async def api_parent_me(request):
         children.append({
             "id": s["id"], "name": f"{s['last_name']} {s['first_name']}", "grade": s["grade"],
             "group": s["gname"], "teacher": s["tname"], "is_registry": bool(s["is_registry"]),
-            "paid": bool(s["is_registry"]) or paid["n"] > 0, "paid_sum": paid["t"], "month": mo,
+            "paid": bool(s["is_registry"]) or paid["n"] > 0, "month": mo,
             "history": [{"day": d, "status": mine.get(d, "")} for d in days],
             "exams": [dict(x) for x in exams]})
     return web.json_response({"linked": True, "children": children})
