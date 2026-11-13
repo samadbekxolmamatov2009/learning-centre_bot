@@ -121,6 +121,6 @@ ulanish mumkin.
 
 ## To'lov cheki
 Har bir to'lov kiritilganda (chatda ham, Mini App'da ham) avtomatik PDF chek yaratiladi: markaz nomi, o'quvchi,
-sinf, guruh, oy, sana, kim qabul qildi, summa. Chek kiritgan admin/o'qituvchiga va o'sha o'quvchiga bog'langan
-barcha ota-onalarga yuboriladi. Markaz nomini `CENTER_NAME` muhit o'zgaruvchisi orqali o'zgartirish mumkin
-(standart: "O'quv markazi").
+sinf, guruh, oy, sana, kim qabul qildi, summa. Chek faqat **kiritgan admin/o'qituvchiga** yuboriladi — ota-onaga
+to'lov haqida alohida xabar yuborilmaydi (ota-ona to'lov holatini istalgan vaqt `/parent` sahifasida o'zi ko'rishi
+mumkin). Markaz nomini `CENTER_NAME` muhit o'zgaruvchisi orqali o'zgartirish mumkin (standart: "O'quv markazi").
