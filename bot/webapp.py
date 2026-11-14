@@ -1222,6 +1222,18 @@ async def api_parent_me(request):
     return web.json_response({"linked": True, "children": children})
 
 
+async def api_parent_unlink(request):
+    """Ota-ona o'zini shu o'quvchining ota-onasi ro'yxatidan chiqarib tashlaydi (bazadan o'chiriladi)."""
+    uid = await auth_any(request)
+    db = request.app["db"]
+    try:
+        sid = int(request.match_info["sid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    await db.execute("DELETE FROM parent_links WHERE parent_tg_id=? AND student_id=?", (uid, sid))
+    return web.json_response({"ok": True})
+
+
 def create_app(db, bot=None) -> web.Application:
     app = web.Application(middlewares=[errors_mw])
     app["db"] = db
@@ -1272,6 +1284,7 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_post("/api/students/{sid}/parent-link", api_parent_link_post)
     app.router.add_get("/parent", parent_index)
     app.router.add_get("/api/parent/me", api_parent_me)
+    app.router.add_delete("/api/parent/me/{sid}", api_parent_unlink)
     return app
 
 
