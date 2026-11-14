@@ -89,7 +89,10 @@ yaratiladi. Ota-ona shu havolani bosib botni ochsa, `/parent` Mini App sahifasid
 shu oy to'lov holati (**to'langan/to'lanmagan — faqat shu, summasi ko'rsatilmaydi**) va oxirgi darslar davomati
 ko'rinadi — hech narsani o'zgartira olmaydi. To'lov summasi maxfiy saqlanadi, faqat xodimlarga (admin, direktor,
 o'qituvchi) Mini App'da ko'rinadi. Bir nechta farzand bo'lsa, hammasi ro'yxatda chiqadi. Havola doimiy ishlaydi
-(muddati tugamaydi), istalgan vaqt qayta yuborilishi mumkin.
+(muddati tugamaydi), istalgan vaqt qayta yuborilishi mumkin. Har bir farzand kartochkasida
+**"🔓 Ushbu farzand bilan bog'lanishni bekor qilish"** tugmasi bor — bosilsa (tasdiqlagandan keyin) shu
+bog'lanish bazadan butunlay o'chiriladi, ota-ona endi o'sha o'quvchi haqida hech narsa ko'rmaydi (boshqa
+farzandlari bilan bog'lanish, agar bo'lsa, o'zgarmay qoladi; qayta ko'rish uchun markazdan yangi havola kerak bo'ladi).
 Havolani **kim bossa, o'sha ota-ona sifatida bog'lanadi** — tizim bu kishi haqiqiy ota-ona ekanligini tekshirmaydi,
 shuning uchun havolani faqat haqiqiy ota-onaga yuborish kerak. Buning uchun havola yonida **"📤 Telegramda ulashish"**
 (Telegramning o'z ulashish oynasi orqali to'g'ridan-to'g'ri kerakli kishiga yuboriladi) va, agar o'quvchining telefon
