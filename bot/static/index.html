@@ -675,7 +675,10 @@ function viewHrBranchForm() {
       <input class="input" id="b_name" placeholder="masalan Chilonzor" value="${esc(f.name)}" autocomplete="off"></div>
     <div class="form-actions"><button class="secondary" data-act="hr-back">Bekor qilish</button>
       <button class="primary" data-act="hr-branch-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : 'Saqlash'}</button></div>
-    ${isEdit ? `<button class="abtn danger" style="width:100%;margin-top:20px" data-act="hr-branch-del" data-id="${f.id}">🗑 Filialni o'chirish</button>` : ''}`;
+    ${isEdit ? `<button class="abtn" style="width:100%;margin-top:20px" data-act="hr-branch-assign" data-id="${f.id}">
+      📥 Filialsiz guruhlarni bu filialga ko'chirish</button>
+      <div class="sub" style="margin-top:6px">Hali hech qaysi filialga biriktirilmagan barcha guruhlarni shu filialga o'tkazadi.</div>
+      <button class="abtn danger" style="width:100%;margin-top:20px" data-act="hr-branch-del" data-id="${f.id}">🗑 Filialni o'chirish</button>` : ''}`;
 }
 function hrNewBranch() { S.hr.bform = {mode:'add', id:null, name:''}; S.hr.toast = ''; S.hr.view = 'bform'; render(); }
 function hrOpenBranch(id) {
@@ -710,6 +713,21 @@ async function hrDeleteBranch(bid) {
     await refreshStaff();
     S.dashBranches = null; S.stu.groups = [];
     S.hr.view = 'home';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function hrAssignUnassigned(bid) {
+  const b = S.hr.branches.find(x => x.id === bid);
+  const msg = `Hali hech qaysi filialga biriktirilmagan barcha guruhlar ${b ? b.name : ''} filialiga o'tkazilsinmi?`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  S.busy = true; render();
+  try {
+    const r = await api(`/api/branches/${bid}/assign-unassigned`, {method:'POST'});
+    haptic('medium');
+    S.hr.toast = `✅ ${r.moved} ta guruh ko'chirildi`;
+    await refreshStaff();
+    S.dashBranches = null; S.stu.groups = [];
   } catch (e) { alert(e.message); }
   S.busy = false; render();
 }
@@ -1561,6 +1579,7 @@ document.addEventListener('click', e => {
   else if (act === 'hr-branch-open') hrOpenBranch(id);
   else if (act === 'hr-branch-save') hrSaveBranch();
   else if (act === 'hr-branch-del') hrDeleteBranch(Number(t.dataset.id));
+  else if (act === 'hr-branch-assign') hrAssignUnassigned(Number(t.dataset.id));
   else if (act === 'notif-open') openNotif(S.view, S.tab);
   else if (act === 'notif-back') notifBack();
   else if (act === 'notif-item') notifGo(Number(t.dataset.i));

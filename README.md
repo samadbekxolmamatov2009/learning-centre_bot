@@ -81,7 +81,12 @@ O'qituvchining o'zi filialga biriktirilmaydi — turli filiallardagi guruhlarni 
 faqat guruh qaysi filialga tegishli ekanligi muhim. **Panel** sahifasida filial bo'yicha filtr chiplari bor —
 "🏢 Barchasi" yoki aniq bitta filialni tanlab, shu filialning tushumi, qarzdorlari, davomat foizi, 6 oylik grafigi
 va (direktorga) o'sha filialdagi guruhlar uchun hisoblangan o'qituvchilar oyligi alohida ko'rsatiladi. Filial
-o'chirilsa, undagi guruhlar o'chmaydi — faqat filialsiz holatga o'tadi.
+o'chirilsa, undagi guruhlar o'chmaydi — faqat filialsiz holatga o'tadi. Filiallar funksiyasi qo'shilishidan oldin
+yaratilgan barcha guruhlar (hozirgi asosiy markaz) avtomatik "filialsiz" holatda qoladi — hech qaysi filialga
+majburan biriktirilmaydi, "Barchasi" ko'rinishida baribir hisoblanadi. Agar ularni ham bitta filialga (masalan
+"Asosiy") yig'moqchi bo'lsangiz, filial ichida **"📥 Filialsiz guruhlarni bu filialga ko'chirish"** tugmasi bor —
+hali hech qaysi filialga biriktirilmagan barcha guruhlarni bir bosishda shu filialga o'tkazadi (allaqachon boshqa
+filialga biriktirilgan guruhlarga tegmaydi).
 
 ## Sertifikatlar
 Pastki **"🎓 Sertifikat"** tab (hamma rollar). Guruhni tanlab, o'quvchini oching — har bir fan bo'yicha
