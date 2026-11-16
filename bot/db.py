@@ -16,9 +16,12 @@ CREATE TABLE IF NOT EXISTS teachers(
     pay_type TEXT NOT NULL CHECK(pay_type IN ('percent','per_student')),
     pay_value REAL NOT NULL,
     registry_rate INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS branches(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS groups(
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE,
-    teacher_id INTEGER REFERENCES teachers(tg_id),
+    teacher_id INTEGER REFERENCES teachers(tg_id), branch_id INTEGER REFERENCES branches(id),
     lesson_days TEXT NOT NULL DEFAULT '', lesson_time TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS students(
     id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT NOT NULL,
@@ -120,6 +123,8 @@ class Database:
         for col in ("lesson_days", "lesson_time"):
             if col not in gcols:
                 await self.execute(f"ALTER TABLE groups ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        if "branch_id" not in gcols:
+            await self.execute("ALTER TABLE groups ADD COLUMN branch_id INTEGER")
         if "rate" not in acols:
             await self.execute("ALTER TABLE attendance ADD COLUMN rate INTEGER NOT NULL DEFAULT 0")
         if "phone" not in cols:  # eski bazani yangilash
@@ -346,15 +351,20 @@ def per_student_pay(rate: float, paid_sum: float) -> float:
     return float(rate)
 
 
-async def registry_rows(db, teacher_id, month=None):
+async def registry_rows(db, teacher_id, month=None, branch_id=None):
     """Reyestr o'quvchilari: [(guruh, kelgan darslar soni, summa)]. Summa har bir dars paytidagi
     stavka bo'yicha (attendance.rate) hisoblanadi, o'qituvchiga 100% beriladi."""
     month = month or current_month()
-    rows = await fetchall(db, """
+    sql = """
         SELECT g.name AS name, COUNT(*) AS lessons, COALESCE(SUM(a.rate),0) AS total
         FROM attendance a JOIN groups g ON g.id=a.group_id
-        WHERE g.teacher_id=? AND a.present=1 AND a.rate>0 AND a.day LIKE ?
-        GROUP BY g.id ORDER BY g.name""", (teacher_id, month + "-%"))
+        WHERE g.teacher_id=? AND a.present=1 AND a.rate>0 AND a.day LIKE ?"""
+    args = [teacher_id, month + "-%"]
+    if branch_id:
+        sql += " AND g.branch_id=?"
+        args.append(branch_id)
+    sql += " GROUP BY g.id ORDER BY g.name"
+    rows = await fetchall(db, sql, tuple(args))
     return [(r["name"], r["lessons"], r["total"]) for r in rows]
 
 
@@ -365,14 +375,20 @@ async def registry_total(db, month=None):
     return row["t"]
 
 
-async def teacher_salary(db, teacher_id, month=None):
-    """Return (pay_type, pay_value, [(group, income, paid_count)], salary)."""
+async def teacher_salary(db, teacher_id, month=None, branch_id=None):
+    """Return (pay_type, pay_value, [(group, income, paid_count)], salary).
+    branch_id berilsa, faqat shu filialdagi guruhlar bo'yicha hisoblanadi."""
     month = month or current_month()
     t = await fetchone(db, "SELECT * FROM teachers WHERE tg_id=?", (teacher_id,))
     if not t:
         return None
     rows, total = [], 0.0
-    for g in await fetchall(db, "SELECT * FROM groups WHERE teacher_id=?", (teacher_id,)):
+    sql = "SELECT * FROM groups WHERE teacher_id=?"
+    args = [teacher_id]
+    if branch_id:
+        sql += " AND branch_id=?"
+        args.append(branch_id)
+    for g in await fetchall(db, sql, tuple(args)):
         income = await group_income(db, g["id"], month)
         studs = await group_students(db, g["id"], month)
         rows.append((g["name"], income, sum(1 for s in studs if s["paid"] and not s["is_registry"])))
@@ -380,5 +396,5 @@ async def teacher_salary(db, teacher_id, month=None):
             total += income * t["pay_value"] / 100
         else:
             total += sum(per_student_pay(t["pay_value"], s["paid_sum"]) for s in studs)
-    total += sum(r[2] for r in await registry_rows(db, teacher_id, month))  # reyestr: 100%
+    total += sum(r[2] for r in await registry_rows(db, teacher_id, month, branch_id))  # reyestr: 100%
     return t["pay_type"], t["pay_value"], rows, total

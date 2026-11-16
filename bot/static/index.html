@@ -156,15 +156,15 @@ const ST = {
 };
 const CYCLE = ['present','absent','late','excused'];
 const WD = ['Ya','Du','Se','Ch','Pa','Ju','Sh'];
-const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, q:'', open:new Set(), busy:false,
-  stu:{view:'groups', groups:[], teachers:[], students:[], searching:false, searchResults:null, q:'', debtOnly:false,
+const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, dashBranch:null, dashBranches:null, q:'', open:new Set(), busy:false,
+  stu:{view:'groups', groups:[], teachers:[], branches:[], students:[], searching:false, searchResults:null, q:'', debtOnly:false,
        group:null, detail:null, formBack:'groups', detailBack:'groups', payOpen:false, payAmount:'', moveOpen:false, moveTo:'',
        payHistOpen:false, payHistory:null, parentOpen:false, parentLink:null, parentLoading:false, parentCopied:false,
        examHistOpen:false, examHistory:null,
        form:null, toast:'', gform:null},
   salary:{loading:false, data:null, month:null},
   xport:{busy:false, error:'', month:null},
-  hr:{view:'home', teachers:[], admins:[], registry:null, toast:'', tform:null, aform:null},
+  hr:{view:'home', teachers:[], admins:[], branches:[], registry:null, toast:'', tform:null, aform:null, bform:null},
   notif:{count:0, items:null, loading:false, from:null},
   exam:{view:'list', groupId:null, groupName:'', list:[], loading:false, form:null, detail:null, students:[], scores:{}, grades:{}, gradeOptions:[], toast:'', notLinked:null},
   cert:{view:'groups', groups:[], group:null, students:[], subjects:[], grades:[], detail:null, detailCerts:[],
@@ -350,9 +350,14 @@ function viewDone() {
 }
 
 /* ---------- panel (admin / direktor) ---------- */
-async function loadDash() {
+async function loadDash(branchId) {
+  if (branchId !== undefined) S.dashBranch = branchId;
   $app.innerHTML = '<div class="spin"></div>';
-  try { S.dash = await api('/api/dashboard'); S.view = 'dash'; S.tab = 'dash'; render(); } catch (e) { fail(e); }
+  try {
+    if (!S.dashBranches) { const b = await api('/api/branches'); S.dashBranches = b.branches; }
+    const q = S.dashBranch ? `?branch=${S.dashBranch}` : '';
+    S.dash = await api('/api/dashboard' + q); S.view = 'dash'; S.tab = 'dash'; render();
+  } catch (e) { fail(e); }
 }
 function barChart(months) {
   const max = Math.max(1, ...months.map(m => m.income + m.registry));
@@ -377,6 +382,10 @@ function viewDash() {
   const groups = [...d.groups].sort((a, b) => b.debtors - a.debtors);
   return `<div class="top"><h1 style="padding-top:0">Panel</h1><span style="margin-left:auto;display:flex;gap:8px">${notifBell()}<button class="iconbtn" data-act="export-open" title="Excel yuklab olish">📥</button></span></div>
     <div class="sub" style="margin-top:-6px">${d.month}</div>
+    ${S.dashBranches && S.dashBranches.length ? `<div class="strip">
+      <button class="dchip ${!S.dashBranch ? 'on' : ''}" data-act="dash-branch" data-id="">🏢 Barchasi</button>
+      ${S.dashBranches.map(b => `<button class="dchip ${String(S.dashBranch) === String(b.id) ? 'on' : ''}"
+        data-act="dash-branch" data-id="${b.id}">${esc(b.name)}</button>`).join('')}</div>` : ''}
     <div class="kpis">
       <div class="kpi"><div class="l">Tushum</div><div class="v">${short(cur.income)}</div>
         <div class="d ${diff >= 0 ? 'up' : 'dn'}">${diff >= 0 ? '▲' : '▼'} ${short(Math.abs(diff))} o'tgan oyga nisbatan</div></div>
@@ -406,7 +415,7 @@ async function loadStudentsTab() {
   $app.innerHTML = '<div class="spin"></div>';
   try {
     const d = await api('/api/groups');
-    S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    S.stu.groups = d.groups; S.stu.teachers = d.teachers || []; S.stu.branches = d.branches || [];
     S.stu.view = 'groups'; render();
   } catch (e) { fail(e); }
 }
@@ -583,15 +592,15 @@ async function loadStaffTab() {
   if (S.hr.teachers.length || S.hr.admins.length) { S.hr.view = 'home'; render(); return; }
   $app.innerHTML = '<div class="spin"></div>';
   try {
-    const [t, a, r] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry')]);
-    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r;
+    const [t, a, r, b] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry'), api('/api/branches')]);
+    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r; S.hr.branches = b.branches;
     S.hr.view = 'home'; render();
   } catch (e) { fail(e); }
 }
 async function refreshStaff() {
   try {
-    const [t, a, r] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry')]);
-    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r;
+    const [t, a, r, b] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry'), api('/api/branches')]);
+    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r; S.hr.branches = b.branches;
   } catch (e) {}
 }
 function viewHrHome() {
@@ -619,7 +628,13 @@ function viewHrHome() {
       <div class="actions2" style="grid-template-columns:1fr 1fr">
         <button class="abtn" data-act="hr-reg" data-hide="1" ${r.hidden_mode ? 'disabled' : ''}>🙈 Hammasini yashirish</button>
         <button class="abtn" data-act="hr-reg" data-hide="0" ${!r.hidden_mode ? 'disabled' : ''}>👁 Hammasini ochish</button>
-      </div></div>` : ''}`;
+      </div></div>` : ''}
+    <div class="sec">🏢 Filiallar</div>
+    <div class="list">${h.branches.map(b => `<div class="srow-row" data-act="hr-branch-open" data-id="${b.id}">
+        <div class="who"><div class="name">${esc(b.name)}</div><div class="meta">${b.groups} ta guruh</div></div>
+        <span class="sub">▸</span></div>`).join('') || '<div class="empty">Filiallar yo\'q</div>'}</div>
+    <button class="gcard" data-act="hr-branch-add" style="border:1.5px dashed var(--line);background:transparent;margin-top:8px">
+      <div class="t">➕ Yangi filial</div></button>`;
 }
 function hrBack() { S.hr.view = 'home'; render(); }
 function viewHrTeacherForm() {
@@ -652,7 +667,53 @@ function viewHrAdminForm() {
     <div class="form-actions"><button class="secondary" data-act="hr-back">Bekor qilish</button>
       <button class="primary" data-act="hr-admin-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : "Qo'shish"}</button></div>`;
 }
-const HR_VIEWS = {home: viewHrHome, tform: viewHrTeacherForm, aform: viewHrAdminForm};
+function viewHrBranchForm() {
+  const f = S.hr.bform, isEdit = f.mode === 'edit';
+  return `<div class="top"><button class="back" data-act="hr-back">‹</button><h1>${isEdit ? 'Filialni tahrirlash' : 'Yangi filial'}</h1></div>
+    ${S.hr.toast ? `<div class="toast">${esc(S.hr.toast)}</div>` : ''}
+    <div class="field"><label>Filial nomi <span class="req">*</span></label>
+      <input class="input" id="b_name" placeholder="masalan Chilonzor" value="${esc(f.name)}" autocomplete="off"></div>
+    <div class="form-actions"><button class="secondary" data-act="hr-back">Bekor qilish</button>
+      <button class="primary" data-act="hr-branch-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : 'Saqlash'}</button></div>
+    ${isEdit ? `<button class="abtn danger" style="width:100%;margin-top:20px" data-act="hr-branch-del" data-id="${f.id}">🗑 Filialni o'chirish</button>` : ''}`;
+}
+function hrNewBranch() { S.hr.bform = {mode:'add', id:null, name:''}; S.hr.toast = ''; S.hr.view = 'bform'; render(); }
+function hrOpenBranch(id) {
+  const b = S.hr.branches.find(x => x.id === id);
+  if (!b) return;
+  S.hr.bform = {mode:'edit', id, name:b.name}; S.hr.toast = ''; S.hr.view = 'bform'; render();
+}
+async function hrSaveBranch() {
+  const f = S.hr.bform;
+  f.name = document.getElementById('b_name').value.trim();
+  if (f.name.length < 1) return alert('Filial nomini kiriting.');
+  S.busy = true; render();
+  try {
+    if (f.mode === 'add') await api('/api/branches', {method:'POST', body: JSON.stringify({name:f.name})});
+    else await api(`/api/branches/${f.id}`, {method:'PATCH', body: JSON.stringify({name:f.name})});
+    haptic('medium');
+    await refreshStaff();
+    S.dashBranches = null; S.stu.groups = [];
+    S.hr.view = 'home';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function hrDeleteBranch(bid) {
+  const b = S.hr.branches.find(x => x.id === bid);
+  const msg = `${b ? b.name : ''} filiali o'chirilsinmi? Undagi guruhlar o'chmaydi, faqat filialsiz qoladi.`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  S.busy = true; render();
+  try {
+    await api(`/api/branches/${bid}`, {method:'DELETE'});
+    haptic('medium');
+    await refreshStaff();
+    S.dashBranches = null; S.stu.groups = [];
+    S.hr.view = 'home';
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+const HR_VIEWS = {home: viewHrHome, tform: viewHrTeacherForm, aform: viewHrAdminForm, bform: viewHrBranchForm};
 
 function hrOpenTeacher(id) {
   const t = S.hr.teachers.find(x => x.id === id);
@@ -794,6 +855,7 @@ function viewStuGroups() {
   const groups = st.groups;
   const cards = groups.map(g => `<div class="gcard" data-act="stu-group" data-id="${g.id}" style="cursor:pointer">
     <div style="flex:1;min-width:0"><div class="t">${esc(g.name)}</div><div class="sub">${g.students} ta o'quvchi${g.teacher ? ' · 👨‍🏫 ' + esc(g.teacher) : ''}
+      ${g.branch_name ? ' · 🏢 ' + esc(g.branch_name) : ''}
       ${g.debtors ? ' · <span style="color:var(--no);font-weight:600">❌ ' + g.debtors + '</span>' : ''}</div></div>
     ${staff ? `<button class="iconbtn" style="width:40px;height:40px;font-size:16px;flex:none" data-act="stu-gedit" data-id="${g.id}">⚙️</button>` : '<span class="sub">▸</span>'}</div>`).join('');
   const addGroup = staff ? `<button class="gcard" data-act="stu-gform" style="border:1.5px dashed var(--line);background:transparent">
@@ -933,6 +995,9 @@ function viewStuGroupForm() {
     <div class="field"><label>O'qituvchi</label>
       <select class="input" id="g_teacher"><option value="">— keyinroq biriktirish —</option>
         ${S.stu.teachers.map(t => `<option value="${t.id}" ${String(t.id) === String(f.teacher) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>
+    ${S.stu.branches.length ? `<div class="field"><label>🏢 Filial</label>
+      <select class="input" id="g_branch"><option value="">— filialsiz —</option>
+        ${S.stu.branches.map(b => `<option value="${b.id}" ${String(b.id) === String(f.branch) ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>` : ''}
     <div class="form-actions"><button class="secondary" data-act="stu-gform-back">Bekor qilish</button>
       <button class="primary" data-act="stu-gform-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : "Yaratish"}</button></div>`;
 }
@@ -1018,12 +1083,15 @@ async function saveGroup() {
   const f = S.stu.gform;
   f.name = document.getElementById('g_name').value.trim();
   f.teacher = document.getElementById('g_teacher').value;
+  const branchEl = document.getElementById('g_branch');
+  f.branch = branchEl ? branchEl.value : '';
   if (f.name.length < 1) return alert('Guruh nomini kiriting.');
   S.busy = true; render();
   try {
-    const r = await api('/api/groups', {method:'POST', body: JSON.stringify({name:f.name, teacher:f.teacher || null})});
+    const r = await api('/api/groups', {method:'POST', body: JSON.stringify(
+      {name:f.name, teacher:f.teacher || null, branch:f.branch || null})});
     haptic('medium');
-    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || []; S.stu.branches = d.branches || [];
     S.stu.view = 'groups';
   } catch (e) { S.stu.toast = ''; alert(e.message); }
   S.busy = false; render();
@@ -1034,7 +1102,7 @@ const WD_SHORT = [['1','Du'],['2','Se'],['3','Ch'],['4','Pa'],['5','Ju'],['6','S
 function openGroupEdit(gid) {
   const g = S.stu.groups.find(x => x.id === gid);
   if (!g) return;
-  S.stu.gedit = {id: gid, name: g.name, teacher: g.teacherId ?? '',
+  S.stu.gedit = {id: gid, name: g.name, teacher: g.teacherId ?? '', branch: g.branch_id ?? '',
     days: new Set((g.lesson_days || '').split(',').filter(Boolean)), time: g.lesson_time || ''};
   S.stu.toast = '';
   S.stu.view = 'gedit';
@@ -1052,6 +1120,9 @@ function viewGroupEdit() {
     <div class="field"><label>O'qituvchi</label>
       <select class="input" id="ge_teacher"><option value="">— biriktirilmagan —</option>
         ${S.stu.teachers.map(t => `<option value="${t.id}" ${String(t.id) === String(f.teacher) ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></div>
+    ${S.stu.branches.length ? `<div class="field"><label>🏢 Filial</label>
+      <select class="input" id="ge_branch"><option value="">— filialsiz —</option>
+        ${S.stu.branches.map(b => `<option value="${b.id}" ${String(b.id) === String(f.branch) ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>` : ''}
     <div class="field"><label>🗓 Dars kunlari (ixtiyoriy)</label><div class="strip" style="padding-top:0">${dayChips}</div></div>
     <div class="field"><label>⏰ Dars vaqti</label>
       <input class="input" id="ge_time" type="time" value="${esc(f.time)}"></div>
@@ -1065,13 +1136,16 @@ async function saveGroupEdit() {
   const name = document.getElementById('ge_name').value.trim();
   const teacher = document.getElementById('ge_teacher').value;
   const time = document.getElementById('ge_time').value;
+  const branchEl = document.getElementById('ge_branch');
+  const branch = branchEl ? branchEl.value : '';
   if (!name) return alert('Guruh nomini kiriting.');
   S.busy = true; render();
   try {
     await api(`/api/groups/${f.id}`, {method:'PATCH', body: JSON.stringify(
-      {name, teacher: teacher || null, lesson_days: [...f.days].sort().join(','), lesson_time: time})});
+      {name, teacher: teacher || null, branch: branch || null,
+       lesson_days: [...f.days].sort().join(','), lesson_time: time})});
     haptic('medium');
-    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || []; S.stu.branches = d.branches || [];
     S.stu.view = 'groups';
   } catch (e) { alert(e.message); }
   S.busy = false; render();
@@ -1085,7 +1159,7 @@ async function deleteGroupEdit() {
   try {
     await api(`/api/groups/${S.stu.gedit.id}`, {method:'DELETE'});
     haptic('medium');
-    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || [];
+    const d = await api('/api/groups'); S.stu.groups = d.groups; S.stu.teachers = d.teachers || []; S.stu.branches = d.branches || [];
     S.stu.view = 'groups';
   } catch (e) { alert(e.message); }
   S.busy = false; render();
@@ -1418,7 +1492,7 @@ document.addEventListener('click', e => {
   else if (act === 'back') backToGroups();
   else if (act === 'tab') {
     S.tab = t.dataset.tab;
-    if (t.dataset.tab === 'dash') (S.dash ? (S.view = 'dash', render()) : loadDash());
+    if (t.dataset.tab === 'dash') ((S.dash && S.dashBranches) ? (S.view = 'dash', render()) : loadDash());
     else if (t.dataset.tab === 'stu') loadStudentsTab();
     else if (t.dataset.tab === 'sal') (S.salary.data ? (S.view = 'sal', render()) : loadSalary());
     else if (t.dataset.tab === 'hr') loadStaffTab();
@@ -1460,7 +1534,7 @@ document.addEventListener('click', e => {
   else if (act === 'stu-pay-send') sendPayment();
   else if (act === 'stu-move-send') sendMove();
   else if (act === 'stu-delete') deleteStudent();
-  else if (act === 'stu-gform') { S.stu.gform = {name:'', teacher:''}; S.stu.toast = ''; S.stu.view = 'gform'; render(); }
+  else if (act === 'stu-gform') { S.stu.gform = {name:'', teacher:'', branch:''}; S.stu.toast = ''; S.stu.view = 'gform'; render(); }
   else if (act === 'stu-gform-back') { S.stu.view = 'groups'; render(); }
   else if (act === 'stu-gform-save') saveGroup();
   else if (act === 'stu-gedit') openGroupEdit(id);
@@ -1470,6 +1544,7 @@ document.addEventListener('click', e => {
   else if (act === 'stu-gedit-delete') deleteGroupEdit();
   else if (act === 'stu-word') downloadGroupRoster();
   else if (act === 'export-open') { S.xport = {busy:false, error:'', month: monthsBack(6)[0]}; S.view = 'xport'; render(); }
+  else if (act === 'dash-branch') loadDash(t.dataset.id ? Number(t.dataset.id) : null);
   else if (act === 'xp-back') { S.view = 'dash'; S.tab = 'dash'; render(); }
   else if (act === 'xp-month') { S.xport.month = t.dataset.month; render(); }
   else if (act === 'xp-go') downloadExport(t.dataset.type, t.dataset.month || S.xport.month);
@@ -1482,6 +1557,10 @@ document.addEventListener('click', e => {
   else if (act === 'hr-admin-save') hrSaveAdmin();
   else if (act === 'hr-admin-del') hrDeleteAdmin(id);
   else if (act === 'hr-reg') hrToggleRegistry(t.dataset.hide === '1');
+  else if (act === 'hr-branch-add') hrNewBranch();
+  else if (act === 'hr-branch-open') hrOpenBranch(id);
+  else if (act === 'hr-branch-save') hrSaveBranch();
+  else if (act === 'hr-branch-del') hrDeleteBranch(Number(t.dataset.id));
   else if (act === 'notif-open') openNotif(S.view, S.tab);
   else if (act === 'notif-back') notifBack();
   else if (act === 'notif-item') notifGo(Number(t.dataset.i));
