@@ -198,9 +198,9 @@ async def api_attendance_post(request):
     return web.json_response({"ok": True, **res})
 
 
-async def _gather_salaries(db, month):
+async def _gather_salaries(db, month, branch_id=None):
     teachers = await db.fetchall("SELECT tg_id FROM teachers")
-    res = await asyncio.gather(*(D.teacher_salary(db, t["tg_id"], month) for t in teachers))
+    res = await asyncio.gather(*(D.teacher_salary(db, t["tg_id"], month, branch_id) for t in teachers))
     return sum(r[3] for r in res if r)
 
 
@@ -209,6 +209,12 @@ async def api_dashboard(request):
     if role not in ("admin", "director"):
         return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
+    branch_id = None
+    if request.query.get("branch"):
+        try:
+            branch_id = int(request.query["branch"])
+        except Exception:
+            return bad("Filial noto'g'ri")
     today = D.today_local()
     cur = D.current_month()
     months, y, m = [], today.year, today.month
@@ -219,19 +225,24 @@ async def api_dashboard(request):
             y, m = y - 1, 12
     months.reverse()
     ph = ",".join("?" * len(months))
+    bcond = " AND g.branch_id=?" if branch_id else ""
+    bargs = (branch_id,) if branch_id else ()
     inc = {r["month"]: r["t"] for r in await db.fetchall(
-        f"SELECT month, SUM(amount) t FROM payments WHERE month IN ({ph}) GROUP BY month", tuple(months))}
+        f"SELECT p.month, SUM(p.amount) t FROM payments p JOIN groups g ON g.id=p.group_id "
+        f"WHERE p.month IN ({ph}){bcond} GROUP BY p.month", tuple(months) + bargs)}
     reg = {}
     for r in await db.fetchall(
-            "SELECT substr(day,1,7) mo, SUM(rate) t FROM attendance WHERE present=1 AND substr(day,1,7) IN "
-            f"({ph}) GROUP BY mo", tuple(months)):
+            f"SELECT substr(a.day,1,7) mo, SUM(a.rate) t FROM attendance a JOIN groups g ON g.id=a.group_id "
+            f"WHERE a.present=1 AND substr(a.day,1,7) IN ({ph}){bcond} GROUP BY mo", tuple(months) + bargs):
         reg[r["mo"]] = r["t"]
-    groups = await db.fetchall("""
+    gcond = " WHERE g.branch_id=?" if branch_id else ""
+    groups = await db.fetchall(f"""
         SELECT g.id, g.name, u.full_name AS teacher, COUNT(s.id) AS n,
                COALESCE(SUM(CASE WHEN s.is_registry=1 OR EXISTS(
                    SELECT 1 FROM payments p WHERE p.student_id=s.id AND p.month=?) THEN 1 ELSE 0 END),0) AS paid
         FROM groups g LEFT JOIN students s ON s.group_id=g.id AND s.hidden=0
-        LEFT JOIN users u ON u.tg_id=g.teacher_id GROUP BY g.id ORDER BY g.name""", (cur,))
+        LEFT JOIN users u ON u.tg_id=g.teacher_id{gcond} GROUP BY g.id ORDER BY g.name""",
+        (cur,) + bargs)
     g_inc = {r["group_id"]: r["t"] for r in await db.fetchall(
         "SELECT group_id, SUM(amount) t FROM payments WHERE month=? GROUP BY group_id", (cur,))}
     g_att = {r["group_id"]: (r["p"], r["n"]) for r in await db.fetchall(
@@ -245,15 +256,16 @@ async def api_dashboard(request):
                            "att": round(p * 100 / n) if n else None})
     total_students = sum(g["students"] for g in out_groups)
     total_debtors = sum(g["debtors"] for g in out_groups)
-    att_all = await db.fetchone("SELECT COALESCE(SUM(present),0) p, COUNT(*) n FROM attendance WHERE day LIKE ?",
-                                (cur + "-%",))
+    att_all = await db.fetchone(
+        f"SELECT COALESCE(SUM(a.present),0) p, COUNT(*) n FROM attendance a JOIN groups g ON g.id=a.group_id "
+        f"WHERE a.day LIKE ?{bcond}", (cur + "-%",) + bargs)
     data = {
-        "role": role, "month": cur,
+        "role": role, "month": cur, "branch": branch_id,
         "months": [{"month": mo, "income": inc.get(mo, 0), "registry": reg.get(mo, 0)} for mo in months],
         "groups": out_groups, "students": total_students, "debtors": total_debtors,
         "att": round(att_all["p"] * 100 / att_all["n"]) if att_all["n"] else None}
     if role == "director":
-        sal = await _gather_salaries(db, cur)
+        sal = await _gather_salaries(db, cur, branch_id)
         data["salaries"] = round(sal)
         data["remaining"] = round(inc.get(cur, 0) + reg.get(cur, 0) - sal)
     return web.json_response(data)
@@ -284,12 +296,14 @@ async def api_groups(request):
     uid, role, _ = await auth(request)
     db = request.app["db"]
     if role == "teacher":
-        groups = await db.fetchall("SELECT id, name, lesson_days, lesson_time FROM groups "
-                                   "WHERE teacher_id=? ORDER BY name", (uid,))
+        groups = await db.fetchall("SELECT g.id, g.name, g.lesson_days, g.lesson_time, g.branch_id, "
+                                   "b.name AS branch_name FROM groups g LEFT JOIN branches b ON b.id=g.branch_id "
+                                   "WHERE g.teacher_id=? ORDER BY g.name", (uid,))
     else:
         groups = await db.fetchall("SELECT g.id, g.name, g.teacher_id AS teacherId, u.full_name AS teacher, "
-                                   "g.lesson_days, g.lesson_time FROM groups g "
-                                   "LEFT JOIN users u ON u.tg_id=g.teacher_id ORDER BY g.name")
+                                   "g.lesson_days, g.lesson_time, g.branch_id, b.name AS branch_name FROM groups g "
+                                   "LEFT JOIN users u ON u.tg_id=g.teacher_id "
+                                   "LEFT JOIN branches b ON b.id=g.branch_id ORDER BY g.name")
     counts = {r["group_id"]: r["n"] for r in await db.fetchall(
         "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 GROUP BY group_id")}
     paid_ids = {r["student_id"] for r in await db.fetchall(
@@ -300,7 +314,74 @@ async def api_groups(request):
         out["teachers"] = [dict(t) for t in await db.fetchall(
             "SELECT u.tg_id AS id, u.full_name AS name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
             "ORDER BY u.full_name")]
+        out["branches"] = [dict(b) for b in await db.fetchall("SELECT id, name FROM branches ORDER BY name")]
     return web.json_response(out)
+
+
+# ---------------- Filiallar (faqat direktor) ----------------
+async def api_branches_get(request):
+    await auth(request)
+    db = request.app["db"]
+    rows = await db.fetchall(
+        "SELECT b.id, b.name, (SELECT COUNT(*) FROM groups g WHERE g.branch_id=b.id) AS groups "
+        "FROM branches b ORDER BY b.name")
+    return web.json_response({"branches": [dict(r) for r in rows]})
+
+
+async def api_branch_post(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        body = await request.json()
+        name = clean_text(body.get("name"), 60)
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    if not name:
+        return bad("Filial nomini kiriting")
+    if await db.fetchone("SELECT 1 FROM branches WHERE name=?", (name,)):
+        return bad("Bunday nomli filial bor")
+    await db.execute("INSERT INTO branches(name) VALUES(?)", (name,))
+    b = await db.fetchone("SELECT id FROM branches WHERE name=?", (name,))
+    return web.json_response({"ok": True, "id": b["id"]})
+
+
+async def api_branch_patch(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        bid = int(request.match_info["bid"])
+        body = await request.json()
+        name = clean_text(body.get("name"), 60)
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    if not name:
+        return bad("Filial nomini kiriting")
+    if not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (bid,)):
+        return bad("Topilmadi", 404)
+    if await db.fetchone("SELECT 1 FROM branches WHERE name=? AND id<>?", (name, bid)):
+        return bad("Bunday nomli filial bor")
+    await db.execute("UPDATE branches SET name=? WHERE id=?", (name, bid))
+    return web.json_response({"ok": True})
+
+
+async def api_branch_delete(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        bid = int(request.match_info["bid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    if not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (bid,)):
+        return bad("Topilmadi", 404)
+    await db.execute("UPDATE groups SET branch_id=NULL WHERE branch_id=?", (bid,))
+    await db.execute("DELETE FROM branches WHERE id=?", (bid,))
+    return web.json_response({"ok": True})
 
 
 async def api_groups_post(request):
@@ -313,15 +394,19 @@ async def api_groups_post(request):
         name = clean_text(body.get("name"), 40)
         teacher = body.get("teacher")
         teacher = int(teacher) if teacher else None
+        branch = body.get("branch")
+        branch = int(branch) if branch else None
     except Exception:
         return bad("So'rov noto'g'ri")
     if not name:
         return bad("Guruh nomini kiriting")
     if teacher and not await db.fetchone("SELECT 1 FROM teachers WHERE tg_id=?", (teacher,)):
         return bad("O'qituvchi topilmadi")
+    if branch and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch,)):
+        return bad("Filial topilmadi")
     if await db.fetchone("SELECT 1 FROM groups WHERE name=?", (name,)):
         return bad("Bunday nomli guruh bor")
-    await db.execute("INSERT INTO groups(name, teacher_id) VALUES(?,?)", (name, teacher))
+    await db.execute("INSERT INTO groups(name, teacher_id, branch_id) VALUES(?,?,?)", (name, teacher, branch))
     g = await db.fetchone("SELECT id FROM groups WHERE name=?", (name,))
     return web.json_response({"ok": True, "id": g["id"]})
 
@@ -1017,6 +1102,12 @@ async def api_group_patch(request):
         if tid and not await db.fetchone("SELECT 1 FROM teachers WHERE tg_id=?", (tid,)):
             return bad("O'qituvchi topilmadi")
         await db.execute("UPDATE groups SET teacher_id=? WHERE id=?", (tid, gid))
+    if "branch" in body:
+        bid = body["branch"]
+        bid = int(bid) if bid else None
+        if bid and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (bid,)):
+            return bad("Filial topilmadi")
+        await db.execute("UPDATE groups SET branch_id=? WHERE id=?", (bid, gid))
     if "name" in body:
         name = clean_text(body["name"], 40)
         if not name:
@@ -1246,6 +1337,10 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_post("/api/attendance", api_attendance_post)
     app.router.add_get("/api/dashboard", api_dashboard)
     app.router.add_get("/api/groups", api_groups)
+    app.router.add_get("/api/branches", api_branches_get)
+    app.router.add_post("/api/branches", api_branch_post)
+    app.router.add_patch("/api/branches/{bid}", api_branch_patch)
+    app.router.add_delete("/api/branches/{bid}", api_branch_delete)
     app.router.add_post("/api/groups", api_groups_post)
     app.router.add_get("/api/students", api_students_get)
     app.router.add_post("/api/students", api_students_post)

@@ -73,6 +73,16 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - **Dars jadvali** (🗓): dars kunlari va vaqti; davomat olinmasa o'qituvchiga (20 daqiqadan keyin) va adminga (2 soatdan keyin) eslatma.
 - Vaqt Toshkent bo'yicha (`TZ_OFFSET=5`).
 
+## Filiallar
+O'quv markaz bir nechta filial (shahar/tuman bo'limi) bilan ishlashi mumkin. Direktorga **"👨‍🏫 Xodimlar"** bo'limida
+**"🏢 Filiallar"** bo'limi: filial qo'shish/nomini o'zgartirish/o'chirish (faqat direktor huquqi). Guruh
+qo'shish/tahrirlashda (admin/direktor) guruhga filial tanlanadi (ixtiyoriy — filialsiz ham bo'lishi mumkin).
+O'qituvchining o'zi filialga biriktirilmaydi — turli filiallardagi guruhlarni bitta o'qituvchi olib borishi mumkin,
+faqat guruh qaysi filialga tegishli ekanligi muhim. **Panel** sahifasida filial bo'yicha filtr chiplari bor —
+"🏢 Barchasi" yoki aniq bitta filialni tanlab, shu filialning tushumi, qarzdorlari, davomat foizi, 6 oylik grafigi
+va (direktorga) o'sha filialdagi guruhlar uchun hisoblangan o'qituvchilar oyligi alohida ko'rsatiladi. Filial
+o'chirilsa, undagi guruhlar o'chmaydi — faqat filialsiz holatga o'tadi.
+
 ## Sertifikatlar
 Pastki **"🎓 Sertifikat"** tab (hamma rollar). Guruhni tanlab, o'quvchini oching — har bir fan bo'yicha
 (Matematika, Fizika, Kimyo, Biologiya, Ona tili va adabiyot, Ingliz tili, Rus tili, Tarix, Geografiya, Informatika)
