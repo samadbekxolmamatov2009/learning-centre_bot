@@ -386,6 +386,9 @@ function viewDash() {
       <button class="dchip ${!S.dashBranch ? 'on' : ''}" data-act="dash-branch" data-id="">🏢 Barchasi</button>
       ${S.dashBranches.map(b => `<button class="dchip ${String(S.dashBranch) === String(b.id) ? 'on' : ''}"
         data-act="dash-branch" data-id="${b.id}">${esc(b.name)}</button>`).join('')}</div>` : ''}
+    ${d.branch && d.orphan_income ? `<div class="notice">⚠️ Bu oy ichida ${short(d.orphan_income)} so'm o'chirilgan
+      guruh(lar)dan tushgan to'lov bor — ularning qaysi filialga tegishli ekani noma'lum bo'lgani uchun,
+      bu summa aynan shu filial ko'rsatkichiga qo'shilmagan ("🏢 Barchasi"da esa hisoblangan).</div>` : ''}
     <div class="kpis">
       <div class="kpi"><div class="l">Tushum</div><div class="v">${short(cur.income)}</div>
         <div class="d ${diff >= 0 ? 'up' : 'dn'}">${diff >= 0 ? '▲' : '▼'} ${short(Math.abs(diff))} o'tgan oyga nisbatan</div></div>
