@@ -75,6 +75,13 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - **Dars jadvali** (🗓): dars kunlari va vaqti; davomat olinmasa o'qituvchiga (20 daqiqadan keyin) va adminga (2 soatdan keyin) eslatma.
 - Vaqt Toshkent bo'yicha (`TZ_OFFSET=5`).
 
+## O'qituvchilar reytingi (faqat direktor)
+Panelda **"🏆"** tugmasi — barcha o'qituvchilarni solishtiruvchi ro'yxat: har biri uchun guruhlar/o'quvchilar soni,
+joriy oy tushumi, qarzdorlar foizi va davomat foizi. Ro'yxat **eng kam qarzdorlikdan eng ko'pigacha** tartiblanadi
+(eng yaxshi natija birinchi), va alohida "🏆 eng yaxshi davomat" / "⚠️ eng ko'p qarzdor" o'qituvchi ajratib
+ko'rsatiladi. Panel'dagi filial filtri bilan birga ishlaydi — faqat shu filialdagi guruhlar bo'yicha hisoblanadi.
+Hech qanday guruhi yo'q o'qituvchilar ro'yxatda ko'rinmaydi.
+
 ## Qarzdorlarga to'lov eslatmasi (faqat direktor)
 Panel sahifasida (yuqorida) **"📢"** tugmasi — shu oydagi **barcha** qarzdor o'quvchilarning ulangan ota-onalariga
 avtomatik Telegram xabari yuboradi ("Hurmatli ota-ona! [O'quvchi] uchun [oy] oyi kurs to'lovini hali amalga
