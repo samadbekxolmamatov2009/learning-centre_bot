@@ -42,7 +42,9 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
   qaysi kunlari kelmagani, telefon qo'ng'irog'i tugmasi. Oxirgi **2 hafta** ichida 2 yoki undan ko'p marta kelmagan bo'lsa
   ogohlantirish chiqadi (faqat oxirgi 3 ta darsga emas, 2 haftalik davrga qarab). "Batafsil" tugmasi orqali oxirgi 20 tagacha
   dars (taxminan 1 oy) ko'rinadi. Holatlar: ✅ keldi, ❌ kelmadi, 🕒 kechikdi, 📝 sababli. O'tgan kun davomatini ham
-  tuzatish mumkin. Saqlanganda adminga PDF boradi.
+  tuzatish mumkin. Saqlanganda adminga PDF boradi, va **"❌ Kelmadi"** yoki **"🕒 Kechikdi"** deb belgilangan har bir
+  o'quvchining ulangan ota-onasiga avtomatik Telegram xabari ketadi ("sababli" uchun bormaydi). Ota-onasi ulanmagan
+  bo'lsa, shunchaki xabar yuborilmaydi (xato chiqmaydi).
 - **Panel** (admin/direktor): tushum, qarzdorlar, davomat, 6 oylik grafik, guruhlar bo'yicha ko'rsatkichlar.
 - **O'quvchilar bo'limi (Mini App)** (hamma, pastki "O'quvchilar" tab): guruh tanlab yoki qidirib o'quvchini topish,
   **bitta formada** yangi o'quvchi qo'shish (ism, familiya, sinf, telefon, guruh, admin/direktorga reyestr belgisi),
@@ -72,6 +74,13 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - Guruhlar: o'qituvchi -> guruh -> o'quvchi -> kartochka (bitta xabar tahrirlanadi), sahifalash, davomat tarixi.
 - **Dars jadvali** (🗓): dars kunlari va vaqti; davomat olinmasa o'qituvchiga (20 daqiqadan keyin) va adminga (2 soatdan keyin) eslatma.
 - Vaqt Toshkent bo'yicha (`TZ_OFFSET=5`).
+
+## O'qituvchilar reytingi (faqat direktor)
+Panelda **"🏆"** tugmasi — barcha o'qituvchilarni solishtiruvchi ro'yxat: har biri uchun guruhlar/o'quvchilar soni,
+joriy oy tushumi, qarzdorlar foizi va davomat foizi. Ro'yxat **eng kam qarzdorlikdan eng ko'pigacha** tartiblanadi
+(eng yaxshi natija birinchi), va alohida "🏆 eng yaxshi davomat" / "⚠️ eng ko'p qarzdor" o'qituvchi ajratib
+ko'rsatiladi. Panel'dagi filial filtri bilan birga ishlaydi — faqat shu filialdagi guruhlar bo'yicha hisoblanadi.
+Hech qanday guruhi yo'q o'qituvchilar ro'yxatda ko'rinmaydi.
 
 ## Qarzdorlarga to'lov eslatmasi (faqat direktor)
 Panel sahifasida (yuqorida) **"📢"** tugmasi — shu oydagi **barcha** qarzdor o'quvchilarning ulangan ota-onalariga

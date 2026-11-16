@@ -656,6 +656,50 @@ async def api_salary(request):
         "registry": [{"group": n, "lessons": l, "total": t} for n, l, t in reg], "total": round(total)})
 
 
+async def api_teacher_ranking(request):
+    """O'qituvchilarni solishtirish (faqat direktor): har bir o'qituvchi uchun joriy oy bo'yicha
+    o'quvchilar soni, tushum, qarzdorlar foizi, davomat foizi. branch berilsa, faqat shu filialdagi
+    guruhlar bo'yicha hisoblanadi, boshqa guruhlari bo'lsa ham ular inobatga olinmaydi."""
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    branch_id = None
+    if request.query.get("branch"):
+        try:
+            branch_id = int(request.query["branch"])
+        except Exception:
+            return bad("Filial noto'g'ri")
+    month = D.current_month()
+    out = []
+    for t in await db.fetchall(
+            "SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id ORDER BY u.full_name"):
+        sql = "SELECT * FROM groups WHERE teacher_id=?"
+        args = [t["tg_id"]]
+        if branch_id:
+            sql += " AND branch_id=?"
+            args.append(branch_id)
+        tgroups = await db.fetchall(sql, tuple(args))
+        if not tgroups:
+            continue
+        students = debtors = income = att_p = att_n = 0
+        for g in tgroups:
+            studs = await D.group_students(db, g["id"], month)
+            reg_cnt = sum(1 for s in studs if s["is_registry"])
+            paid = sum(1 for s in studs if s["paid"]) - reg_cnt
+            students += len(studs)
+            debtors += len(studs) - paid - reg_cnt
+            income += await D.group_income(db, g["id"], month)
+            att = await db.fetchone("SELECT COALESCE(SUM(present),0) p, COUNT(*) n FROM attendance "
+                                    "WHERE group_id=? AND day LIKE ?", (g["id"], month + "-%"))
+            att_p += att["p"]; att_n += att["n"]
+        out.append({
+            "id": t["tg_id"], "name": t["full_name"], "groups": len(tgroups), "students": students,
+            "debtors": debtors, "income": income, "att": round(att_p * 100 / att_n) if att_n else None})
+    out.sort(key=lambda x: (x["debtors"] / x["students"] if x["students"] else 0))
+    return web.json_response({"teachers": out, "month": month, "branch": branch_id})
+
+
 # ---------------- Nazorat/sinov natijalari ----------------
 def exam_out(e, avg=None, count=None):
     return {"id": e["id"], "group": e["group_id"], "title": e["title"], "max_score": e["max_score"],
@@ -1418,6 +1462,7 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_get("/api/payments", api_payments_get)
     app.router.add_delete("/api/payments/{pid}", api_payment_delete)
     app.router.add_get("/api/salary", api_salary)
+    app.router.add_get("/api/teacher-ranking", api_teacher_ranking)
     app.router.add_get("/api/teachers", api_teachers)
     app.router.add_post("/api/teachers", api_teacher_post)
     app.router.add_patch("/api/teachers/{tid}", api_teacher_patch)

@@ -1,8 +1,12 @@
 """Davomat: statuslar, tarix va saqlash (bot va Mini App uchun umumiy)."""
+import html
+import logging
 from datetime import date
 
 from aiogram import Bot
 from aiogram.types import BufferedInputFile
+
+log = logging.getLogger(__name__)
 
 from . import db as D
 from .pdfgen import attendance_pdf
@@ -82,6 +86,7 @@ async def save_attendance(db, bot: Bot | None, uid: int, gid: int, day: date, st
     reg_price = trow["registry_rate"] if trow else 0
     iso = day.isoformat()
     stmts, rows, absent_lines, counts, no_price = [], [], [], {k: 0 for k in STATUSES}, False
+    notify_students = []  # (student_id, name, status) - ota-onaga xabar boradigan holatlar
     for s in await D.group_students(db, gid):
         st = statuses.get(s["id"]) or statuses.get(str(s["id"])) or "present"
         if st not in STATUSES:
@@ -95,12 +100,29 @@ async def save_attendance(db, bot: Bot | None, uid: int, gid: int, day: date, st
                       "ON CONFLICT(group_id,day,student_id) DO UPDATE SET "
                       "present=excluded.present, rate=excluded.rate, status=excluded.status",
                       (gid, iso, s["id"], present, rate, st)))
-        rows.append((f"{s['last_name']} {s['first_name']}", s["grade"], s.get("phone") or "", st))
+        name = f"{s['last_name']} {s['first_name']}"
+        rows.append((name, s["grade"], s.get("phone") or "", st))
         if st in ("absent", "excused"):
             phone = f" 📞 {s['phone']}" if s.get("phone") else ""
             absent_lines.append(f"• {s['last_name']} {s['first_name']}{phone}" + (" (sababli)" if st == "excused" else ""))
+        if st in ("absent", "late"):
+            notify_students.append((s["id"], name, st))
     for i in range(0, len(stmts), 300):
         await db.batch(stmts[i:i + 300])
+
+    if bot is not None and notify_students:
+        for sid, name, st in notify_students:
+            parents = await db.fetchall("SELECT parent_tg_id FROM parent_links WHERE student_id=?", (sid,))
+            if not parents:
+                continue
+            icon, label = STATUSES[st][0], STATUSES[st][1]
+            text = (f"{icon} <b>{html.escape(name)}</b> bugun ({day:%d.%m.%Y}) <b>{html.escape(g['name'])}</b> "
+                   f"darsiga {html.escape(label.lower())}.")
+            for p in parents:
+                try:
+                    await bot.send_message(p["parent_tg_id"], text, parse_mode="HTML")
+                except Exception:
+                    log.warning("Ota-onaga davomat xabari yuborilmadi: %s", p["parent_tg_id"], exc_info=True)
 
     sent = 0
     if bot is not None:

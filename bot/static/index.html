@@ -163,6 +163,7 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, dashBranch
        examHistOpen:false, examHistory:null,
        form:null, toast:'', gform:null},
   salary:{loading:false, data:null, month:null},
+  rank:{loading:false, data:null, branch:null},
   xport:{busy:false, error:'', month:null},
   hr:{view:'home', teachers:[], admins:[], branches:[], registry:null, toast:'', tform:null, aform:null, bform:null},
   notif:{count:0, items:null, loading:false, from:null},
@@ -397,7 +398,8 @@ function viewDash() {
   const dp = d.students ? Math.round(d.debtors * 100 / d.students) : 0;
   const groups = [...d.groups].sort((a, b) => b.debtors - a.debtors);
   return `<div class="top"><h1 style="padding-top:0">Panel</h1><span style="margin-left:auto;display:flex;gap:8px">${notifBell()}
-      ${d.role === 'director' ? `<button class="iconbtn" data-act="debtors-notify-all" title="Qarzdorlarga xabar" ${S.busy ? 'disabled' : ''}>📢</button>` : ''}
+      ${d.role === 'director' ? `<button class="iconbtn" data-act="debtors-notify-all" title="Qarzdorlarga xabar" ${S.busy ? 'disabled' : ''}>📢</button>
+      <button class="iconbtn" data-act="rank-open" title="O'qituvchilar reytingi">🏆</button>` : ''}
       <button class="iconbtn" data-act="export-open" title="Excel yuklab olish">📥</button></span></div>
     <div class="sub" style="margin-top:-6px">${d.month}</div>
     ${S.dashBranches && S.dashBranches.length ? `<div class="strip">
@@ -558,6 +560,46 @@ function viewSalary() {
       ${d.registry.map(r => `<div class="srow-row"><div class="who"><div class="name">${esc(r.group)}</div>
           <div class="meta">${r.lessons} ta dars</div></div><div class="name">${short(r.total)}</div></div>`).join('')}` : ''}
     <div class="kpi" style="margin-top:16px"><div class="l">Jami oylik</div><div class="v" style="font-size:26px">${money(d.total)} so'm</div></div>`;
+}
+
+/* ---------- o'qituvchilar reytingi (faqat direktor) ---------- */
+async function loadRanking(branchId) {
+  if (branchId !== undefined) S.rank.branch = branchId;
+  S.view = 'rank'; S.rank.loading = true; render();
+  try {
+    if (!S.dashBranches) { const b = await api('/api/branches'); S.dashBranches = b.branches; }
+    const q = S.rank.branch ? `?branch=${S.rank.branch}` : '';
+    S.rank.data = await api('/api/teacher-ranking' + q);
+  } catch (e) { fail(e); return; }
+  S.rank.loading = false; render();
+}
+function rankBack() { S.view = 'dash'; S.tab = 'dash'; render(); }
+function viewRanking() {
+  if (S.rank.loading || !S.rank.data) return '<div class="spin" style="margin:60px auto"></div>';
+  const d = S.rank.data, ts = d.teachers;
+  let best = '';
+  if (ts.length > 1) {
+    const withAtt = ts.filter(t => t.att !== null);
+    const bestAtt = withAtt.length ? withAtt.reduce((a, b) => b.att > a.att ? b : a) : null;
+    const worstDebt = [...ts].sort((a, b) => (b.students ? b.debtors / b.students : 0) - (a.students ? a.debtors / a.students : 0))[0];
+    const tips = [];
+    if (bestAtt) tips.push(`🏆 Eng yaxshi davomat: <b>${esc(bestAtt.name)}</b> (${bestAtt.att}%)`);
+    if (worstDebt && worstDebt.debtors > 0) tips.push(`⚠️ Eng ko'p qarzdor: <b>${esc(worstDebt.name)}</b> (${worstDebt.debtors} ta)`);
+    if (tips.length) best = `<div class="notice" style="background:var(--card)">${tips.join('<br>')}</div>`;
+  }
+  return `<div class="top"><button class="back" data-act="rank-back">‹</button><h1>🏆 O'qituvchilar reytingi</h1></div>
+    <div class="sub" style="margin-top:-6px">${esc(d.month)} · eng yaxshi (eng kam qarzdorlik) birinchi</div>
+    ${S.dashBranches && S.dashBranches.length ? `<div class="strip">
+      <button class="dchip ${!S.rank.branch ? 'on' : ''}" data-act="rank-branch" data-id="">🏢 Barchasi</button>
+      ${S.dashBranches.map(b => `<button class="dchip ${String(S.rank.branch) === String(b.id) ? 'on' : ''}"
+        data-act="rank-branch" data-id="${b.id}">${esc(b.name)}</button>`).join('')}</div>` : ''}
+    ${best}
+    <div class="list" style="margin-top:8px">${ts.map((t, i) => { const dp = t.students ? Math.round(t.debtors * 100 / t.students) : 0;
+      return `<div class="gbox"><div class="hd">${i + 1}. ${esc(t.name)}<span>${short(t.income)}</span></div>
+      <div class="sub" style="margin-top:2px">${t.groups} guruh · ${t.students} o'quvchi</div>
+      ${pctBar('Qarzdor', dp, 'var(--no)', t.debtors + ' ta')}
+      ${pctBar('Davomat', t.att, 'var(--ok)', t.att === null ? '—' : t.att + '%')}</div>`; }).join('')
+      || '<div class="empty">O\'qituvchi yo\'q</div>'}</div>`;
 }
 
 /* ---------- Excel yuklab olish ---------- */
@@ -1471,6 +1513,7 @@ function render() {
   else if (S.view === 'notif') html = viewNotif();
   else if (S.view === 'exam') html = EXAM_VIEWS[S.exam.view]();
   else if (S.view === 'cert') html = CERT_VIEWS[S.cert.view]() + (S.cert.view === 'groups' ? tabs() : '');
+  else if (S.view === 'rank') html = viewRanking();
   else html = viewGroups() + tabs();
   const focusEl = document.activeElement;
   const focusId = focusEl && focusEl.id;
@@ -1485,7 +1528,7 @@ function render() {
       const canBack = (S.view === 'att' && !S.att.single && !S.att.done) ||
         (S.view === 'stu' && S.stu.view !== 'groups') || S.view === 'xport' ||
         (S.view === 'hr' && S.hr.view !== 'home') || S.view === 'notif' || S.view === 'exam' ||
-        (S.view === 'cert' && S.cert.view !== 'groups');
+        (S.view === 'cert' && S.cert.view !== 'groups') || S.view === 'rank';
       canBack ? tg.BackButton.show() : tg.BackButton.hide();
     }
   } catch (e) {}
@@ -1498,6 +1541,7 @@ if (tg && tg.BackButton) tg.BackButton.onClick(() => {
   else if (S.view === 'notif') notifBack();
   else if (S.view === 'exam') examBack();
   else if (S.view === 'cert') certBack();
+  else if (S.view === 'rank') rankBack();
 });
 function backToGroups() { S.view = 'groups'; S.tab = 'groups'; render(); }
 function stuBack() {
@@ -1589,6 +1633,9 @@ document.addEventListener('click', e => {
   else if (act === 'dash-branch') loadDash(t.dataset.id ? Number(t.dataset.id) : null);
   else if (act === 'debtors-notify-all') notifyDebtors(null);
   else if (act === 'debtors-notify-group') notifyDebtors(Number(t.dataset.id));
+  else if (act === 'rank-open') loadRanking();
+  else if (act === 'rank-back') rankBack();
+  else if (act === 'rank-branch') loadRanking(t.dataset.id ? Number(t.dataset.id) : null);
   else if (act === 'xp-back') { S.view = 'dash'; S.tab = 'dash'; render(); }
   else if (act === 'xp-month') { S.xport.month = t.dataset.month; render(); }
   else if (act === 'xp-go') downloadExport(t.dataset.type, t.dataset.month || S.xport.month);
