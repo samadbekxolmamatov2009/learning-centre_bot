@@ -86,7 +86,10 @@ yaratilgan barcha guruhlar (hozirgi asosiy markaz) avtomatik "filialsiz" holatda
 majburan biriktirilmaydi, "Barchasi" ko'rinishida baribir hisoblanadi. Agar ularni ham bitta filialga (masalan
 "Asosiy") yig'moqchi bo'lsangiz, filial ichida **"📥 Filialsiz guruhlarni bu filialga ko'chirish"** tugmasi bor —
 hali hech qaysi filialga biriktirilmagan barcha guruhlarni bir bosishda shu filialga o'tkazadi (allaqachon boshqa
-filialga biriktirilgan guruhlarga tegmaydi).
+filialga biriktirilgan guruhlarga tegmaydi). Agar o'tmishda biror guruh o'chirilgan bo'lsa-yu, uning to'lovlari
+tarix sifatida saqlanib qolgan bo'lsa — bunday to'lovlarning qaysi filialga tegishli ekani endi aniqlanmaydi,
+shuning uchun **aniq bitta filial tanlanganda** ular hisobga kirmaydi ("🏢 Barchasi"da esa to'liq hisoblanadi).
+Bunday holatda Panelda sariq ogohlantirish chiqib, qancha summa va nega ko'rinmayotgani tushuntiriladi.
 
 ## Sertifikatlar
 Pastki **"🎓 Sertifikat"** tab (hamma rollar). Guruhni tanlab, o'quvchini oching — har bir fan bo'yicha

@@ -259,8 +259,11 @@ async def api_dashboard(request):
     att_all = await db.fetchone(
         f"SELECT COALESCE(SUM(a.present),0) p, COUNT(*) n FROM attendance a LEFT JOIN groups g ON g.id=a.group_id "
         f"WHERE a.day LIKE ?{bcond}", (cur + "-%",) + bargs)
+    orphan = await db.fetchone(
+        "SELECT COALESCE(SUM(p.amount),0) t FROM payments p "
+        "WHERE p.month=? AND NOT EXISTS(SELECT 1 FROM groups g WHERE g.id=p.group_id)", (cur,))
     data = {
-        "role": role, "month": cur, "branch": branch_id,
+        "role": role, "month": cur, "branch": branch_id, "orphan_income": orphan["t"],
         "months": [{"month": mo, "income": inc.get(mo, 0), "registry": reg.get(mo, 0)} for mo in months],
         "groups": out_groups, "students": total_students, "debtors": total_debtors,
         "att": round(att_all["p"] * 100 / att_all["n"]) if att_all["n"] else None}
