@@ -165,7 +165,7 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, dashBranch
   salary:{loading:false, data:null, month:null},
   rank:{loading:false, data:null, branch:null},
   xport:{busy:false, error:'', month:null},
-  hr:{view:'home', teachers:[], admins:[], branches:[], registry:null, toast:'', tform:null, aform:null, bform:null},
+  hr:{view:'home', teachers:[], admins:[], branches:[], registry:null, orphans:null, toast:'', tform:null, aform:null, bform:null},
   notif:{count:0, items:null, loading:false, from:null},
   exam:{view:'list', groupId:null, groupName:'', list:[], loading:false, form:null, detail:null, students:[], scores:{}, grades:{}, gradeOptions:[], toast:'', notLinked:null},
   cert:{view:'groups', groups:[], group:null, students:[], subjects:[], grades:[], detail:null, detailCerts:[],
@@ -658,15 +658,17 @@ async function loadStaffTab() {
   if (S.hr.teachers.length || S.hr.admins.length) { S.hr.view = 'home'; render(); return; }
   $app.innerHTML = '<div class="spin"></div>';
   try {
-    const [t, a, r, b] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry'), api('/api/branches')]);
-    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r; S.hr.branches = b.branches;
+    const [t, a, r, b, o] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry'),
+      api('/api/branches'), api('/api/students-orphaned')]);
+    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r; S.hr.branches = b.branches; S.hr.orphans = o;
     S.hr.view = 'home'; render();
   } catch (e) { fail(e); }
 }
 async function refreshStaff() {
   try {
-    const [t, a, r, b] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry'), api('/api/branches')]);
-    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r; S.hr.branches = b.branches;
+    const [t, a, r, b, o] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry'),
+      api('/api/branches'), api('/api/students-orphaned')]);
+    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r; S.hr.branches = b.branches; S.hr.orphans = o;
   } catch (e) {}
 }
 function viewHrHome() {
@@ -700,7 +702,13 @@ function viewHrHome() {
         <div class="who"><div class="name">${esc(b.name)}</div><div class="meta">${b.groups} ta guruh</div></div>
         <span class="sub">▸</span></div>`).join('') || '<div class="empty">Filiallar yo\'q</div>'}</div>
     <button class="gcard" data-act="hr-branch-add" style="border:1.5px dashed var(--line);background:transparent;margin-top:8px">
-      <div class="t">➕ Yangi filial</div></button>`;
+      <div class="t">➕ Yangi filial</div></button>
+    ${h.orphans && h.orphans.count > 0 ? `<div class="sec">🧹 Guruhsiz qolgan o'quvchilar</div>
+    <div class="gbox"><div class="hd">Guruhsiz o'quvchilar<span>${h.orphans.count} ta</span></div>
+      <div class="sub" style="margin-top:6px">Bularning guruhi o'chirilgan, lekin o'zlari texnik sabab bilan
+        o'chmay qolib ketgan. Masalan: ${esc(h.orphans.students.slice(0, 5).map(s => s.name).join(', '))}${h.orphans.count > 5 ? ' va h.k.' : ''}</div>
+      <button class="abtn danger" style="width:100%;margin-top:10px" data-act="hr-orphans-del">
+        🗑 Hammasini bittada o'chirish (${h.orphans.count} ta)</button></div>` : ''}`;
 }
 function hrBack() { S.hr.view = 'home'; render(); }
 function viewHrTeacherForm() {
@@ -794,6 +802,20 @@ async function hrAssignUnassigned(bid) {
     S.hr.toast = `✅ ${r.moved} ta guruh ko'chirildi`;
     await refreshStaff();
     S.dashBranches = null; S.stu.groups = [];
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function hrDeleteOrphans() {
+  const n = S.hr.orphans ? S.hr.orphans.count : 0;
+  const msg = `${n} ta guruhsiz o'quvchi butunlay o'chirilsinmi? Bu amalni qaytarib bo'lmaydi.`;
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm(msg, r)) : confirm(msg);
+  if (!ok) return;
+  S.busy = true; render();
+  try {
+    const r = await api('/api/students-orphaned', {method:'DELETE'});
+    haptic('medium');
+    S.hr.toast = `✅ ${r.removed} ta o'quvchi o'chirildi`;
+    await refreshStaff();
   } catch (e) { alert(e.message); }
   S.busy = false; render();
 }
@@ -1653,6 +1675,7 @@ document.addEventListener('click', e => {
   else if (act === 'hr-branch-save') hrSaveBranch();
   else if (act === 'hr-branch-del') hrDeleteBranch(Number(t.dataset.id));
   else if (act === 'hr-branch-assign') hrAssignUnassigned(Number(t.dataset.id));
+  else if (act === 'hr-orphans-del') hrDeleteOrphans();
   else if (act === 'notif-open') openNotif(S.view, S.tab);
   else if (act === 'notif-back') notifBack();
   else if (act === 'notif-item') notifGo(Number(t.dataset.i));
