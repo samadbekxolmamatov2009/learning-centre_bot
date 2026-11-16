@@ -228,11 +228,11 @@ async def api_dashboard(request):
     bcond = " AND g.branch_id=?" if branch_id else ""
     bargs = (branch_id,) if branch_id else ()
     inc = {r["month"]: r["t"] for r in await db.fetchall(
-        f"SELECT p.month, SUM(p.amount) t FROM payments p JOIN groups g ON g.id=p.group_id "
+        f"SELECT p.month, SUM(p.amount) t FROM payments p LEFT JOIN groups g ON g.id=p.group_id "
         f"WHERE p.month IN ({ph}){bcond} GROUP BY p.month", tuple(months) + bargs)}
     reg = {}
     for r in await db.fetchall(
-            f"SELECT substr(a.day,1,7) mo, SUM(a.rate) t FROM attendance a JOIN groups g ON g.id=a.group_id "
+            f"SELECT substr(a.day,1,7) mo, SUM(a.rate) t FROM attendance a LEFT JOIN groups g ON g.id=a.group_id "
             f"WHERE a.present=1 AND substr(a.day,1,7) IN ({ph}){bcond} GROUP BY mo", tuple(months) + bargs):
         reg[r["mo"]] = r["t"]
     gcond = " WHERE g.branch_id=?" if branch_id else ""
@@ -257,7 +257,7 @@ async def api_dashboard(request):
     total_students = sum(g["students"] for g in out_groups)
     total_debtors = sum(g["debtors"] for g in out_groups)
     att_all = await db.fetchone(
-        f"SELECT COALESCE(SUM(a.present),0) p, COUNT(*) n FROM attendance a JOIN groups g ON g.id=a.group_id "
+        f"SELECT COALESCE(SUM(a.present),0) p, COUNT(*) n FROM attendance a LEFT JOIN groups g ON g.id=a.group_id "
         f"WHERE a.day LIKE ?{bcond}", (cur + "-%",) + bargs)
     data = {
         "role": role, "month": cur, "branch": branch_id,
