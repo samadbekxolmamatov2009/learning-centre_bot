@@ -73,6 +73,15 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - **Dars jadvali** (🗓): dars kunlari va vaqti; davomat olinmasa o'qituvchiga (20 daqiqadan keyin) va adminga (2 soatdan keyin) eslatma.
 - Vaqt Toshkent bo'yicha (`TZ_OFFSET=5`).
 
+## Qarzdorlarga to'lov eslatmasi (faqat direktor)
+Panel sahifasida (yuqorida) **"📢"** tugmasi — shu oydagi **barcha** qarzdor o'quvchilarning ulangan ota-onalariga
+avtomatik Telegram xabari yuboradi ("Hurmatli ota-ona! [O'quvchi] uchun [oy] oyi kurs to'lovini hali amalga
+oshirmagansiz..."). Agar Panelda filial tanlangan bo'lsa, faqat o'sha filialdagi qarzdorlarga yuboriladi.
+Har bir guruh kartochkasida ham alohida **"📢 Shu guruh qarzdorlariga xabar"** tugmasi bor — faqat o'sha bitta
+guruhning (demak, o'sha o'qituvchining) qarzdorlariga yuboradi. Reyestr o'quvchilari hech qachon qarzdor
+hisoblanmagani uchun ularga xabar bormaydi. Ota-onasi hali ulanmagan qarzdorlar bo'lsa, ularning ismlari
+yuborilgandan keyin chiqadigan xabarda ko'rsatiladi. Bu funksiya faqat direktorga ko'rinadi, admin/o'qituvchiga yo'q.
+
 ## Filiallar
 O'quv markaz bir nechta filial (shahar/tuman bo'limi) bilan ishlashi mumkin. Direktorga **"👨‍🏫 Xodimlar"** bo'limida
 **"🏢 Filiallar"** bo'limi: filial qo'shish/nomini o'zgartirish/o'chirish (faqat direktor huquqi). Guruh

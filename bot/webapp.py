@@ -19,7 +19,7 @@ from aiohttp import web
 
 from . import attendance as A
 from . import db as D
-from .config import BOT_TOKEN
+from .config import BOT_TOKEN, CENTER_NAME
 from .handlers import normalize_phone, can_access_group
 
 log = logging.getLogger(__name__)
@@ -251,7 +251,7 @@ async def api_dashboard(request):
     out_groups = []
     for g in groups:
         p, n = g_att.get(g["id"], (0, 0))
-        out_groups.append({"name": g["name"], "teacher": g["teacher"] or "-", "students": g["n"],
+        out_groups.append({"id": g["id"], "name": g["name"], "teacher": g["teacher"] or "-", "students": g["n"],
                            "debtors": g["n"] - g["paid"], "income": g_inc.get(g["id"], 0),
                            "att": round(p * 100 / n) if n else None})
     total_students = sum(g["students"] for g in out_groups)
@@ -791,6 +791,52 @@ async def api_exam_notify_parents(request):
             except Exception:
                 log.warning("Ota-onaga natija yuborilmadi: %s", p["parent_tg_id"], exc_info=True)
     return web.json_response({"ok": True, "sent": sent, "not_linked": not_linked})
+
+
+async def api_debtors_notify(request):
+    """Qarzdor o'quvchilarning ota-onalariga to'lov eslatmasi yuboradi (faqat direktor).
+    body: {group: <id>} - faqat shu guruh, yoki {branch: <id>} - shu filialdagi hammasi, yoki bo'sh - barchasi."""
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    mo = D.current_month()
+    sql = ("SELECT s.id, s.first_name, s.last_name FROM students s JOIN groups g ON g.id=s.group_id "
+          "WHERE s.hidden=0 AND s.is_registry=0")
+    args = []
+    if body.get("group"):
+        sql += " AND s.group_id=?"
+        args.append(int(body["group"]))
+    elif body.get("branch"):
+        sql += " AND g.branch_id=?"
+        args.append(int(body["branch"]))
+    sql += " AND NOT EXISTS(SELECT 1 FROM payments p WHERE p.student_id=s.id AND p.month=?)"
+    args.append(mo)
+    rows = await db.fetchall(sql, tuple(args))
+    bot = request.app.get("bot")
+    sent, not_linked = 0, []
+    for r in rows:
+        name = f"{r['last_name']} {r['first_name']}"
+        parents = await db.fetchall("SELECT parent_tg_id FROM parent_links WHERE student_id=?", (r["id"],))
+        if not parents:
+            not_linked.append(name)
+            continue
+        if not bot:
+            continue
+        text = (f"💰 Hurmatli ota-ona!\n<b>{html.escape(name)}</b> uchun {mo} oyi kurs to'lovini hali amalga "
+               f"oshirmagansiz. Iltimos, imkon qadar tezroq to'lovni amalga oshirishingizni so'raymiz.\n\n"
+               f"{html.escape(CENTER_NAME)}")
+        for p in parents:
+            try:
+                await bot.send_message(p["parent_tg_id"], text, parse_mode="HTML")
+                sent += 1
+            except Exception:
+                log.warning("Qarzdorlik eslatmasi yuborilmadi: %s", p["parent_tg_id"], exc_info=True)
+    return web.json_response({"ok": True, "count": len(rows), "sent": sent, "not_linked": not_linked})
 
 
 async def api_exam_delete(request):
@@ -1391,6 +1437,7 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_get("/api/exams/{eid}", api_exam_get)
     app.router.add_post("/api/exams/{eid}/scores", api_exam_scores_post)
     app.router.add_post("/api/exams/{eid}/notify-parents", api_exam_notify_parents)
+    app.router.add_post("/api/debtors/notify", api_debtors_notify)
     app.router.add_delete("/api/exams/{eid}", api_exam_delete)
     app.router.add_get("/api/students/{sid}/exams", api_student_exams_get)
     app.router.add_get("/api/certificates", api_certificates_get)
