@@ -75,6 +75,13 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - **Dars jadvali** (🗓): dars kunlari va vaqti; davomat olinmasa o'qituvchiga (20 daqiqadan keyin) va adminga (2 soatdan keyin) eslatma.
 - Vaqt Toshkent bo'yicha (`TZ_OFFSET=5`).
 
+## Guruhsiz qolgan o'quvchilarni tozalash (faqat direktor)
+Xodimlar sahifasida, agar shunday o'quvchilar bo'lsa, **"🧹 Guruhsiz qolgan o'quvchilar"** bo'limi chiqadi:
+guruhi (masalan eski kod versiyasi orqali) o'chirilgan-u, lekin o'zi texnik sabab bilan o'chmay qolgan o'quvchilar
+ro'yxati va soni. **"🗑 Hammasini bittada o'chirish"** tugmasi — ularning barchasini bir zumda tozalaydi (agar
+ulardan birortasida sertifikat yoki 189 ball belgisi bo'lsa, u hali ham arxivlanadi, butunlay o'chirilmaydi -
+odatdagi o'chirish qoidasi bilan bir xil). Bunday o'quvchilar yo'q bo'lsa, bu bo'lim umuman ko'rinmaydi.
+
 ## O'qituvchilar reytingi (faqat direktor)
 Panelda **"🏆"** tugmasi — barcha o'qituvchilarni solishtiruvchi ro'yxat: har biri uchun guruhlar/o'quvchilar soni,
 joriy oy tushumi, qarzdorlar foizi va davomat foizi. Ro'yxat **eng kam qarzdorlikdan eng ko'pigacha** tartiblanadi

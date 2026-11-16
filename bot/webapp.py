@@ -1167,6 +1167,35 @@ async def api_admin_delete(request):
     return web.json_response({"ok": True})
 
 
+async def api_orphan_students_get(request):
+    """Guruhi o'chirilgan, lekin o'zi o'chirilmay qolgan ('yetim') o'quvchilar - odatda texnik
+    xato yoki eski kod versiyasi tufayli yuzaga keladi (guruh o'chirilganda o'quvchilar tozalanmagan)."""
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    rows = await db.fetchall(
+        "SELECT s.id, s.first_name, s.last_name FROM students s "
+        "WHERE s.hidden=0 AND NOT EXISTS(SELECT 1 FROM groups g WHERE g.id=s.group_id) "
+        "ORDER BY s.last_name, s.first_name")
+    return web.json_response({"count": len(rows),
+                              "students": [{"id": r["id"], "name": f"{r['last_name']} {r['first_name']}"}
+                                          for r in rows]})
+
+
+async def api_orphan_students_delete(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    rows = await db.fetchall(
+        "SELECT s.id FROM students s "
+        "WHERE s.hidden=0 AND NOT EXISTS(SELECT 1 FROM groups g WHERE g.id=s.group_id)")
+    for r in rows:
+        await D.archive_or_delete_student(db, r["id"])
+    return web.json_response({"ok": True, "removed": len(rows)})
+
+
 async def api_registry_get(request):
     uid, role, _ = await auth(request)
     if role != "director":
@@ -1471,6 +1500,8 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_post("/api/admins", api_admin_post)
     app.router.add_delete("/api/admins/{aid}", api_admin_delete)
     app.router.add_get("/api/registry", api_registry_get)
+    app.router.add_get("/api/students-orphaned", api_orphan_students_get)
+    app.router.add_delete("/api/students-orphaned", api_orphan_students_delete)
     app.router.add_post("/api/registry", api_registry_post)
     app.router.add_patch("/api/groups/{gid}", api_group_patch)
     app.router.add_delete("/api/groups/{gid}", api_group_delete)
