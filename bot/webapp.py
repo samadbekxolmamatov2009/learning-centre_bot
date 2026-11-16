@@ -368,6 +368,24 @@ async def api_branch_patch(request):
     return web.json_response({"ok": True})
 
 
+async def api_branch_assign_unassigned(request):
+    """Hozirgi filialsiz (branch_id bo'sh) barcha guruhlarni shu filialga biriktiradi -
+    masalan, filiallar qo'shishdan oldingi eski/asosiy guruhlarni bitta marta ko'chirish uchun."""
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        bid = int(request.match_info["bid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    if not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (bid,)):
+        return bad("Topilmadi", 404)
+    n = (await db.fetchone("SELECT COUNT(*) n FROM groups WHERE branch_id IS NULL"))["n"]
+    await db.execute("UPDATE groups SET branch_id=? WHERE branch_id IS NULL", (bid,))
+    return web.json_response({"ok": True, "moved": n})
+
+
 async def api_branch_delete(request):
     uid, role, _ = await auth(request)
     if role != "director":
@@ -1340,6 +1358,7 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_get("/api/branches", api_branches_get)
     app.router.add_post("/api/branches", api_branch_post)
     app.router.add_patch("/api/branches/{bid}", api_branch_patch)
+    app.router.add_post("/api/branches/{bid}/assign-unassigned", api_branch_assign_unassigned)
     app.router.add_delete("/api/branches/{bid}", api_branch_delete)
     app.router.add_post("/api/groups", api_groups_post)
     app.router.add_get("/api/students", api_students_get)
