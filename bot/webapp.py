@@ -561,6 +561,8 @@ async def api_student_delete(request):
 
 async def api_payment_post(request):
     uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
     try:
         body = await request.json()
