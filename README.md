@@ -27,6 +27,10 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - **Admin**: guruh, o'quvchi qo'shish; to'lov kiritish va bekor qilish; o'quvchini ko'chirish; guruh/o'qituvchi/o'quvchini o'chirish; guruh o'qituvchisini almashtirish; qarzdorlar; oylik hisobot (o'tgan oylar ham).
 - O'quvchining telefon raqami saqlanadi: qarzdorlar ro'yxati, davomat xabari va PDF'da ko'rinadi; "📞 Telefonni o'zgartirish" tugmasi bor.
 - **O'qituvchi**: o'z guruhiga o'quvchi qo'shish/o'chirish, davomat (PDF adminga), oylik (o'tgan oylar ham), barcha guruhlari qarzdorlari.
+- **Oylik hisob-kitobi doimiy saqlanadi**: agar o'quvchi biror oy uchun to'lov qilgandan keyin guruhdan
+  chiqarilsa/o'chirilsa (masalan keyingi oy boshida), o'sha o'tgan oyning o'qituvchi oyligi **o'zgarmaydi** —
+  "o'quvchi boshiga" turidagi oylik ham, shu jumladan, to'g'ridan-to'g'ri to'lovlar yozuvidan hisoblanadi,
+  o'quvchi hozir ro'yxatda bor-yo'qligidan qat'i nazar.
 - Oy oxirgi kuni (Toshkent vaqti bilan 09:00) admin va direktorga qarzdorlar ro'yxati avtomatik yuboriladi.
 - To'lov summasi qanday bo'lishidan qat'i nazar, shu oy uchun o'quvchi qarzdor emas; yangi oyda qayta qarzdor.
 - **Qidirish** (hamma): ism/familiya/telefon bo'yicha; o'qituvchi faqat o'z guruhlarida qidiradi.
