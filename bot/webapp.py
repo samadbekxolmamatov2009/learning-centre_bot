@@ -134,9 +134,10 @@ async def api_me(request):
     today = D.today_local().isoformat()
     if role == "teacher":
         groups = await db.fetchall("SELECT id, name, lesson_days, lesson_time FROM groups "
-                                   "WHERE teacher_id=? ORDER BY name", (uid,))
+                                   "WHERE teacher_id=? AND archived=0 ORDER BY name", (uid,))
     else:
-        groups = await db.fetchall("SELECT g.id, g.name, g.lesson_days, g.lesson_time FROM groups g ORDER BY g.name")
+        groups = await db.fetchall("SELECT g.id, g.name, g.lesson_days, g.lesson_time FROM groups g "
+                                   "WHERE g.archived=0 ORDER BY g.name")
     counts = {r["group_id"]: r["n"] for r in await db.fetchall(
         "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 GROUP BY group_id")}
     taken = {r["group_id"] for r in await db.fetchall(
@@ -235,7 +236,7 @@ async def api_dashboard(request):
             f"SELECT substr(a.day,1,7) mo, SUM(a.rate) t FROM attendance a LEFT JOIN groups g ON g.id=a.group_id "
             f"WHERE a.present=1 AND substr(a.day,1,7) IN ({ph}){bcond} GROUP BY mo", tuple(months) + bargs):
         reg[r["mo"]] = r["t"]
-    gcond = " WHERE g.branch_id=?" if branch_id else ""
+    gcond = " WHERE g.archived=0 AND g.branch_id=?" if branch_id else " WHERE g.archived=0"
     groups = await db.fetchall(f"""
         SELECT g.id, g.name, u.full_name AS teacher, COUNT(s.id) AS n,
                COALESCE(SUM(CASE WHEN s.is_registry=1 OR EXISTS(
@@ -301,12 +302,12 @@ async def api_groups(request):
     if role == "teacher":
         groups = await db.fetchall("SELECT g.id, g.name, g.lesson_days, g.lesson_time, g.branch_id, "
                                    "b.name AS branch_name FROM groups g LEFT JOIN branches b ON b.id=g.branch_id "
-                                   "WHERE g.teacher_id=? ORDER BY g.name", (uid,))
+                                   "WHERE g.teacher_id=? AND g.archived=0 ORDER BY g.name", (uid,))
     else:
         groups = await db.fetchall("SELECT g.id, g.name, g.teacher_id AS teacherId, u.full_name AS teacher, "
                                    "g.lesson_days, g.lesson_time, g.branch_id, b.name AS branch_name FROM groups g "
                                    "LEFT JOIN users u ON u.tg_id=g.teacher_id "
-                                   "LEFT JOIN branches b ON b.id=g.branch_id ORDER BY g.name")
+                                   "LEFT JOIN branches b ON b.id=g.branch_id WHERE g.archived=0 ORDER BY g.name")
     counts = {r["group_id"]: r["n"] for r in await db.fetchall(
         "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 GROUP BY group_id")}
     paid_ids = {r["student_id"] for r in await db.fetchall(
@@ -326,7 +327,7 @@ async def api_branches_get(request):
     await auth(request)
     db = request.app["db"]
     rows = await db.fetchall(
-        "SELECT b.id, b.name, (SELECT COUNT(*) FROM groups g WHERE g.branch_id=b.id) AS groups "
+        "SELECT b.id, b.name, (SELECT COUNT(*) FROM groups g WHERE g.branch_id=b.id AND g.archived=0) AS groups "
         "FROM branches b ORDER BY b.name")
     return web.json_response({"branches": [dict(r) for r in rows]})
 
@@ -1034,7 +1035,7 @@ async def api_teachers(request):
     db = request.app["db"]
     rows = await db.fetchall(
         "SELECT u.tg_id, u.full_name, t.pay_type, t.pay_value, t.registry_rate, "
-        "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id) AS groups "
+        "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id AND g.archived=0) AS groups "
         "FROM users u JOIN teachers t ON t.tg_id=u.tg_id ORDER BY u.full_name")
     return web.json_response({"teachers": [teacher_out(r) for r in rows]})
 
@@ -1100,7 +1101,7 @@ async def api_teacher_patch(request):
         await db.execute("UPDATE teachers SET registry_rate=? WHERE tg_id=?", (rr, tid))
     row = await db.fetchone(
         "SELECT u.tg_id, u.full_name, t.pay_type, t.pay_value, t.registry_rate, "
-        "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id) AS groups "
+        "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id AND g.archived=0) AS groups "
         "FROM users u JOIN teachers t ON t.tg_id=u.tg_id WHERE u.tg_id=?", (tid,))
     return web.json_response({"ok": True, "teacher": teacher_out(row)})
 
@@ -1286,7 +1287,7 @@ async def api_group_delete(request):
     if not g:
         return bad("Topilmadi", 404)
     await D.archive_or_delete_group_students(db, gid)
-    await db.execute("DELETE FROM groups WHERE id=?", (gid,))
+    await D.archive_or_delete_group(db, gid)
     return web.json_response({"ok": True})
 
 
@@ -1310,8 +1311,11 @@ async def api_export(request):
         for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
             studs = await D.group_students(db, g["id"], mo)
             reg = sum(1 for s in studs if s["is_registry"])
-            paid = sum(1 for s in studs if s["paid"]) - reg
-            grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, len(studs) - paid - reg])
+            debtors = sum(1 for s in studs if not s["is_registry"] and not s["paid"])
+            pay_rows = await D.group_payment_rows(db, g["id"], mo)
+            paid = len({s["id"] for s in studs if not s["is_registry"] and s["paid"]} |
+                       {r["student_id"] for r in pay_rows})
+            grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, debtors])
         _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Reyestr", "Qarzdorlar"], grows, True)
         trows = []
         for t in await db.fetchall("SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
@@ -1371,9 +1375,9 @@ async def api_notifications(request):
 
     if staff:
         groups = await db.fetchall("SELECT g.*, u.full_name AS tname FROM groups g "
-                                   "LEFT JOIN users u ON u.tg_id=g.teacher_id ORDER BY g.name")
+                                   "LEFT JOIN users u ON u.tg_id=g.teacher_id WHERE g.archived=0 ORDER BY g.name")
     else:
-        groups = await db.fetchall("SELECT * FROM groups WHERE teacher_id=? ORDER BY name", (uid,))
+        groups = await db.fetchall("SELECT * FROM groups WHERE teacher_id=? AND archived=0 ORDER BY name", (uid,))
 
     taken_today = {r["group_id"] for r in await db.fetchall(
         "SELECT DISTINCT group_id FROM attendance WHERE day=?", (today_iso,))}

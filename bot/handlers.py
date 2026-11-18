@@ -356,7 +356,7 @@ async def xgr_do(c: CallbackQuery, db):
     if not g:
         return await c.answer("Topilmadi", show_alert=True)
     await D.archive_or_delete_group_students(db, gid)
-    await db.execute("DELETE FROM groups WHERE id=?", (gid,))
+    await D.archive_or_delete_group(db, gid)
     await c.message.edit_text(f"🗑 Guruh {g['name']} o'chirildi.")
     await c.answer()
 
