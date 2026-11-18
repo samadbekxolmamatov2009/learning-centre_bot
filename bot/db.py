@@ -336,6 +336,16 @@ async def group_income(db, group_id, month=None):
     return row["t"]
 
 
+async def group_payment_rows(db, group_id, month=None):
+    """Guruhda shu oyda har bir o'quvchi qancha to'lagani - to'g'ridan-to'g'ri to'lovlar
+    jadvalidan (hozirgi o'quvchilar ro'yxatidan emas). Shuning uchun o'quvchi keyinroq
+    guruhdan chiqarilsa/o'chirilsa ham, o'tgan oylardagi to'lovi oylik hisobidan tushib
+    qolmaydi (masalan dekabr boshida oylik hisoblanganda, noyabr to'lovi saqlanadi)."""
+    month = month or current_month()
+    return await fetchall(db, "SELECT student_id, SUM(amount) AS paid_sum FROM payments "
+                             "WHERE group_id=? AND month=? GROUP BY student_id", (group_id, month))
+
+
 # "O'quvchi boshiga" oylik qoidasi: o'quvchi to'lovi stavkaning LOW_PAY_MULT baravaridan
 # oshmasa (masalan stavka 200 000 bo'lsa 400 000 gacha) o'qituvchi shu to'lovning
 # LOW_PAY_PERCENT foizini oladi, undan ko'p to'lasa - stavkaning o'zini.
@@ -390,11 +400,11 @@ async def teacher_salary(db, teacher_id, month=None, branch_id=None):
         args.append(branch_id)
     for g in await fetchall(db, sql, tuple(args)):
         income = await group_income(db, g["id"], month)
-        studs = await group_students(db, g["id"], month)
-        rows.append((g["name"], income, sum(1 for s in studs if s["paid"] and not s["is_registry"])))
+        pay_rows = await group_payment_rows(db, g["id"], month)
+        rows.append((g["name"], income, len(pay_rows)))
         if t["pay_type"] == "percent":
             total += income * t["pay_value"] / 100
         else:
-            total += sum(per_student_pay(t["pay_value"], s["paid_sum"]) for s in studs)
+            total += sum(per_student_pay(t["pay_value"], r["paid_sum"]) for r in pay_rows)
     total += sum(r[2] for r in await registry_rows(db, teacher_id, month, branch_id))  # reyestr: 100%
     return t["pay_type"], t["pay_value"], rows, total
