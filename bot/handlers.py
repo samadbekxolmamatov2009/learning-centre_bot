@@ -356,7 +356,7 @@ async def xgr_do(c: CallbackQuery, db):
     if not g:
         return await c.answer("Topilmadi", show_alert=True)
     await D.archive_or_delete_group_students(db, gid)
-    await db.execute("DELETE FROM groups WHERE id=?", (gid,))
+    await D.archive_or_delete_group(db, gid)
     await c.message.edit_text(f"🗑 Guruh {g['name']} o'chirildi.")
     await c.answer()
 
@@ -682,9 +682,31 @@ async def p_group(c: CallbackQuery, db):
 
 
 @router.callback_query(F.data.startswith("ps:"), STAFF)
-async def p_student(c: CallbackQuery, state: FSMContext):
+async def p_student(c: CallbackQuery, db, state: FSMContext):
+    sid = int(c.data[3:])
     await state.set_state(Pay.amount)
-    await state.update_data(student_id=int(c.data[3:]))
+    await state.update_data(student_id=sid)
+    s = await D.fetchone(db, "SELECT grade FROM students WHERE id=?", (sid,))
+    sug = D.suggested_payment(s["grade"]) if s else None
+    if sug:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"✅ {money(sug)} to'landi", callback_data=f"pc:{sug}")],
+            [InlineKeyboardButton(text="✏️ Boshqa summa kiritish", callback_data="pf")]])
+        await c.message.answer(f"Tavsiya etilgan summa ({s['grade']}-sinf uchun): {money(sug)}.",
+                               reply_markup=kb)
+    else:
+        await c.message.answer("To'lov summasi (so'm):")
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("pc:"), Pay.amount, STAFF)
+async def p_confirm_suggested(c: CallbackQuery, db, state: FSMContext, bot: Bot):
+    await _save_payment(c.message, db, state, bot, int(c.data[3:]), c.from_user.id)
+    await c.answer()
+
+
+@router.callback_query(F.data == "pf", Pay.amount, STAFF)
+async def p_free_amount(c: CallbackQuery):
     await c.message.answer("To'lov summasi (so'm):")
     await c.answer()
 
@@ -696,19 +718,23 @@ async def p_amount(m: Message, db, state: FSMContext, bot: Bot):
         assert amt > 0
     except Exception:
         return await m.answer("Musbat butun son kiriting.")
+    await _save_payment(m, db, state, bot, amt, m.from_user.id)
+
+
+async def _save_payment(msg_obj, db, state: FSMContext, bot: Bot, amt: int, from_user_id: int):
     sid = (await state.get_data())["student_id"]
     s = await D.fetchone(db, "SELECT * FROM students WHERE id=?", (sid,))
     mo = D.current_month()
     await db.execute("INSERT INTO payments(student_id,group_id,amount,month) VALUES(?,?,?,?)",
                      (sid, s["group_id"], amt, mo))
     await state.clear()
-    await m.answer(f"✅ {s['last_name']} {s['first_name']}: {money(amt)} qabul qilindi. "
-                   f"Bu oy uchun qarzdor emas.")
+    await msg_obj.answer(f"✅ {s['last_name']} {s['first_name']}: {money(amt)} qabul qilindi. "
+                         f"Bu oy uchun qarzdor emas.")
     row = await D.fetchone(db, "SELECT id FROM payments WHERE student_id=? AND month=? ORDER BY id DESC LIMIT 1",
                            (sid, mo))
     if row:
         from .receipts import send_receipt
-        await send_receipt(bot, db, row["id"], m.from_user.id)
+        await send_receipt(bot, db, row["id"], from_user_id)
 
 
 # ---------------- Qarzdorlar / hisob ----------------

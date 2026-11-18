@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import re
 from datetime import date, datetime, timedelta, timezone
 
 import aiohttp
@@ -22,7 +23,8 @@ CREATE TABLE IF NOT EXISTS branches(
 CREATE TABLE IF NOT EXISTS groups(
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE,
     teacher_id INTEGER REFERENCES teachers(tg_id), branch_id INTEGER REFERENCES branches(id),
-    lesson_days TEXT NOT NULL DEFAULT '', lesson_time TEXT NOT NULL DEFAULT '');
+    lesson_days TEXT NOT NULL DEFAULT '', lesson_time TEXT NOT NULL DEFAULT '',
+    archived INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS students(
     id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT NOT NULL,
     last_name TEXT NOT NULL, grade TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '',
@@ -125,6 +127,8 @@ class Database:
                 await self.execute(f"ALTER TABLE groups ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
         if "branch_id" not in gcols:
             await self.execute("ALTER TABLE groups ADD COLUMN branch_id INTEGER")
+        if "archived" not in gcols:
+            await self.execute("ALTER TABLE groups ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
         if "rate" not in acols:
             await self.execute("ALTER TABLE attendance ADD COLUMN rate INTEGER NOT NULL DEFAULT 0")
         if "phone" not in cols:  # eski bazani yangilash
@@ -263,6 +267,19 @@ def current_month() -> str:
     return today_local().strftime("%Y-%m")
 
 
+GRADE_SUGGESTED_PAY = {
+    "11": 600000, "10": 550000, "9": 500000, "8": 450000,
+    "7": 450000, "6": 400000, "5": 400000,
+}
+
+
+def suggested_payment(grade):
+    """O'quvchi sinfiga qarab tavsiya etilgan to'lov summasi (5-11 sinflar uchun). Boshqa
+    sinflar (yoki noma'lum format) uchun None qaytaradi - tavsiya ko'rsatilmaydi."""
+    m = re.match(r"\s*(\d+)", str(grade or ""))
+    return GRADE_SUGGESTED_PAY.get(m.group(1)) if m else None
+
+
 async def connect() -> Database:
     db = TursoDB(TURSO_URL, TURSO_TOKEN) if TURSO_URL else await SqliteDB.open(DB_PATH)
     await db.init_schema()
@@ -317,6 +334,24 @@ async def archive_or_delete_student(db, sid):
 async def archive_or_delete_group_students(db, group_id):
     for r in await fetchall(db, "SELECT id FROM students WHERE group_id=?", (group_id,)):
         await archive_or_delete_student(db, r["id"])
+
+
+async def archive_or_delete_group(db, group_id):
+    """Guruhni o'chiradi - lekin agar unda to'lov yoki davomat tarixi bo'lsa, butunlay
+    o'chirilmaydi, balki arxivlangan holatda saqlanadi (nomi o'zgartiriladi, chunki nom
+    UNIQUE - shunda xuddi shu nomda yangi guruh ochish mumkin bo'ladi). Shunday qilinmasa,
+    o'tgan oylardagi o'qituvchi oyligi va hisobotlardagi shu guruhga tegishli summalar
+    guruh o'chirilgandan keyin butunlay yo'qolib qoladi."""
+    g = await fetchone(db, "SELECT name FROM groups WHERE id=?", (group_id,))
+    if not g:
+        return
+    has_history = (await fetchone(db, "SELECT 1 FROM payments WHERE group_id=?", (group_id,)) or
+                   await fetchone(db, "SELECT 1 FROM attendance WHERE group_id=?", (group_id,)))
+    if has_history:
+        new_name = f"{g['name']} (arxiv, {today_local().isoformat()})"
+        await db.execute("UPDATE groups SET archived=1, name=? WHERE id=?", (new_name, group_id))
+    else:
+        await db.execute("DELETE FROM groups WHERE id=?", (group_id,))
 
 
 async def get_setting(db, key, default=""):

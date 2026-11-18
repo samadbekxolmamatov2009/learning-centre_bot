@@ -356,14 +356,29 @@ def _sheet(wb, title, header, rows, first=False):
 
 
 async def _students_rows(db, month, only_debtors):
+    """Qarzdorlar ro'yxati (only_debtors) - hozirgi ro'yxatdagi o'quvchilar bo'yicha (joriy holat).
+    To'liq ro'yxat/hisobot (only_debtors=False) - shu oyda to'lov qilgan, lekin keyinroq
+    guruhdan/ro'yxatdan chiqarilgan o'quvchilar ham to'lovlar jadvalidan qo'shib chiqiladi,
+    shunda o'tgan oy hisobotida ularning to'lovi yo'qolib qolmaydi."""
     rows = []
     for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
-        for s in await D.group_students(db, g["id"], month):
+        studs = await D.group_students(db, g["id"], month)
+        seen = {s["id"] for s in studs}
+        for s in studs:
             if only_debtors and s["paid"]:
                 continue
             rows.append([g["name"], s["last_name"], s["first_name"], s["grade"], s["phone"],
                          "Reyestr" if s["is_registry"] else ("To'lagan" if s["paid"] else "Qarzdor"),
                          s["paid_sum"]])
+        if only_debtors:
+            continue
+        for pr in await D.group_payment_rows(db, g["id"], month):
+            if pr["student_id"] in seen:
+                continue
+            sr = await db.fetchone("SELECT first_name, last_name, grade, phone FROM students WHERE id=?",
+                                   (pr["student_id"],))
+            rows.append([g["name"], sr["last_name"] if sr else "(o'chirilgan)", sr["first_name"] if sr else "",
+                         sr["grade"] if sr else "", sr["phone"] if sr else "", "To'lagan", pr["paid_sum"]])
     return rows
 
 
@@ -400,8 +415,11 @@ async def xl_report(c: CallbackQuery, db):
     for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
         studs = await D.group_students(db, g["id"], mo)
         reg = sum(1 for s in studs if s["is_registry"])
-        paid = sum(1 for s in studs if s["paid"]) - reg
-        grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, len(studs) - paid - reg])
+        debtors = sum(1 for s in studs if not s["is_registry"] and not s["paid"])
+        pay_rows = await D.group_payment_rows(db, g["id"], mo)
+        paid = len({s["id"] for s in studs if not s["is_registry"] and s["paid"]} |
+                   {r["student_id"] for r in pay_rows})
+        grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, debtors])
     _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Reyestr", "Qarzdorlar"], grows, True)
     trows = []
     for t in await db.fetchall("SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "

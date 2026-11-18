@@ -158,7 +158,7 @@ const CYCLE = ['present','absent','late','excused'];
 const WD = ['Ya','Du','Se','Ch','Pa','Ju','Sh'];
 const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, dashBranch:null, dashBranches:null, q:'', open:new Set(), busy:false,
   stu:{view:'groups', groups:[], teachers:[], branches:[], students:[], searching:false, searchResults:null, q:'', debtOnly:false,
-       group:null, detail:null, formBack:'groups', detailBack:'groups', payOpen:false, payAmount:'', moveOpen:false, moveTo:'',
+       group:null, detail:null, formBack:'groups', detailBack:'groups', payOpen:false, payAmount:'', payCustom:false, moveOpen:false, moveTo:'',
        payHistOpen:false, payHistory:null, parentOpen:false, parentLink:null, parentLoading:false, parentCopied:false,
        examHistOpen:false, examHistory:null,
        form:null, toast:'', gform:null},
@@ -175,6 +175,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const fmtDay = d => d.slice(8,10) + '.' + d.slice(5,7);
 const wd = d => WD[new Date(d + 'T12:00:00').getDay()];
 const money = n => Math.round(n).toLocaleString('ru-RU').replace(/ /g,' ');
+const GRADE_PAY = {11:600000, 10:550000, 9:500000, 8:450000, 7:450000, 6:400000, 5:400000};
+const suggestedPay = grade => { const m = String(grade ?? '').match(/\d+/); return m ? (GRADE_PAY[+m[0]] || null) : null; };
 const short = n => Math.abs(n) >= 1e6 ? (n/1e6).toFixed(1).replace('.0','') + ' mln' : Math.abs(n) >= 1e3 ? Math.round(n/1e3) + ' ming' : String(Math.round(n));
 const haptic = (k='light') => { try { tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred(k); } catch(e){} };
 
@@ -462,7 +464,7 @@ function goStuForm(mode, prefillGroup, student) {
 }
 function goStuDetail(student) {
   S.stu.detailBack = S.stu.view === 'detail' ? S.stu.detailBack : S.stu.view;
-  S.stu.detail = student; S.stu.payOpen = false; S.stu.payAmount = ''; S.stu.moveOpen = false; S.stu.moveTo = '';
+  S.stu.detail = student; S.stu.payOpen = false; S.stu.payAmount = ''; S.stu.payCustom = false; S.stu.moveOpen = false; S.stu.moveTo = '';
   S.stu.payHistOpen = false; S.stu.payHistory = null;
   S.stu.parentOpen = false; S.stu.parentLink = null; S.stu.parentCopied = false;
   S.stu.examHistOpen = false; S.stu.examHistory = null;
@@ -1025,9 +1027,7 @@ function viewStuDetail() {
         <button class="abtn" data-act="stu-move-toggle">🔀 Ko'chirish</button>
         <button class="abtn danger" data-act="stu-delete">🗑 O'chirish</button>
       </div>
-      ${st.payOpen ? `<div class="inline-form"><input class="input" id="payAmt" type="number" inputmode="numeric"
-          placeholder="Summa, masalan 300000" value="${esc(st.payAmount)}">
-        <button class="primary" style="flex:none" data-act="stu-pay-send" ${S.busy ? 'disabled' : ''}>Yubor</button></div>` : ''}
+      ${st.payOpen ? viewPayForm(s) : ''}
       ${st.moveOpen ? `<div class="inline-form"><select class="input" id="moveSel">
           <option value="">— guruh —</option>${otherGroups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select>
         <button class="primary" style="flex:none" data-act="stu-move-send" ${S.busy ? 'disabled' : ''}>Ko'chir</button></div>` : ''}
@@ -1038,6 +1038,18 @@ function viewStuDetail() {
     ${st.payHistOpen ? viewPayHistory(staff) : ''}
     <button class="abtn" style="width:100%;margin-top:10px" data-act="stu-exam-toggle">📝 Nazorat natijalari ${st.examHistOpen ? '▴' : '▾'}</button>
     ${st.examHistOpen ? viewExamHistory() : ''}`;
+}
+function viewPayForm(s) {
+  const st = S.stu, sug = suggestedPay(s.grade);
+  if (sug && !st.payCustom) {
+    return `<div class="inline-form" style="flex-direction:column;align-items:stretch;gap:8px">
+      <button class="primary" data-act="stu-pay-suggested" data-amt="${sug}" ${S.busy ? 'disabled' : ''}>✅ ${money(sug)} so'm to'landi</button>
+      <button class="secondary" data-act="stu-pay-custom-toggle">✏️ Boshqa summa kiritish</button>
+    </div>`;
+  }
+  return `<div class="inline-form"><input class="input" id="payAmt" type="number" inputmode="numeric"
+      placeholder="Summa, masalan 300000" value="${esc(st.payAmount)}">
+    <button class="primary" style="flex:none" data-act="stu-pay-send" ${S.busy ? 'disabled' : ''}>Yubor</button></div>`;
 }
 function viewExamHistory() {
   const h = S.stu.examHistory;
@@ -1142,15 +1154,15 @@ async function saveStudent() {
   S.busy = false; render();
 }
 
-async function sendPayment() {
-  const amt = parseInt(document.getElementById('payAmt').value, 10);
+async function sendPayment(directAmt) {
+  const amt = directAmt || parseInt(document.getElementById('payAmt').value, 10);
   if (!amt || amt <= 0) return alert("Musbat summa kiriting.");
   S.busy = true; render();
   try {
     await api('/api/payments', {method:'POST', body: JSON.stringify({student: S.stu.detail.id, amount: amt})});
     haptic('medium');
     S.stu.detail = {...S.stu.detail, paid: true};
-    S.stu.payOpen = false; S.stu.payAmount = '';
+    S.stu.payOpen = false; S.stu.payAmount = ''; S.stu.payCustom = false;
     await refreshStuGroup();
     try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
   } catch (e) { alert(e.message); }
@@ -1637,7 +1649,9 @@ document.addEventListener('click', e => {
   else if (act === 'stu-form-back') { S.stu.view = S.stu.formBack; render(); }
   else if (act === 'stu-detail-back') { S.stu.view = S.stu.detailBack; render(); }
   else if (act === 'stu-save') saveStudent();
-  else if (act === 'stu-pay-toggle') { S.stu.payOpen = !S.stu.payOpen; S.stu.moveOpen = false; render(); }
+  else if (act === 'stu-pay-toggle') { S.stu.payOpen = !S.stu.payOpen; S.stu.payCustom = false; S.stu.moveOpen = false; render(); }
+  else if (act === 'stu-pay-custom-toggle') { S.stu.payCustom = true; render(); }
+  else if (act === 'stu-pay-suggested') sendPayment(Number(t.dataset.amt));
   else if (act === 'stu-move-toggle') { S.stu.moveOpen = !S.stu.moveOpen; S.stu.payOpen = false; render(); }
   else if (act === 'stu-pay-send') sendPayment();
   else if (act === 'stu-move-send') sendMove();
