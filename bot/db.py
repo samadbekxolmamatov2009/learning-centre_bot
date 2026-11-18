@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import re
 from datetime import date, datetime, timedelta, timezone
 
 import aiohttp
@@ -264,6 +265,19 @@ def today_local() -> date:
 
 def current_month() -> str:
     return today_local().strftime("%Y-%m")
+
+
+GRADE_SUGGESTED_PAY = {
+    "11": 600000, "10": 550000, "9": 500000, "8": 450000,
+    "7": 450000, "6": 400000, "5": 400000,
+}
+
+
+def suggested_payment(grade):
+    """O'quvchi sinfiga qarab tavsiya etilgan to'lov summasi (5-11 sinflar uchun). Boshqa
+    sinflar (yoki noma'lum format) uchun None qaytaradi - tavsiya ko'rsatilmaydi."""
+    m = re.match(r"\s*(\d+)", str(grade or ""))
+    return GRADE_SUGGESTED_PAY.get(m.group(1)) if m else None
 
 
 async def connect() -> Database:

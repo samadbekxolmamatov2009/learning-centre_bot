@@ -26,6 +26,10 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - **Direktor**: o'qituvchi (foiz / o'quvchi boshiga: stavkaning 2 baravarigacha to'lagan o'quvchidan to'lovning 40%, undan ko'pidan stavka) va admin qo'shish, oyliklar, admin funksiyalari.
 - **Admin**: guruh, o'quvchi qo'shish; to'lov kiritish va bekor qilish; o'quvchini ko'chirish; guruh/o'qituvchi/o'quvchini o'chirish; guruh o'qituvchisini almashtirish; qarzdorlar; oylik hisobot (o'tgan oylar ham).
 - O'quvchining telefon raqami saqlanadi: qarzdorlar ro'yxati, davomat xabari va PDF'da ko'rinadi; "📞 Telefonni o'zgartirish" tugmasi bor.
+- **To'lov kiritishda tavsiya etilgan summa**: o'quvchining sinfiga qarab (11-sinf: 600 000, 10-sinf: 550 000,
+  9-sinf: 500 000, 8/7-sinf: 450 000, 6/5-sinf: 400 000 so'm) tavsiya ko'rsatiladi - "✅ ... so'm to'landi"
+  tugmasini bossa, programma shu summa to'landi deb hisoblaydi. Agar summa boshqacha bo'lsa, "✏️ Boshqa summa
+  kiritish" tugmasi orqali istalgan summa qo'lda kiritiladi. Boshqa sinflar uchun tavsiya ko'rsatilmaydi, to'g'ridan-to'g'ri summa so'raladi. Chat va Mini App'da ham ishlaydi.
 - **O'qituvchi**: o'z guruhiga o'quvchi qo'shish/o'chirish, davomat (PDF adminga), oylik (o'tgan oylar ham), barcha guruhlari qarzdorlari.
 - **Oylik hisob-kitobi va hisobotlar doimiy saqlanadi**: agar o'quvchi biror oy uchun to'lov qilgandan keyin
   guruhdan chiqarilsa/o'chirilsa (masalan keyingi oy boshida), o'sha o'tgan oyning o'qituvchi oyligi
