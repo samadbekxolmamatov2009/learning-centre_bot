@@ -1008,8 +1008,8 @@ function viewStuForm() {
     <div class="field"><label>Guruh <span class="req">*</span></label>
       <select class="input" id="f_group">${!f.group ? '<option value="">— tanlang —</option>' : ''}${groups.map(g =>
         `<option value="${g.id}" ${g.id === f.group ? 'selected' : ''}>${esc(g.name)}${g.teacher ? ' · ' + esc(g.teacher) : ''}</option>`).join('')}</select></div>
-    ${staff ? `<label class="check"><input type="checkbox" id="f_reg" ${f.is_registry ? 'checked' : ''}>
-      <span>🏛 Reyestr o'quvchisi (davlat to'laydi)</span></label>` : ''}
+    <label class="check"><input type="checkbox" id="f_reg" ${f.is_registry ? 'checked' : ''}>
+      <span>🏛 Reyestr o'quvchisi (davlat to'laydi)</span></label>
     <div class="form-actions"><button class="secondary" data-act="stu-form-back">Bekor qilish</button>
       <button class="primary" data-act="stu-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : (isEdit ? 'Saqlash' : "Qo'shish")}</button></div>`;
 }
