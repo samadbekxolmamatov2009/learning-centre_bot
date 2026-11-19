@@ -116,6 +116,14 @@ xil funksiya).
 - **5 kunlik eslatma**: agar lid qo'shilganidan beri 5 kun o'tib hali qaror qilinmagan bo'lsa (hali Yangi/
   Bog'lanildi/Sinov darsida holatida), admin va direktorga har kuni (ertalab) eslatma xabari boradi - qaror
   qilinmaguncha har kuni takrorlanadi.
+- **Sinov darsi sanasi**: "Sinov darsida" bosqichiga o'tganda sana kiritish so'raladi (ixtiyoriy, keyinroq
+  ✏️ Tahrirlash orqali ham qo'shish/o'zgartirish mumkin). O'sha kuni ertalab, hali qaror qilinmagan bo'lsa,
+  "bugun sinov darsi bor" eslatmasi admin va direktorga yuboriladi.
+- **✏️ Tahrirlash**: lidning istalgan maydonini (ism, familiya, telefon, sinf, manba, izoh) keyinchalik
+  o'zgartirish mumkin - xato kiritilgan bo'lsa, o'chirib qayta qo'shish shart emas.
+- **📊 Statistika**: manba bo'yicha nechta lid kelgani va ularning necha foizi o'quvchi bo'lganini (konversiya),
+  shuningdek eng ko'p takrorlanadigan "voz kechish" sabablarini ko'rsatadi - qaysi reklama kanali samaraliroq
+  ekanini va narx/shartlar bo'yicha qaysi e'tirozlar ko'p uchrashini bilish uchun.
 
 ## Qarzdorlarga to'lov eslatmasi (faqat direktor)
 Panel sahifasida (yuqorida) **"📢"** tugmasi — shu oydagi **barcha** qarzdor o'quvchilarning ulangan ota-onalariga

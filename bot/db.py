@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS leads(
     source TEXT NOT NULL DEFAULT '', branch_id INTEGER REFERENCES branches(id),
     note TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','contacted','trial','won','lost')),
-    lost_reason TEXT NOT NULL DEFAULT '',
+    lost_reason TEXT NOT NULL DEFAULT '', trial_at TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP, decided_at TEXT);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 """
@@ -145,6 +145,9 @@ class Database:
             await self.execute("ALTER TABLE groups ADD COLUMN branch_id INTEGER")
         if "archived" not in gcols:
             await self.execute("ALTER TABLE groups ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+        lcols = [r["name"] for r in await self.fetchall("PRAGMA table_info(leads)")]
+        if "trial_at" not in lcols:
+            await self.execute("ALTER TABLE leads ADD COLUMN trial_at TEXT")
         if "rate" not in acols:
             await self.execute("ALTER TABLE attendance ADD COLUMN rate INTEGER NOT NULL DEFAULT 0")
         if "phone" not in cols:  # eski bazani yangilash
@@ -350,6 +353,37 @@ async def archive_or_delete_student(db, sid):
 async def archive_or_delete_group_students(db, group_id):
     for r in await fetchall(db, "SELECT id FROM students WHERE group_id=?", (group_id,)):
         await archive_or_delete_student(db, r["id"])
+
+
+def parse_lead_date(text):
+    """Lid uchun sinov darsi sanasini tekshiradi (YYYY-MM-DD). Bo'sh/'-' -> "" (tozalash),
+    noto'g'ri format -> None (xato)."""
+    t = (text or "").strip()
+    if not t or t == "-":
+        return ""
+    try:
+        date.fromisoformat(t)
+    except ValueError:
+        return None
+    return t
+
+
+async def leads_trial_today(db):
+    """Bugun sinov darsi rejalashtirilgan, hali ochiq (status='trial') lidlar."""
+    today = today_local().isoformat()
+    return await fetchall(db, "SELECT * FROM leads WHERE status='trial' AND trial_at=? ORDER BY id", (today,))
+
+
+async def lead_stats(db):
+    """Manba bo'yicha konversiya (jami/o'quvchi bo'lgan) va voz kechish sabablari bo'yicha hisob."""
+    sources = await fetchall(db, """
+        SELECT COALESCE(NULLIF(source,''),'(manba kiritilmagan)') AS source, COUNT(*) AS total,
+               SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) AS won
+        FROM leads GROUP BY source ORDER BY total DESC""")
+    reasons = await fetchall(db, """
+        SELECT COALESCE(NULLIF(lost_reason,''),'(sabab yozilmagan)') AS reason, COUNT(*) AS n
+        FROM leads WHERE status='lost' GROUP BY reason ORDER BY n DESC""")
+    return sources, reasons
 
 
 async def stale_leads(db):

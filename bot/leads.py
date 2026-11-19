@@ -24,6 +24,8 @@ def lead_detail_text(r) -> str:
     lines = [f"🧲 <b>{lead_line(r)}</b>", f"Holat: {D.LEAD_STATUS_LABELS[r['status']]}"]
     if r["source"]:
         lines.append(f"Manba: {r['source']}")
+    if r.get("trial_at"):
+        lines.append(f"Sinov darsi: {r['trial_at']}")
     if r["note"]:
         lines.append(f"Izoh: {r['note']}")
     if r["status"] == "lost" and r["lost_reason"]:
@@ -31,7 +33,12 @@ def lead_detail_text(r) -> str:
     return "\n".join(lines)
 
 
-def lead_actions_kb(r) -> InlineKeyboardMarkup | None:
+EDIT_FIELDS = {"first": ("Ism", "first_name"), "last": ("Familiya", "last_name"),
+              "grade": ("Sinf", "grade"), "phone": ("Telefon", "phone"),
+              "source": ("Manba", "source"), "note": ("Izoh", "note")}
+
+
+def lead_actions_kb(r) -> InlineKeyboardMarkup:
     rows = []
     if r["status"] == "new":
         rows.append([InlineKeyboardButton(text="📞 Bog'landim", callback_data=f"ld_next:{r['id']}")])
@@ -40,7 +47,8 @@ def lead_actions_kb(r) -> InlineKeyboardMarkup | None:
     if r["status"] in D.LEAD_OPEN_STATUSES:
         rows.append([InlineKeyboardButton(text="🎉 O'quvchi qilish", callback_data=f"ld_win:{r['id']}"),
                      InlineKeyboardButton(text="❌ Voz kechish", callback_data=f"ld_lose:{r['id']}")])
-    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+    rows.append([InlineKeyboardButton(text="✏️ Tahrirlash", callback_data=f"ld_edit:{r['id']}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 # ---------------- Lid qo'shish ----------------
@@ -53,7 +61,27 @@ class AddLead(StatesGroup):
 async def leads_menu(m: Message):
     await m.answer("Lidlar bo'limi:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Lid qo'shish", callback_data="ld_add")],
-        [InlineKeyboardButton(text="📋 Ochiq lidlar", callback_data="ld_list")]]))
+        [InlineKeyboardButton(text="📋 Ochiq lidlar", callback_data="ld_list")],
+        [InlineKeyboardButton(text="📊 Statistika", callback_data="ld_stats")]]))
+
+
+@router.callback_query(F.data == "ld_stats", STAFF)
+async def ld_stats(c: CallbackQuery, db):
+    sources, reasons = await D.lead_stats(db)
+    await c.answer()
+    lines = ["📊 <b>Manba bo'yicha</b>:"]
+    if not sources:
+        lines.append("Hali lid yo'q.")
+    for s in sources:
+        pct = round(s["won"] * 100 / s["total"]) if s["total"] else 0
+        lines.append(f"- {s['source']}: {s['total']} ta, {s['won']} o'quvchi bo'ldi ({pct}%)")
+    lines.append("")
+    lines.append("❌ <b>Voz kechish sabablari</b>:")
+    if not reasons:
+        lines.append("Hali yo'q.")
+    for r in reasons:
+        lines.append(f"- {r['reason']}: {r['n']} marta")
+    await c.message.answer("\n".join(lines), parse_mode="HTML")
 
 
 @router.callback_query(F.data == "ld_add", STAFF)
@@ -176,8 +204,12 @@ async def ld_open(c: CallbackQuery, db):
     await c.message.answer(lead_detail_text(r), parse_mode="HTML", reply_markup=lead_actions_kb(r))
 
 
+class SetTrialDate(StatesGroup):
+    date = State()
+
+
 @router.callback_query(F.data.startswith("ld_next:"), STAFF)
-async def ld_next(c: CallbackQuery, db):
+async def ld_next(c: CallbackQuery, db, state: FSMContext):
     lid = int(c.data[8:])
     r = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
     if not r or r["status"] not in D.LEAD_NEXT_STATUS:
@@ -187,6 +219,25 @@ async def ld_next(c: CallbackQuery, db):
     r2 = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
     await c.message.edit_text(lead_detail_text(r2), parse_mode="HTML", reply_markup=lead_actions_kb(r2))
     await c.answer("Holat yangilandi")
+    if nxt == "trial":
+        await state.set_state(SetTrialDate.date)
+        await state.update_data(lead_id=lid)
+        await c.message.answer("Sinov darsi sanasi (masalan 2026-11-25, bilmasangiz - yuboring):")
+
+
+@router.message(SetTrialDate.date)
+async def set_trial_date(m: Message, db, state: FSMContext):
+    lid = (await state.get_data())["lead_id"]
+    val = D.parse_lead_date(m.text)
+    if val is None:
+        return await m.answer("Sana formati noto'g'ri. Masalan: 2026-11-25 (yoki - yuboring).")
+    await db.execute("UPDATE leads SET trial_at=? WHERE id=?", (val, lid))
+    await state.clear()
+    r = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
+    if val:
+        await m.answer(f"✅ Sinov darsi sanasi saqlandi: {val}")
+    else:
+        await m.answer("Sana kiritilmadi - keyinroq ✏️ Tahrirlash orqali qo'shishingiz mumkin.")
 
 
 @router.callback_query(F.data.startswith("ld_win:"), STAFF)
@@ -234,3 +285,49 @@ async def ld_lose_reason(m: Message, db, state: FSMContext):
                      ("" if t == "-" else t, lid))
     await state.clear()
     await m.answer("❌ Lid yopildi (voz kechdi).")
+
+
+# ---------------- Tahrirlash ----------------
+class EditLead(StatesGroup):
+    value = State()
+
+
+@router.callback_query(F.data.startswith("ld_edit:"), STAFF)
+async def ld_edit_menu(c: CallbackQuery):
+    lid = c.data[8:]
+    b = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=label, callback_data=f"ldef:{key}:{lid}")]
+        for key, (label, _) in EDIT_FIELDS.items()])
+    await c.message.answer("Qaysi maydonni tahrirlaysiz?", reply_markup=b)
+    await c.answer()
+
+
+@router.callback_query(F.data.startswith("ldef:"), STAFF)
+async def ld_edit_pick(c: CallbackQuery, state: FSMContext):
+    _, key, lid_s = c.data.split(":")
+    label, col = EDIT_FIELDS[key]
+    await state.set_state(EditLead.value)
+    await state.update_data(lead_id=int(lid_s), col=col)
+    await c.message.answer(f"{label} - yangi qiymat (bo'sh qoldirish uchun - yuboring):")
+    await c.answer()
+
+
+@router.message(EditLead.value)
+async def ld_edit_save(m: Message, db, state: FSMContext):
+    d = await state.get_data()
+    lid, col = d["lead_id"], d["col"]
+    t = m.text.strip()
+    if col == "first_name" and t != "-" and len(t) < 2:
+        return await m.answer("Ismni to'liq kiriting.")
+    val = "" if t == "-" else t
+    if col == "first_name" and not val:
+        return await m.answer("Ism bo'sh bo'lishi mumkin emas.")
+    if col == "phone" and val:
+        phone = normalize_phone(val)
+        if phone is None:
+            return await m.answer("Raqam noto'g'ri. Masalan: 90 123 45 67 (yoki - yuboring).")
+        val = phone
+    await db.execute(f"UPDATE leads SET {col}=? WHERE id=?", (val, lid))
+    await state.clear()
+    r = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
+    await m.answer(f"✅ Yangilandi.\n\n{lead_detail_text(r)}", parse_mode="HTML", reply_markup=lead_actions_kb(r))

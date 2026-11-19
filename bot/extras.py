@@ -304,9 +304,34 @@ async def check_stale_leads(bot: Bot, db):
             log.warning("Lid eslatmasi yuborilmadi: %s", u["tg_id"])
 
 
+async def check_trial_today(bot: Bot, db):
+    """Bugun sinov darsi rejalashtirilgan lidlar haqida ertalab bir marta admin/direktorga eslatma."""
+    now = local_now()
+    if now.hour < REMINDER_HOUR:
+        return
+    today = now.date().isoformat()
+    key = f"trialrem-{today}"
+    if await db.fetchone("SELECT 1 FROM notices WHERE key=?", (key,)):
+        return
+    rows = await D.leads_trial_today(db)
+    if not rows:
+        return
+    await db.execute("INSERT OR IGNORE INTO notices(key) VALUES(?)", (key,))
+    lines = [f"🎓 Bugun {len(rows)} ta lidning sinov darsi bor:"]
+    for r in rows:
+        name = f"{r['last_name']} {r['first_name']}".strip()
+        lines.append(f"- {name}{with_phone(r)}")
+    text = "\n".join(lines)
+    for u in await db.fetchall("SELECT tg_id FROM users WHERE role IN ('admin','director')"):
+        try:
+            await bot.send_message(u["tg_id"], text)
+        except Exception:
+            log.warning("Sinov darsi eslatmasi yuborilmadi: %s", u["tg_id"])
+
+
 async def scheduler(bot: Bot, db):
     while True:
-        for job in (send_month_end_notice, check_attendance_reminders, check_stale_leads):
+        for job in (send_month_end_notice, check_attendance_reminders, check_stale_leads, check_trial_today):
             try:
                 await job(bot, db)
             except Exception:

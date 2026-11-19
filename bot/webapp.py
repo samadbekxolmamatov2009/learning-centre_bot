@@ -845,7 +845,7 @@ def lead_out(r):
     return {"id": r["id"], "first": r["first_name"], "last": r["last_name"], "phone": r["phone"],
             "grade": r["grade"], "source": r["source"], "branch_id": r["branch_id"], "note": r["note"],
             "status": r["status"], "status_label": D.LEAD_STATUS_LABELS[r["status"]],
-            "lost_reason": r["lost_reason"], "created_at": str(r["created_at"]),
+            "lost_reason": r["lost_reason"], "trial_at": r["trial_at"], "created_at": str(r["created_at"]),
             "decided_at": str(r["decided_at"]) if r["decided_at"] else None}
 
 
@@ -865,6 +865,18 @@ async def api_leads_get(request):
     branches = await db.fetchall("SELECT id, name FROM branches ORDER BY name")
     return web.json_response({"leads": [lead_out(r) for r in rows],
                               "branches": [dict(b) for b in branches]})
+
+
+async def api_leads_stats(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    sources, reasons = await D.lead_stats(db)
+    return web.json_response({
+        "sources": [{"source": s["source"], "total": s["total"], "won": s["won"],
+                    "pct": round(s["won"] * 100 / s["total"]) if s["total"] else 0} for s in sources],
+        "reasons": [{"reason": r["reason"], "n": r["n"]} for r in reasons]})
 
 
 async def api_leads_post(request):
@@ -896,7 +908,9 @@ async def api_leads_post(request):
 
 
 async def api_lead_patch(request):
-    """Holatni 'new'->'contacted'->'trial' siljitish uchun: {status: 'contacted'|'trial'}."""
+    """Holatni 'new'->'contacted'->'trial' siljitish uchun: {status: 'contacted'|'trial'}.
+    Shuningdek maydonlarni tahrirlash uchun: first/last/grade/phone/source/note/branch/trial_at
+    (berilganlari yangilanadi, qolganlari o'zgarmaydi)."""
     uid, role, _ = await auth(request)
     if role not in ("admin", "director"):
         return bad("Ruxsat yo'q", 403)
@@ -914,6 +928,36 @@ async def api_lead_patch(request):
         if r["status"] not in D.LEAD_NEXT_STATUS or status != D.LEAD_NEXT_STATUS[r["status"]]:
             return bad("Bu holatga o'tib bo'lmaydi")
         await db.execute("UPDATE leads SET status=? WHERE id=?", (status, lid))
+    fields = {}
+    if "first" in body:
+        first = clean_text(body.get("first"))
+        if len(first) < 2:
+            return bad("Ismni to'liq kiriting")
+        fields["first_name"] = first
+    if "last" in body:
+        fields["last_name"] = clean_text(body.get("last"))
+    if "grade" in body:
+        fields["grade"] = clean_text(body.get("grade"), 20)
+    if "phone" in body:
+        phone_raw = body.get("phone") or ""
+        phone = normalize_phone(phone_raw) if phone_raw.strip() else ""
+        if phone is None:
+            return bad("Telefon raqami noto'g'ri")
+        fields["phone"] = phone
+    if "source" in body:
+        fields["source"] = clean_text(body.get("source"), 60)
+    if "note" in body:
+        fields["note"] = clean_text(body.get("note"), 500)
+    if "branch" in body:
+        fields["branch_id"] = int(body["branch"]) if body.get("branch") else None
+    if "trial_at" in body:
+        val = D.parse_lead_date(body.get("trial_at"))
+        if val is None:
+            return bad("Sana formati noto'g'ri (YYYY-MM-DD)")
+        fields["trial_at"] = val
+    if fields:
+        set_sql = ", ".join(f"{k}=?" for k in fields)
+        await db.execute(f"UPDATE leads SET {set_sql} WHERE id=?", tuple(fields.values()) + (lid,))
     row = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
     return web.json_response({"ok": True, "lead": lead_out(row)})
 
@@ -1651,6 +1695,7 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_get("/api/export", api_export)
     app.router.add_get("/api/export-group-roster", api_export_group_roster)
     app.router.add_get("/api/leads", api_leads_get)
+    app.router.add_get("/api/leads/stats", api_leads_stats)
     app.router.add_post("/api/leads", api_leads_post)
     app.router.add_patch("/api/leads/{lid}", api_lead_patch)
     app.router.add_post("/api/leads/{lid}/convert", api_lead_convert)

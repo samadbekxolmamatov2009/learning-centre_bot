@@ -172,7 +172,7 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, dashBranch
   cert:{view:'groups', groups:[], group:null, students:[], subjects:[], grades:[], detail:null, detailCerts:[],
         has189:false, pickSubject:null, detailBack:'list', graduated:null},
   leads:{view:'list', filter:'open', items:[], branches:[], groups:null, detail:null, form:null,
-        declineOpen:false, convertOpen:false}};
+        declineOpen:false, convertOpen:false, stats:null, trialOpen:false}};
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d.slice(8,10) + '.' + d.slice(5,7);
@@ -1540,7 +1540,8 @@ async function loadLeadsTab() {
 function viewLeadsList() {
   const items = S.leads.items || [];
   return `<div class="top"><h1>🧲 Lidlar</h1>
-      <button class="iconbtn" data-act="lead-add-open" style="margin-left:auto">➕</button></div>
+      <button class="iconbtn" data-act="lead-stats-open">📊</button>
+      <button class="iconbtn" data-act="lead-add-open">➕</button></div>
     <div class="actions2" style="margin-bottom:8px">
       <button class="abtn ${S.leads.filter === 'open' ? 'on' : ''}" data-act="lead-filter" data-f="open">Ochiq</button>
       <button class="abtn ${S.leads.filter === '' ? 'on' : ''}" data-act="lead-filter" data-f="">Barchasi</button>
@@ -1553,8 +1554,9 @@ function viewLeadsList() {
 }
 function viewLeadForm() {
   const f = S.leads.form || {first:'', last:'', grade:'', phone:'', source:'', branch:'', note:''};
+  const editing = !!f.id;
   const multiBranch = S.leads.branches.length > 1;
-  return `<div class="top"><button class="back" data-act="lead-form-back">‹</button><h1>➕ Yangi lid</h1></div>
+  return `<div class="top"><button class="back" data-act="lead-form-back">‹</button><h1>${editing ? '✏️ Lidni tahrirlash' : '➕ Yangi lid'}</h1></div>
     <div class="field"><label>Ism <span class="req">*</span></label>
       <input class="input" id="ld_first" placeholder="Ali" value="${esc(f.first)}" autocomplete="off"></div>
     <div class="field"><label>Familiya</label>
@@ -1572,7 +1574,7 @@ function viewLeadForm() {
     <div class="field"><label>Izoh</label>
       <input class="input" id="ld_note" placeholder="masalan: narx so'radi" value="${esc(f.note)}" autocomplete="off"></div>
     <div class="form-actions"><button class="secondary" data-act="lead-form-back">Bekor qilish</button>
-      <button class="primary" data-act="lead-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : "Qo'shish"}</button></div>`;
+      <button class="primary" data-act="lead-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : (editing ? 'Saqlash' : "Qo'shish")}</button></div>`;
 }
 function viewLeadDetail() {
   const r = S.leads.detail;
@@ -1586,7 +1588,11 @@ function viewLeadDetail() {
       ${r.note ? `<div class="ln">Izoh: ${esc(r.note)}</div>` : ''}
       <div class="ln" style="margin-top:10px"><span class="pay-badge ${leadBadgeClass(r.status)}">${esc(r.status_label)}</span></div>
       ${r.status === 'lost' && r.lost_reason ? `<div class="ln">Sababi: ${esc(r.lost_reason)}</div>` : ''}
+      ${r.status === 'trial' ? `<div class="ln">Sinov darsi: ${r.trial_at ? esc(r.trial_at) : '— belgilanmagan —'}
+        <button class="iconbtn" style="width:32px;height:32px;font-size:13px" data-act="lead-trial-toggle">📅</button></div>` : ''}
     </div>
+    ${S.leads.trialOpen ? `<div class="inline-form"><input class="input" id="ld_trial" type="date" value="${esc(r.trial_at || '')}">
+      <button class="primary" style="flex:none" data-act="lead-trial-send" ${S.busy ? 'disabled' : ''}>Saqlash</button></div>` : ''}
     ${LEAD_OPEN.includes(r.status) ? `<div class="actions2" style="margin-top:10px">
       ${next ? `<button class="abtn" data-act="lead-next">${next[1]}</button>` : ''}
       <button class="abtn" data-act="lead-convert-toggle">🎉 O'quvchi qilish</button>
@@ -1596,7 +1602,24 @@ function viewLeadDetail() {
         <option value="">— guruh —</option>${(S.leads.groups || []).map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select>
       <button class="primary" style="flex:none" data-act="lead-convert-send" ${S.busy ? 'disabled' : ''}>Qo'shish</button></div>` : ''}
     ${S.leads.declineOpen ? `<div class="inline-form"><input class="input" id="ld_reason" placeholder="Sababi (ixtiyoriy)">
-      <button class="primary" style="flex:none" data-act="lead-decline-send" ${S.busy ? 'disabled' : ''}>Yopish</button></div>` : ''}`;
+      <button class="primary" style="flex:none" data-act="lead-decline-send" ${S.busy ? 'disabled' : ''}>Yopish</button></div>` : ''}
+    <button class="abtn" style="width:100%;margin-top:10px" data-act="lead-edit-open">✏️ Tahrirlash</button>`;
+}
+function viewLeadsStats() {
+  const d = S.leads.stats;
+  if (!d) return '<div class="spin" style="margin:30px auto"></div>';
+  return `<div class="top"><button class="back" data-act="lead-stats-back">‹</button><h1>📊 Lid statistikasi</h1></div>
+    <div class="sub">Manba bo'yicha (jami / o'quvchi bo'lgan / konversiya)</div>
+    <div class="list" style="margin-top:8px">${d.sources.map(s => `<div class="srow-row">
+        <div class="who"><div class="name">${esc(s.source)}</div>
+          <div class="meta">${s.total} ta · ${s.won} o'quvchi bo'ldi</div></div>
+        <span class="pay-badge ${s.pct >= 50 ? 'ok' : 'reg'}">${s.pct}%</span></div>`).join('')
+      || '<div class="empty">Hali lid yo\'q</div>'}</div>
+    <div class="sub" style="margin-top:16px">Voz kechish sabablari</div>
+    <div class="list" style="margin-top:8px">${d.reasons.map(r => `<div class="srow-row">
+        <div class="who"><div class="name">${esc(r.reason)}</div></div>
+        <span class="pay-badge no">${r.n}</span></div>`).join('')
+      || '<div class="empty">Hali yo\'q</div>'}</div>`;
 }
 function leadFormRead() {
   return {first: document.getElementById('ld_first').value.trim(), last: document.getElementById('ld_last').value.trim(),
@@ -1608,9 +1631,11 @@ function leadFormRead() {
 async function saveLead() {
   const f = leadFormRead();
   if (f.first.length < 2) return alert('Ismni to\'liq kiriting.');
+  const editing = S.leads.form && S.leads.form.id;
   S.busy = true; render();
   try {
-    await api('/api/leads', {method: 'POST', body: JSON.stringify(f)});
+    if (editing) await api(`/api/leads/${S.leads.form.id}`, {method: 'PATCH', body: JSON.stringify(f)});
+    else await api('/api/leads', {method: 'POST', body: JSON.stringify(f)});
     haptic('medium');
     S.leads.form = null; S.leads.view = 'list';
     S.busy = false;
@@ -1650,7 +1675,23 @@ async function leadDeclineSend() {
     await loadLeadsTab();
   } catch (e) { alert(e.message); S.busy = false; render(); }
 }
-const LEADS_VIEWS = {list: viewLeadsList, form: viewLeadForm, detail: viewLeadDetail};
+async function leadTrialSend() {
+  const val = document.getElementById('ld_trial').value;
+  S.busy = true; render();
+  try {
+    const d = await api(`/api/leads/${S.leads.detail.id}`, {method: 'PATCH', body: JSON.stringify({trial_at: val || '-'})});
+    S.leads.detail = d.lead; S.leads.trialOpen = false; haptic('medium');
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function loadLeadsStats() {
+  S.leads.view = 'stats'; S.leads.stats = null; render();
+  try {
+    S.leads.stats = await api('/api/leads/stats');
+    render();
+  } catch (e) { alert(e.message); S.leads.view = 'list'; render(); }
+}
+const LEADS_VIEWS = {list: viewLeadsList, form: viewLeadForm, detail: viewLeadDetail, stats: viewLeadsStats};
 const CERT_VIEWS = {groups: viewCertGroups, list: viewCertList, detail: viewCertDetail, graduated: viewCertGraduated};
 
 /* ---------- umumiy chizish ---------- */
@@ -1859,13 +1900,19 @@ document.addEventListener('click', e => {
   else if (act === 'lead-filter') { S.leads.filter = t.dataset.f; loadLeadsTab(); }
   else if (act === 'lead-open') {
     S.leads.detail = S.leads.items.find(r => r.id === id);
-    S.leads.convertOpen = false; S.leads.declineOpen = false; S.leads.view = 'detail';
+    S.leads.convertOpen = false; S.leads.declineOpen = false; S.leads.trialOpen = false; S.leads.view = 'detail';
     render();
   }
-  else if (act === 'lead-form-back') { S.leads.view = 'list'; render(); }
+  else if (act === 'lead-form-back') { S.leads.view = S.leads.form && S.leads.form.id ? 'detail' : 'list'; render(); }
   else if (act === 'lead-save') saveLead();
   else if (act === 'lead-detail-back') { S.leads.view = 'list'; render(); }
   else if (act === 'lead-next') leadNextStage();
+  else if (act === 'lead-edit-open') {
+    const r = S.leads.detail;
+    S.leads.form = {id: r.id, first: r.first, last: r.last, grade: r.grade, phone: r.phone,
+      source: r.source, branch: r.branch_id || '', note: r.note};
+    S.leads.view = 'form'; render();
+  }
   else if (act === 'lead-convert-toggle') {
     S.leads.declineOpen = false;
     S.leads.convertOpen = !S.leads.convertOpen;
@@ -1877,6 +1924,10 @@ document.addEventListener('click', e => {
   else if (act === 'lead-decline-toggle') { S.leads.convertOpen = false; S.leads.declineOpen = !S.leads.declineOpen; render(); }
   else if (act === 'lead-convert-send') leadConvertSend();
   else if (act === 'lead-decline-send') leadDeclineSend();
+  else if (act === 'lead-trial-toggle') { S.leads.trialOpen = !S.leads.trialOpen; render(); }
+  else if (act === 'lead-trial-send') leadTrialSend();
+  else if (act === 'lead-stats-open') loadLeadsStats();
+  else if (act === 'lead-stats-back') { S.leads.view = 'list'; render(); }
 });
 document.addEventListener('change', e => {
   if (e.target.dataset && e.target.dataset.act === 'pick' && e.target.value) openGroup(S.att.group.id, e.target.value, S.att.single);
