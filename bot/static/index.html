@@ -136,6 +136,7 @@ select.input{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w
 .abtn{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:14px;font-weight:600;
   display:flex;align-items:center;justify-content:center;gap:6px;text-align:center}
 .abtn.danger{color:var(--no);border-color:color-mix(in srgb,var(--no) 35%,transparent)}
+.abtn.on{background:var(--btn);color:#fff;border-color:var(--btn)}
 .inline-form{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);display:flex;gap:8px}
 .srow-row{background:var(--card);border-radius:12px;padding:12px;display:flex;align-items:center;gap:10px}
 .srow-row .who{flex:1;min-width:0}
@@ -169,7 +170,9 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, dashBranch
   notif:{count:0, items:null, loading:false, from:null},
   exam:{view:'list', groupId:null, groupName:'', list:[], loading:false, form:null, detail:null, students:[], scores:{}, grades:{}, gradeOptions:[], toast:'', notLinked:null},
   cert:{view:'groups', groups:[], group:null, students:[], subjects:[], grades:[], detail:null, detailCerts:[],
-        has189:false, pickSubject:null, detailBack:'list', graduated:null}};
+        has189:false, pickSubject:null, detailBack:'list', graduated:null},
+  leads:{view:'list', filter:'open', items:[], branches:[], groups:null, detail:null, form:null,
+        declineOpen:false, convertOpen:false}};
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDay = d => d.slice(8,10) + '.' + d.slice(5,7);
@@ -1520,6 +1523,134 @@ function certBack() {
   if (S.cert.view === 'detail') { S.cert.view = S.cert.detailBack; render(); }
   else { S.cert.view = 'groups'; render(); }
 }
+
+/* ---------- Lidlar ---------- */
+const LEAD_SOURCES = ["📷 Instagram", "👥 Tanishlar orqali", "📢 Ko'chadagi reklama", "✍️ Boshqa"];
+const LEAD_OPEN = ['new', 'contacted', 'trial'];
+const LEAD_NEXT = {new: ['contacted', "📞 Bog'landim"], contacted: ['trial', "🎓 Sinov darsiga yozildi"]};
+function leadBadgeClass(st) { return st === 'won' ? 'ok' : st === 'lost' ? 'no' : 'reg'; }
+async function loadLeadsTab() {
+  S.view = 'leads'; S.leads.view = 'list'; render();
+  try {
+    const d = await api(`/api/leads?status=${S.leads.filter}`);
+    S.leads.items = d.leads; S.leads.branches = d.branches;
+    render();
+  } catch (e) { fail(e); }
+}
+function viewLeadsList() {
+  const items = S.leads.items || [];
+  return `<div class="top"><h1>🧲 Lidlar</h1>
+      <button class="iconbtn" data-act="lead-add-open" style="margin-left:auto">➕</button></div>
+    <div class="actions2" style="margin-bottom:8px">
+      <button class="abtn ${S.leads.filter === 'open' ? 'on' : ''}" data-act="lead-filter" data-f="open">Ochiq</button>
+      <button class="abtn ${S.leads.filter === '' ? 'on' : ''}" data-act="lead-filter" data-f="">Barchasi</button>
+    </div>
+    <div class="list">${items.map(r => `<div class="srow-row" data-act="lead-open" data-id="${r.id}">
+        <div class="who"><div class="name">${esc(r.last)} ${esc(r.first)}</div>
+          <div class="meta">${r.grade ? r.grade + '-sinf · ' : ''}${r.phone ? '📞 ' + esc(r.phone) : ''}</div></div>
+        <span class="pay-badge ${leadBadgeClass(r.status)}">${esc(r.status_label)}</span></div>`).join('')
+      || '<div class="empty" style="padding:30px 8px">Lid yo\'q</div>'}</div>`;
+}
+function viewLeadForm() {
+  const f = S.leads.form || {first:'', last:'', grade:'', phone:'', source:'', branch:'', note:''};
+  const multiBranch = S.leads.branches.length > 1;
+  return `<div class="top"><button class="back" data-act="lead-form-back">‹</button><h1>➕ Yangi lid</h1></div>
+    <div class="field"><label>Ism <span class="req">*</span></label>
+      <input class="input" id="ld_first" placeholder="Ali" value="${esc(f.first)}" autocomplete="off"></div>
+    <div class="field"><label>Familiya</label>
+      <input class="input" id="ld_last" placeholder="Valiyev" value="${esc(f.last)}" autocomplete="off"></div>
+    <div class="field"><label>Qiziqqan sinf</label>
+      <input class="input" id="ld_grade" placeholder="7" value="${esc(f.grade)}" autocomplete="off"></div>
+    <div class="field"><label>Telefon</label>
+      <input class="input" id="ld_phone" type="tel" inputmode="tel" placeholder="90 123 45 67" value="${esc(f.phone)}" autocomplete="tel"></div>
+    <div class="field"><label>Manba</label>
+      <select class="input" id="ld_source"><option value="">— tanlang —</option>${LEAD_SOURCES.map(s =>
+        `<option value="${esc(s)}" ${s === f.source ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
+    ${multiBranch ? `<div class="field"><label>Filial</label>
+      <select class="input" id="ld_branch"><option value="">— tanlang —</option>${S.leads.branches.map(b =>
+        `<option value="${b.id}" ${b.id == f.branch ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>` : ''}
+    <div class="field"><label>Izoh</label>
+      <input class="input" id="ld_note" placeholder="masalan: narx so'radi" value="${esc(f.note)}" autocomplete="off"></div>
+    <div class="form-actions"><button class="secondary" data-act="lead-form-back">Bekor qilish</button>
+      <button class="primary" data-act="lead-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : "Qo'shish"}</button></div>`;
+}
+function viewLeadDetail() {
+  const r = S.leads.detail;
+  const next = LEAD_NEXT[r.status];
+  return `<div class="top"><button class="back" data-act="lead-detail-back">‹</button><h1>${esc(r.last)} ${esc(r.first)}</h1></div>
+    <div class="card-detail">
+      <div class="nm">${esc(r.last)} ${esc(r.first)}</div>
+      ${r.grade ? `<div class="ln">🏫 <b>${esc(r.grade)}-sinf</b></div>` : ''}
+      <div class="ln">${r.phone ? `📞 <a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '📞 raqam kiritilmagan'}</div>
+      ${r.source ? `<div class="ln">Manba: ${esc(r.source)}</div>` : ''}
+      ${r.note ? `<div class="ln">Izoh: ${esc(r.note)}</div>` : ''}
+      <div class="ln" style="margin-top:10px"><span class="pay-badge ${leadBadgeClass(r.status)}">${esc(r.status_label)}</span></div>
+      ${r.status === 'lost' && r.lost_reason ? `<div class="ln">Sababi: ${esc(r.lost_reason)}</div>` : ''}
+    </div>
+    ${LEAD_OPEN.includes(r.status) ? `<div class="actions2" style="margin-top:10px">
+      ${next ? `<button class="abtn" data-act="lead-next">${next[1]}</button>` : ''}
+      <button class="abtn" data-act="lead-convert-toggle">🎉 O'quvchi qilish</button>
+      <button class="abtn danger" data-act="lead-decline-toggle">❌ Voz kechish</button>
+    </div>` : ''}
+    ${S.leads.convertOpen ? `<div class="inline-form"><select class="input" id="ld_group_sel">
+        <option value="">— guruh —</option>${(S.leads.groups || []).map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select>
+      <button class="primary" style="flex:none" data-act="lead-convert-send" ${S.busy ? 'disabled' : ''}>Qo'shish</button></div>` : ''}
+    ${S.leads.declineOpen ? `<div class="inline-form"><input class="input" id="ld_reason" placeholder="Sababi (ixtiyoriy)">
+      <button class="primary" style="flex:none" data-act="lead-decline-send" ${S.busy ? 'disabled' : ''}>Yopish</button></div>` : ''}`;
+}
+function leadFormRead() {
+  return {first: document.getElementById('ld_first').value.trim(), last: document.getElementById('ld_last').value.trim(),
+    grade: document.getElementById('ld_grade').value.trim(), phone: document.getElementById('ld_phone').value.trim(),
+    source: document.getElementById('ld_source').value,
+    branch: document.getElementById('ld_branch') ? document.getElementById('ld_branch').value : '',
+    note: document.getElementById('ld_note').value.trim()};
+}
+async function saveLead() {
+  const f = leadFormRead();
+  if (f.first.length < 2) return alert('Ismni to\'liq kiriting.');
+  S.busy = true; render();
+  try {
+    await api('/api/leads', {method: 'POST', body: JSON.stringify(f)});
+    haptic('medium');
+    S.leads.form = null; S.leads.view = 'list';
+    S.busy = false;
+    await loadLeadsTab();
+  } catch (e) { alert(e.message); S.busy = false; render(); }
+}
+async function leadNextStage() {
+  const r = S.leads.detail, next = LEAD_NEXT[r.status];
+  if (!next) return;
+  S.busy = true; render();
+  try {
+    const d = await api(`/api/leads/${r.id}`, {method: 'PATCH', body: JSON.stringify({status: next[0]})});
+    S.leads.detail = d.lead; haptic('medium');
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+async function leadConvertSend() {
+  const gid = document.getElementById('ld_group_sel').value;
+  if (!gid) return alert('Guruhni tanlang.');
+  S.busy = true; render();
+  try {
+    await api(`/api/leads/${S.leads.detail.id}/convert`, {method: 'POST', body: JSON.stringify({group: +gid})});
+    haptic('medium');
+    S.leads.convertOpen = false; S.leads.view = 'list';
+    S.busy = false;
+    await loadLeadsTab();
+  } catch (e) { alert(e.message); S.busy = false; render(); }
+}
+async function leadDeclineSend() {
+  const reason = document.getElementById('ld_reason').value.trim();
+  S.busy = true; render();
+  try {
+    await api(`/api/leads/${S.leads.detail.id}/decline`, {method: 'POST', body: JSON.stringify({reason})});
+    haptic('medium');
+    S.leads.declineOpen = false; S.leads.view = 'list';
+    S.busy = false;
+    await loadLeadsTab();
+  } catch (e) { alert(e.message); S.busy = false; render(); }
+}
+const LEADS_VIEWS = {list: viewLeadsList, form: viewLeadForm, detail: viewLeadDetail};
 const CERT_VIEWS = {groups: viewCertGroups, list: viewCertList, detail: viewCertDetail, graduated: viewCertGraduated};
 
 /* ---------- umumiy chizish ---------- */
@@ -1531,8 +1662,9 @@ function tabs() {
   const salTab = staff ? '' : `<button class="${S.tab === 'sal' ? 'on' : ''}" data-act="tab" data-tab="sal"><span>💰</span>Oylik</button>`;
   const hrTab = S.me.role === 'director' ? `<button class="${S.tab === 'hr' ? 'on' : ''}" data-act="tab" data-tab="hr"><span>👨‍🏫</span>Xodimlar</button>` : '';
   const certTab = `<button class="${S.tab === 'cert' ? 'on' : ''}" data-act="tab" data-tab="cert"><span>🎓</span>Sertifikat</button>`;
+  const leadsTab = staff ? `<button class="${S.tab === 'leads' ? 'on' : ''}" data-act="tab" data-tab="leads"><span>🧲</span>Lidlar</button>` : '';
   return `<div class="tabs">${first}
-    <button class="${S.tab === 'stu' ? 'on' : ''}" data-act="tab" data-tab="stu"><span>👥</span>O'quvchilar</button>${certTab}${salTab}${hrTab}</div>`;
+    <button class="${S.tab === 'stu' ? 'on' : ''}" data-act="tab" data-tab="stu"><span>👥</span>O'quvchilar</button>${certTab}${salTab}${leadsTab}${hrTab}</div>`;
 }
 const STU_VIEWS = {groups: viewStuGroups, list: viewStuList, form: viewStuForm, detail: viewStuDetail, gform: viewStuGroupForm, gedit: viewGroupEdit};
 function render() {
@@ -1548,6 +1680,7 @@ function render() {
   else if (S.view === 'exam') html = EXAM_VIEWS[S.exam.view]();
   else if (S.view === 'cert') html = CERT_VIEWS[S.cert.view]() + (S.cert.view === 'groups' ? tabs() : '');
   else if (S.view === 'rank') html = viewRanking();
+  else if (S.view === 'leads') html = LEADS_VIEWS[S.leads.view]() + (S.leads.view === 'list' ? tabs() : '');
   else html = viewGroups() + tabs();
   const focusEl = document.activeElement;
   const focusId = focusEl && focusEl.id;
@@ -1617,6 +1750,7 @@ document.addEventListener('click', e => {
     else if (t.dataset.tab === 'sal') (S.salary.data ? (S.view = 'sal', render()) : loadSalary());
     else if (t.dataset.tab === 'hr') loadStaffTab();
     else if (t.dataset.tab === 'cert') loadCertTab();
+    else if (t.dataset.tab === 'leads') loadLeadsTab();
     else { S.view = 'groups'; render(); }
   }
   else if (act === 'cycle') {
@@ -1721,6 +1855,28 @@ document.addEventListener('click', e => {
   else if (act === 'cert-pick') { S.cert.pickSubject = S.cert.pickSubject === t.dataset.sub ? null : t.dataset.sub; render(); }
   else if (act === 'cert-grade') setCertGrade(t.dataset.sub, t.dataset.grade);
   else if (act === 'cert-graduated') openGraduated();
+  else if (act === 'lead-add-open') { S.leads.form = null; S.leads.view = 'form'; render(); }
+  else if (act === 'lead-filter') { S.leads.filter = t.dataset.f; loadLeadsTab(); }
+  else if (act === 'lead-open') {
+    S.leads.detail = S.leads.items.find(r => r.id === id);
+    S.leads.convertOpen = false; S.leads.declineOpen = false; S.leads.view = 'detail';
+    render();
+  }
+  else if (act === 'lead-form-back') { S.leads.view = 'list'; render(); }
+  else if (act === 'lead-save') saveLead();
+  else if (act === 'lead-detail-back') { S.leads.view = 'list'; render(); }
+  else if (act === 'lead-next') leadNextStage();
+  else if (act === 'lead-convert-toggle') {
+    S.leads.declineOpen = false;
+    S.leads.convertOpen = !S.leads.convertOpen;
+    if (S.leads.convertOpen && !S.leads.groups) {
+      api('/api/groups').then(d => { S.leads.groups = d.groups; render(); }).catch(e => alert(e.message));
+    }
+    render();
+  }
+  else if (act === 'lead-decline-toggle') { S.leads.convertOpen = false; S.leads.declineOpen = !S.leads.declineOpen; render(); }
+  else if (act === 'lead-convert-send') leadConvertSend();
+  else if (act === 'lead-decline-send') leadDeclineSend();
 });
 document.addEventListener('change', e => {
   if (e.target.dataset && e.target.dataset.act === 'pick' && e.target.value) openGroup(S.att.group.id, e.target.value, S.att.single);
