@@ -103,6 +103,20 @@ joriy oy tushumi, qarzdorlar foizi va davomat foizi. Ro'yxat **eng kam qarzdorli
 ko'rsatiladi. Panel'dagi filial filtri bilan birga ishlaydi — faqat shu filialdagi guruhlar bo'yicha hisoblanadi.
 Hech qanday guruhi yo'q o'qituvchilar ro'yxatda ko'rinmaydi.
 
+## Lidlar (potentsial o'quvchilar, faqat admin/direktor)
+Hali ro'yxatdan o'tmagan, lekin qiziqish bildirgan odamlarni ("lid") kuzatib borish uchun. Mini App'da
+**"🧲 Lidlar"** tab, bot chatida esa asosiy menyuda **"🧲 Lidlar"** tugmasi orqali ishlaydi (ikkisida ham bir
+xil funksiya).
+- **Qo'shish**: ism, familiya, qiziqqan sinf, telefon, manba (Instagram / tanishlar orqali / ko'chadagi
+  reklama / boshqa), filial (bir nechta filial bo'lsa) va izoh kiritiladi.
+- **Bosqichlar**: 🆕 Yangi → 📞 Bog'lanildi → 🎓 Sinov darsida → 🎉 O'quvchi bo'ldi / ❌ Voz kechdi.
+- **"🎉 O'quvchi qilish"**: guruh tanlanadi, lidning ma'lumotlari asosida yangi o'quvchi yozuvi avtomatik
+  yaratiladi (qayta kiritish shart emas), lid "O'quvchi bo'ldi" deb yopiladi.
+- **"❌ Voz kechish"**: sababini yozish mumkin (ixtiyoriy), lid yopiladi.
+- **5 kunlik eslatma**: agar lid qo'shilganidan beri 5 kun o'tib hali qaror qilinmagan bo'lsa (hali Yangi/
+  Bog'lanildi/Sinov darsida holatida), admin va direktorga har kuni (ertalab) eslatma xabari boradi - qaror
+  qilinmaguncha har kuni takrorlanadi.
+
 ## Qarzdorlarga to'lov eslatmasi (faqat direktor)
 Panel sahifasida (yuqorida) **"📢"** tugmasi — shu oydagi **barcha** qarzdor o'quvchilarning ulangan ota-onalariga
 avtomatik Telegram xabari yuboradi ("Hurmatli ota-ona! [O'quvchi] uchun [oy] oyi kurs to'lovini hali amalga

@@ -91,8 +91,14 @@ def main_menu(role: str):
         row = ["📱 Ilovani ochish", "📤 Fayldan yuklash"]
         if role == "director":
             row.append("📈 Statistika")
-        return kb([row])
-    return kb(_full_menu_rows(role))
+        rows = [row]
+        if role in ("admin", "director"):
+            rows.append(["🧲 Lidlar"])
+        return kb(rows)
+    rows = _full_menu_rows(role)
+    if role in ("admin", "director"):
+        rows.append(["🧲 Lidlar"])
+    return kb(rows)
 
 
 def section_menu(role: str, section: str):
@@ -257,9 +263,9 @@ async def pager_nav(c: CallbackQuery, db):
 
 async def group_picker(db, prefix, teacher_id=None):
     if teacher_id:
-        groups = await D.fetchall(db, "SELECT * FROM groups WHERE teacher_id=?", (teacher_id,))
+        groups = await D.fetchall(db, "SELECT * FROM groups WHERE teacher_id=? AND archived=0", (teacher_id,))
     else:
-        groups = await D.fetchall(db, "SELECT * FROM groups ORDER BY name")
+        groups = await D.fetchall(db, "SELECT * FROM groups WHERE archived=0 ORDER BY name")
     b = InlineKeyboardBuilder()
     for g in groups:
         b.button(text=g["name"], callback_data=f"{prefix}:{g['id']}")

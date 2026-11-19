@@ -66,7 +66,23 @@ CREATE TABLE IF NOT EXISTS certificates(
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(student_id, subject));
 CREATE INDEX IF NOT EXISTS idx_certificates_student ON certificates(student_id);
+CREATE TABLE IF NOT EXISTS leads(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name TEXT NOT NULL, last_name TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '', grade TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '', branch_id INTEGER REFERENCES branches(id),
+    note TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','contacted','trial','won','lost')),
+    lost_reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP, decided_at TEXT);
+CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 """
+
+LEAD_STATUS_LABELS = {"new": "🆕 Yangi", "contacted": "📞 Bog'lanildi", "trial": "🎓 Sinov darsida",
+                      "won": "🎉 O'quvchi bo'ldi", "lost": "❌ Voz kechdi"}
+LEAD_OPEN_STATUSES = ("new", "contacted", "trial")
+LEAD_NEXT_STATUS = {"new": "contacted", "contacted": "trial"}
+LEAD_STALE_DAYS = 5
 
 CERT_SUBJECTS = ["Matematika", "Fizika", "Kimyo", "Biologiya", "Ona tili va adabiyot",
                  "Ingliz tili", "Rus tili", "Tarix", "Geografiya", "Informatika"]
@@ -334,6 +350,13 @@ async def archive_or_delete_student(db, sid):
 async def archive_or_delete_group_students(db, group_id):
     for r in await fetchall(db, "SELECT id FROM students WHERE group_id=?", (group_id,)):
         await archive_or_delete_student(db, r["id"])
+
+
+async def stale_leads(db):
+    """LEAD_STALE_DAYS kundan beri hali qaror qilinmagan (yangi/bog'lanildi/sinov darsida) lidlar."""
+    cutoff = (now_local() - timedelta(days=LEAD_STALE_DAYS)).isoformat()
+    return await fetchall(db, "SELECT * FROM leads WHERE status IN ('new','contacted','trial') "
+                             "AND created_at<=? ORDER BY created_at", (cutoff,))
 
 
 async def archive_or_delete_group(db, group_id):

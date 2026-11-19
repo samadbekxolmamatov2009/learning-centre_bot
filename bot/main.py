@@ -9,6 +9,7 @@ from . import config, db as D
 from .browse import router as browse_router
 from .extras import router as extras_router, scheduler
 from .handlers import router
+from .leads import router as leads_router
 from .webapp import start_server
 
 log = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ async def main():
     dp.include_router(router)
     dp.include_router(extras_router)
     dp.include_router(browse_router)
+    dp.include_router(leads_router)
 
     @dp.errors()
     async def on_error(event):

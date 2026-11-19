@@ -840,6 +840,143 @@ async def api_exam_notify_parents(request):
     return web.json_response({"ok": True, "sent": sent, "not_linked": not_linked})
 
 
+# ---------------- Lidlar (potentsial o'quvchilar) ----------------
+def lead_out(r):
+    return {"id": r["id"], "first": r["first_name"], "last": r["last_name"], "phone": r["phone"],
+            "grade": r["grade"], "source": r["source"], "branch_id": r["branch_id"], "note": r["note"],
+            "status": r["status"], "status_label": D.LEAD_STATUS_LABELS[r["status"]],
+            "lost_reason": r["lost_reason"], "created_at": str(r["created_at"]),
+            "decided_at": str(r["decided_at"]) if r["decided_at"] else None}
+
+
+async def api_leads_get(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    status = request.query.get("status")
+    if status == "open":
+        rows = await db.fetchall(
+            "SELECT * FROM leads WHERE status IN ('new','contacted','trial') ORDER BY created_at")
+    elif status:
+        rows = await db.fetchall("SELECT * FROM leads WHERE status=? ORDER BY created_at DESC", (status,))
+    else:
+        rows = await db.fetchall("SELECT * FROM leads ORDER BY created_at DESC")
+    branches = await db.fetchall("SELECT id, name FROM branches ORDER BY name")
+    return web.json_response({"leads": [lead_out(r) for r in rows],
+                              "branches": [dict(b) for b in branches]})
+
+
+async def api_leads_post(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        body = await request.json()
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    first = clean_text(body.get("first"))
+    if len(first) < 2:
+        return bad("Ismni to'liq kiriting")
+    last = clean_text(body.get("last"))
+    grade = clean_text(body.get("grade"), 20)
+    phone_raw = body.get("phone") or ""
+    phone = normalize_phone(phone_raw) if phone_raw.strip() else ""
+    if phone is None:
+        return bad("Telefon raqami noto'g'ri")
+    source = clean_text(body.get("source"), 60)
+    note = clean_text(body.get("note"), 500)
+    branch_id = int(body["branch"]) if body.get("branch") else None
+    await db.execute(
+        "INSERT INTO leads(first_name,last_name,phone,grade,source,branch_id,note) VALUES(?,?,?,?,?,?,?)",
+        (first, last, phone, grade, source, branch_id, note))
+    row = await db.fetchone("SELECT * FROM leads WHERE id=(SELECT MAX(id) FROM leads)")
+    return web.json_response({"ok": True, "lead": lead_out(row)})
+
+
+async def api_lead_patch(request):
+    """Holatni 'new'->'contacted'->'trial' siljitish uchun: {status: 'contacted'|'trial'}."""
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        lid = int(request.match_info["lid"])
+        body = await request.json()
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    r = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
+    if not r:
+        return bad("Topilmadi", 404)
+    status = body.get("status")
+    if status:
+        if r["status"] not in D.LEAD_NEXT_STATUS or status != D.LEAD_NEXT_STATUS[r["status"]]:
+            return bad("Bu holatga o'tib bo'lmaydi")
+        await db.execute("UPDATE leads SET status=? WHERE id=?", (status, lid))
+    row = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
+    return web.json_response({"ok": True, "lead": lead_out(row)})
+
+
+async def api_lead_convert(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        lid = int(request.match_info["lid"])
+        body = await request.json()
+        gid = int(body["group"])
+    except Exception:
+        return bad("Guruh tanlanmagan")
+    r = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
+    if not r or r["status"] not in D.LEAD_OPEN_STATUSES:
+        return bad("Bu lid allaqachon yopilgan")
+    g = await db.fetchone("SELECT id FROM groups WHERE id=? AND archived=0", (gid,))
+    if not g:
+        return bad("Guruh topilmadi", 404)
+    await db.execute("INSERT INTO students(first_name,last_name,grade,phone,group_id) VALUES(?,?,?,?,?)",
+                     (r["first_name"], r["last_name"] or "-", r["grade"] or "-", r["phone"], gid))
+    student = await db.fetchone(
+        "SELECT * FROM students WHERE id=(SELECT MAX(id) FROM students WHERE group_id=?)", (gid,))
+    await db.execute("UPDATE leads SET status='won', decided_at=CURRENT_TIMESTAMP WHERE id=?", (lid,))
+    return web.json_response({"ok": True, "student": student_out(student)})
+
+
+async def api_lead_decline(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        lid = int(request.match_info["lid"])
+        body = await request.json()
+    except Exception:
+        body = {}
+    r = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
+    if not r or r["status"] not in D.LEAD_OPEN_STATUSES:
+        return bad("Bu lid allaqachon yopilgan")
+    reason = clean_text(body.get("reason"), 300)
+    await db.execute("UPDATE leads SET status='lost', lost_reason=?, decided_at=CURRENT_TIMESTAMP WHERE id=?",
+                     (reason, lid))
+    return web.json_response({"ok": True})
+
+
+async def api_lead_delete(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        lid = int(request.match_info["lid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    if not await db.fetchone("SELECT 1 FROM leads WHERE id=?", (lid,)):
+        return bad("Topilmadi", 404)
+    await db.execute("DELETE FROM leads WHERE id=?", (lid,))
+    return web.json_response({"ok": True})
+
+
 async def api_debtors_notify(request):
     """Qarzdor o'quvchilarning ota-onalariga to'lov eslatmasi yuboradi (faqat direktor).
     body: {group: <id>} - faqat shu guruh, yoki {branch: <id>} - shu filialdagi hammasi, yoki bo'sh - barchasi."""
@@ -1513,6 +1650,12 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_delete("/api/groups/{gid}", api_group_delete)
     app.router.add_get("/api/export", api_export)
     app.router.add_get("/api/export-group-roster", api_export_group_roster)
+    app.router.add_get("/api/leads", api_leads_get)
+    app.router.add_post("/api/leads", api_leads_post)
+    app.router.add_patch("/api/leads/{lid}", api_lead_patch)
+    app.router.add_post("/api/leads/{lid}/convert", api_lead_convert)
+    app.router.add_post("/api/leads/{lid}/decline", api_lead_decline)
+    app.router.add_delete("/api/leads/{lid}", api_lead_delete)
     app.router.add_get("/api/notifications", api_notifications)
     app.router.add_get("/api/exams", api_exams_get)
     app.router.add_post("/api/exams", api_exam_post)
