@@ -387,10 +387,17 @@ async def lead_stats(db):
 
 
 async def stale_leads(db):
-    """LEAD_STALE_DAYS kundan beri hali qaror qilinmagan (yangi/bog'lanildi/sinov darsida) lidlar."""
+    """Hali qaror qilinmagan (yangi/bog'lanildi/sinov darsida) lidlardan qaysilari eslatmaga tushishi kerak:
+    - sinov darsi sanasi (trial_at) belgilangan bo'lsa - LEAD_STALE_DAYS kutilmaydi, sinov darsi kuni
+      check_trial_today orqali alohida eslatiladi, shu sana o'tib ketgandan keyin (natija bo'lmasa)
+      bu yerda har kuni qaytadan eslatiladi;
+    - sinov darsi sanasi belgilanmagan bo'lsa - qo'shilganidan LEAD_STALE_DAYS kun o'tgach eslatiladi."""
     cutoff = (now_local() - timedelta(days=LEAD_STALE_DAYS)).isoformat()
-    return await fetchall(db, "SELECT * FROM leads WHERE status IN ('new','contacted','trial') "
-                             "AND created_at<=? ORDER BY created_at", (cutoff,))
+    today = today_local().isoformat()
+    return await fetchall(db, "SELECT * FROM leads WHERE status IN ('new','contacted','trial') AND ("
+                             "(trial_at IS NOT NULL AND trial_at<>'' AND trial_at<?) OR "
+                             "((trial_at IS NULL OR trial_at='') AND created_at<=?)) ORDER BY created_at",
+                          (today, cutoff))
 
 
 async def archive_or_delete_group(db, group_id):
