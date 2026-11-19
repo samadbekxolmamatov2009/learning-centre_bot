@@ -967,7 +967,8 @@ function viewStuGroups() {
   const cards = groups.map(g => `<div class="gcard" data-act="stu-group" data-id="${g.id}" style="cursor:pointer">
     <div style="flex:1;min-width:0"><div class="t">${esc(g.name)}</div><div class="sub">${g.students} ta o'quvchi${g.teacher ? ' · 👨‍🏫 ' + esc(g.teacher) : ''}
       ${g.branch_name ? ' · 🏢 ' + esc(g.branch_name) : ''}
-      ${g.debtors ? ' · <span style="color:var(--no);font-weight:600">❌ ' + g.debtors + '</span>' : ''}</div></div>
+      ${g.debtors ? ' · <span style="color:var(--no);font-weight:600">❌ ' + g.debtors + '</span>' : ''}</div>
+      ${staff ? `<div class="sub">📝 Oxirgi davomat: ${g.last_attendance ? esc(g.last_attendance) : '— hali olinmagan —'}</div>` : ''}</div>
     ${staff ? `<button class="iconbtn" style="width:40px;height:40px;font-size:16px;flex:none" data-act="stu-gedit" data-id="${g.id}">⚙️</button>` : '<span class="sub">▸</span>'}</div>`).join('');
   const addGroup = staff ? `<button class="gcard" data-act="stu-gform" style="border:1.5px dashed var(--line);background:transparent">
     <div class="t">➕ Yangi guruh</div></button>` : '';

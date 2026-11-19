@@ -313,7 +313,10 @@ async def api_groups(request):
     paid_ids = {r["student_id"] for r in await db.fetchall(
         "SELECT DISTINCT student_id FROM payments WHERE month=?", (D.current_month(),))}
     debt = await debtor_counts_by_group(db, paid_ids)
-    out = {"groups": [{**dict(g), "students": counts.get(g["id"], 0), "debtors": debt.get(g["id"], 0)} for g in groups]}
+    last_att = {r["group_id"]: r["d"] for r in await db.fetchall(
+        "SELECT group_id, MAX(day) AS d FROM attendance GROUP BY group_id")}
+    out = {"groups": [{**dict(g), "students": counts.get(g["id"], 0), "debtors": debt.get(g["id"], 0),
+                       "last_attendance": last_att.get(g["id"])} for g in groups]}
     if role in ("admin", "director"):
         out["teachers"] = [dict(t) for t in await db.fetchall(
             "SELECT u.tg_id AS id, u.full_name AS name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
