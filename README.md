@@ -115,10 +115,12 @@ xil funksiya).
 - **"❌ Voz kechish"**: sababini yozish mumkin (ixtiyoriy), lid yopiladi.
 - **5 kunlik eslatma**: agar lid qo'shilganidan beri 5 kun o'tib hali qaror qilinmagan bo'lsa (hali Yangi/
   Bog'lanildi/Sinov darsida holatida), admin va direktorga har kuni (ertalab) eslatma xabari boradi - qaror
-  qilinmaguncha har kuni takrorlanadi.
+  qilinmaguncha har kuni takrorlanadi. **Agar sinov darsi sanasi belgilangan bo'lsa, bu 5 kunlik eslatma
+  o'chadi** - o'rniga sinov darsi kuni va undan keyingi kunlarda (natija bo'lmasa) eslatiladi.
 - **Sinov darsi sanasi**: "Sinov darsida" bosqichiga o'tganda sana kiritish so'raladi (ixtiyoriy, keyinroq
-  ✏️ Tahrirlash orqali ham qo'shish/o'zgartirish mumkin). O'sha kuni ertalab, hali qaror qilinmagan bo'lsa,
-  "bugun sinov darsi bor" eslatmasi admin va direktorga yuboriladi.
+  ✏️ Tahrirlash orqali ham qo'shish/o'zgartirish mumkin). O'sha kuni ertalab "bugun sinov darsi bor" eslatmasi
+  keladi; agar sinov darsidan keyin ham qaror qilinmasa (o'quvchi qilinmasa yoki voz kechilmasa), ertasi kundan
+  boshlab har kuni qayta eslatiladi (yuqoridagi 5 kunlik eslatma mexanizmi orqali).
 - **✏️ Tahrirlash**: lidning istalgan maydonini (ism, familiya, telefon, sinf, manba, izoh) keyinchalik
   o'zgartirish mumkin - xato kiritilgan bo'lsa, o'chirib qayta qo'shish shart emas.
 - **📊 Statistika**: manba bo'yicha nechta lid kelgani va ularning necha foizi o'quvchi bo'lganini (konversiya),
