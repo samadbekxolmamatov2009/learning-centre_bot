@@ -486,7 +486,7 @@ async def api_students_post(request):
     phone = normalize_phone(phone_raw) if phone_raw.strip() else ""
     if phone is None:
         return bad("Telefon raqami noto'g'ri")
-    is_reg = 1 if (body.get("is_registry") and role in ("admin", "director")) else 0
+    is_reg = 1 if body.get("is_registry") else 0
     hidden = 1 if (is_reg and await D.get_setting(db, "registry_hidden") == "1") else 0
     await db.execute("INSERT INTO students(first_name,last_name,grade,phone,is_registry,hidden,group_id) "
                      "VALUES(?,?,?,?,?,?,?)", (first, last, grade, phone, is_reg, hidden, gid))

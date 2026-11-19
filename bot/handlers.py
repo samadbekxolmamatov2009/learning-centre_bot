@@ -631,14 +631,11 @@ async def s_phone(m: Message, db, state: FSMContext):
         return await m.answer("Raqam noto'g'ri. Masalan: 90 123 45 67 (yoki - yuboring).")
     await state.update_data(phone=phone, is_registry=0, reg_rate=0)
     uid = m.from_user.id
-    if await D.get_role(db, uid) in ("admin", "director"):
-        # Reyestr o'quvchisi o'qituvchi oyligiga ta'sir qiladi, shuning uchun uni faqat admin/direktor belgilaydi
-        await state.set_state(AddStudent.registry)
-        return await m.answer("O'quvchi reyestrdami (kam ta'minlangan oila, davlat to'laydi)?",
-                              reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                                  InlineKeyboardButton(text="🏛 Reyestr", callback_data="reg:y"),
-                                  InlineKeyboardButton(text="Oddiy o'quvchi", callback_data="reg:n")]]))
-    await ask_group(m, db, state, uid)
+    await state.set_state(AddStudent.registry)
+    await m.answer("O'quvchi reyestrdami (kam ta'minlangan oila, davlat to'laydi)?",
+                   reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                       InlineKeyboardButton(text="🏛 Reyestr", callback_data="reg:y"),
+                       InlineKeyboardButton(text="Oddiy o'quvchi", callback_data="reg:n")]]))
 
 
 @router.callback_query(AddStudent.registry, F.data.in_({"reg:y", "reg:n"}))
