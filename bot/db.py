@@ -330,6 +330,16 @@ async def get_role(db, tg_id):
     return row["role"] if row else None
 
 
+async def admin_branch_scope(db, uid, role):
+    """Agar 'admin' roli bitta filialga biriktirilgan bo'lsa, shu filial ID'sini qaytaradi -
+    o'sha admin faqat shu filial ma'lumotlarini ko'rishi/boshqarishi kerak. Direktor va
+    filialga biriktirilmagan (ixtiyoriy) admin uchun None (cheklovsiz, hammasini ko'radi)."""
+    if role != "admin":
+        return None
+    row = await fetchone(db, "SELECT branch_id FROM users WHERE tg_id=?", (uid,))
+    return row["branch_id"] if row else None
+
+
 async def group_students(db, group_id, month=None):
     """Guruh o'quvchilari; paid = shu oyda to'lov kiritilganmi (summasi qanday bo'lishidan qat'iy nazar).
     Reyestr o'quvchilari (davlat to'laydi) hech qachon qarzdor emas, shuning uchun paid=1."""
@@ -382,15 +392,18 @@ async def leads_trial_today(db):
     return await fetchall(db, "SELECT * FROM leads WHERE status='trial' AND trial_at=? ORDER BY id", (today,))
 
 
-async def lead_stats(db):
-    """Manba bo'yicha konversiya (jami/o'quvchi bo'lgan) va voz kechish sabablari bo'yicha hisob."""
-    sources = await fetchall(db, """
+async def lead_stats(db, branch_id=None):
+    """Manba bo'yicha konversiya (jami/o'quvchi bo'lgan) va voz kechish sabablari bo'yicha hisob.
+    branch_id berilsa, faqat shu filialga tegishli (yoki filialsiz) lidlar hisobga olinadi."""
+    bcond = " AND (branch_id=? OR branch_id IS NULL)" if branch_id else ""
+    bargs = (branch_id,) if branch_id else ()
+    sources = await fetchall(db, f"""
         SELECT COALESCE(NULLIF(source,''),'(manba kiritilmagan)') AS source, COUNT(*) AS total,
                SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) AS won
-        FROM leads GROUP BY source ORDER BY total DESC""")
-    reasons = await fetchall(db, """
+        FROM leads WHERE 1=1{bcond} GROUP BY source ORDER BY total DESC""", bargs)
+    reasons = await fetchall(db, f"""
         SELECT COALESCE(NULLIF(lost_reason,''),'(sabab yozilmagan)') AS reason, COUNT(*) AS n
-        FROM leads WHERE status='lost' GROUP BY reason ORDER BY n DESC""")
+        FROM leads WHERE status='lost'{bcond} GROUP BY reason ORDER BY n DESC""", bargs)
     return sources, reasons
 
 

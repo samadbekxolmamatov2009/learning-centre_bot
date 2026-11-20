@@ -406,13 +406,20 @@ def _sheet(wb, title, header, rows, first=False):
     return ws
 
 
-async def _students_rows(db, month, only_debtors):
+async def _students_rows(db, month, only_debtors, branch_id=None):
     """Qarzdorlar ro'yxati (only_debtors) - hozirgi ro'yxatdagi o'quvchilar bo'yicha (joriy holat).
     To'liq ro'yxat/hisobot (only_debtors=False) - shu oyda to'lov qilgan, lekin keyinroq
     guruhdan/ro'yxatdan chiqarilgan o'quvchilar ham to'lovlar jadvalidan qo'shib chiqiladi,
-    shunda o'tgan oy hisobotida ularning to'lovi yo'qolib qolmaydi."""
+    shunda o'tgan oy hisobotida ularning to'lovi yo'qolib qolmaydi. branch_id berilsa, faqat
+    shu filialdagi guruhlar (masalan filialga biriktirilgan admin uchun)."""
     rows = []
-    for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
+    sql = "SELECT * FROM groups"
+    args = ()
+    if branch_id:
+        sql += " WHERE branch_id=?"
+        args = (branch_id,)
+    sql += " ORDER BY name"
+    for g in await db.fetchall(sql, args):
         studs = await D.group_students(db, g["id"], month)
         seen = {s["id"] for s in studs}
         for s in studs:
@@ -447,8 +454,9 @@ STUD_HEAD = ["Guruh", "Familiya", "Ism", "Sinf", "Telefon", "Holat", "To'langan 
 async def xl_students(c: CallbackQuery, db):
     mo = D.current_month()
     debt = c.data == "xl:debt"
+    scope = await D.admin_branch_scope(db, c.from_user.id, await D.get_role(db, c.from_user.id))
     wb = Workbook()
-    _sheet(wb, "Qarzdorlar" if debt else "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, debt), True)
+    _sheet(wb, "Qarzdorlar" if debt else "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, debt, scope), True)
     await _send_xlsx(c, wb, f"{'qarzdorlar' if debt else 'oquvchilar'}_{mo}.xlsx")
 
 
@@ -461,9 +469,16 @@ async def xl_rep_months(c: CallbackQuery):
 @router.callback_query(F.data.startswith("xr:"), STAFF)
 async def xl_report(c: CallbackQuery, db):
     mo = c.data[3:]
+    scope = await D.admin_branch_scope(db, c.from_user.id, await D.get_role(db, c.from_user.id))
     wb = Workbook()
+    gsql = "SELECT * FROM groups"
+    gargs = ()
+    if scope is not None:
+        gsql += " WHERE branch_id=?"
+        gargs = (scope,)
+    gsql += " ORDER BY name"
     grows = []
-    for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
+    for g in await db.fetchall(gsql, gargs):
         studs = await D.group_students(db, g["id"], mo)
         reg = sum(1 for s in studs if s["is_registry"])
         debtors = sum(1 for s in studs if not s["is_registry"] and not s["paid"])
@@ -472,13 +487,18 @@ async def xl_report(c: CallbackQuery, db):
                    {r["student_id"] for r in pay_rows})
         grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, debtors])
     _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Reyestr", "Qarzdorlar"], grows, True)
+    tsql = "SELECT DISTINCT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id"
+    targs = ()
+    if scope is not None:
+        tsql += " JOIN groups g ON g.teacher_id=u.tg_id WHERE g.branch_id=?"
+        targs = (scope,)
+    tsql += " ORDER BY u.full_name"
     trows = []
-    for t in await db.fetchall("SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
-                               "ORDER BY u.full_name"):
-        pt, pv, _, total = await D.teacher_salary(db, t["tg_id"], mo)
+    for t in await db.fetchall(tsql, targs):
+        pt, pv, _, total = await D.teacher_salary(db, t["tg_id"], mo, scope)
         trows.append([t["full_name"], "Foiz" if pt == "percent" else "O'quvchi boshiga", pv, round(total)])
     _sheet(wb, "Oyliklar", ["O'qituvchi", "Turi", "Qiymat", "Oylik"], trows)
-    _sheet(wb, "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, False))
+    _sheet(wb, "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, False, scope))
     await _send_xlsx(c, wb, f"hisobot_{mo}.xlsx")
 
 

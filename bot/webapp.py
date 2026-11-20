@@ -210,8 +210,9 @@ async def api_dashboard(request):
     if role not in ("admin", "director"):
         return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
-    branch_id = None
-    if request.query.get("branch"):
+    scope = await D.admin_branch_scope(db, uid, role)
+    branch_id = scope
+    if scope is None and request.query.get("branch"):
         try:
             branch_id = int(request.query["branch"])
         except Exception:
@@ -304,10 +305,17 @@ async def api_groups(request):
                                    "b.name AS branch_name FROM groups g LEFT JOIN branches b ON b.id=g.branch_id "
                                    "WHERE g.teacher_id=? AND g.archived=0 ORDER BY g.name", (uid,))
     else:
-        groups = await db.fetchall("SELECT g.id, g.name, g.teacher_id AS teacherId, u.full_name AS teacher, "
-                                   "g.lesson_days, g.lesson_time, g.branch_id, b.name AS branch_name FROM groups g "
-                                   "LEFT JOIN users u ON u.tg_id=g.teacher_id "
-                                   "LEFT JOIN branches b ON b.id=g.branch_id WHERE g.archived=0 ORDER BY g.name")
+        scope = await D.admin_branch_scope(db, uid, role)
+        sql = ("SELECT g.id, g.name, g.teacher_id AS teacherId, u.full_name AS teacher, "
+              "g.lesson_days, g.lesson_time, g.branch_id, b.name AS branch_name FROM groups g "
+              "LEFT JOIN users u ON u.tg_id=g.teacher_id "
+              "LEFT JOIN branches b ON b.id=g.branch_id WHERE g.archived=0")
+        args = ()
+        if scope is not None:
+            sql += " AND g.branch_id=?"
+            args = (scope,)
+        sql += " ORDER BY g.name"
+        groups = await db.fetchall(sql, args)
     counts = {r["group_id"]: r["n"] for r in await db.fetchall(
         "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 GROUP BY group_id")}
     paid_ids = {r["student_id"] for r in await db.fetchall(
@@ -321,17 +329,27 @@ async def api_groups(request):
         out["teachers"] = [dict(t) for t in await db.fetchall(
             "SELECT u.tg_id AS id, u.full_name AS name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
             "ORDER BY u.full_name")]
-        out["branches"] = [dict(b) for b in await db.fetchall("SELECT id, name FROM branches ORDER BY name")]
+        if scope is not None:
+            out["branches"] = [dict(b) for b in await db.fetchall(
+                "SELECT id, name FROM branches WHERE id=?", (scope,))]
+        else:
+            out["branches"] = [dict(b) for b in await db.fetchall("SELECT id, name FROM branches ORDER BY name")]
     return web.json_response(out)
 
 
 # ---------------- Filiallar (faqat direktor) ----------------
 async def api_branches_get(request):
-    await auth(request)
+    uid, role, _ = await auth(request)
     db = request.app["db"]
-    rows = await db.fetchall(
-        "SELECT b.id, b.name, (SELECT COUNT(*) FROM groups g WHERE g.branch_id=b.id AND g.archived=0) AS groups "
-        "FROM branches b ORDER BY b.name")
+    scope = await D.admin_branch_scope(db, uid, role)
+    sql = ("SELECT b.id, b.name, (SELECT COUNT(*) FROM groups g WHERE g.branch_id=b.id AND g.archived=0) AS groups "
+          "FROM branches b")
+    args = ()
+    if scope is not None:
+        sql += " WHERE b.id=?"
+        args = (scope,)
+    sql += " ORDER BY b.name"
+    rows = await db.fetchall(sql, args)
     return web.json_response({"branches": [dict(r) for r in rows]})
 
 
@@ -425,6 +443,11 @@ async def api_groups_post(request):
         return bad("So'rov noto'g'ri")
     if not name:
         return bad("Guruh nomini kiriting")
+    scope = await D.admin_branch_scope(db, uid, role)
+    if scope is not None:
+        if branch and branch != scope:
+            return bad("Faqat o'z filialingizga guruh yaratishingiz mumkin", 403)
+        branch = scope
     if teacher and not await db.fetchone("SELECT 1 FROM teachers WHERE tg_id=?", (teacher,)):
         return bad("O'qituvchi topilmadi")
     if branch and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch,)):
@@ -457,6 +480,11 @@ async def api_students_get(request):
     if role == "teacher":
         sql += " AND g.teacher_id=?"
         args.append(uid)
+    else:
+        scope = await D.admin_branch_scope(db, uid, role)
+        if scope is not None:
+            sql += " AND g.branch_id=?"
+            args.append(scope)
     paid_ids = {r["student_id"] for r in await db.fetchall(
         "SELECT DISTINCT student_id FROM payments WHERE month=?", (D.current_month(),))}
     found = []
@@ -874,15 +902,23 @@ async def api_leads_get(request):
     if role not in ("admin", "director"):
         return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
+    scope = await D.admin_branch_scope(db, uid, role)
+    bcond = " AND (branch_id=? OR branch_id IS NULL)" if scope is not None else ""
+    bargs = (scope,) if scope is not None else ()
     status = request.query.get("status")
     if status == "open":
         rows = await db.fetchall(
-            "SELECT * FROM leads WHERE status IN ('new','contacted','trial') ORDER BY created_at")
+            f"SELECT * FROM leads WHERE status IN ('new','contacted','trial'){bcond} ORDER BY created_at",
+            bargs)
     elif status:
-        rows = await db.fetchall("SELECT * FROM leads WHERE status=? ORDER BY created_at DESC", (status,))
+        rows = await db.fetchall(f"SELECT * FROM leads WHERE status=?{bcond} ORDER BY created_at DESC",
+                                 (status,) + bargs)
     else:
-        rows = await db.fetchall("SELECT * FROM leads ORDER BY created_at DESC")
-    branches = await db.fetchall("SELECT id, name FROM branches ORDER BY name")
+        rows = await db.fetchall(f"SELECT * FROM leads WHERE 1=1{bcond} ORDER BY created_at DESC", bargs)
+    if scope is not None:
+        branches = await db.fetchall("SELECT id, name FROM branches WHERE id=?", (scope,))
+    else:
+        branches = await db.fetchall("SELECT id, name FROM branches ORDER BY name")
     return web.json_response({"leads": [lead_out(r) for r in rows],
                               "branches": [dict(b) for b in branches]})
 
@@ -892,7 +928,8 @@ async def api_leads_stats(request):
     if role not in ("admin", "director"):
         return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
-    sources, reasons = await D.lead_stats(db)
+    scope = await D.admin_branch_scope(db, uid, role)
+    sources, reasons = await D.lead_stats(db, scope)
     return web.json_response({
         "sources": [{"source": s["source"], "total": s["total"], "won": s["won"],
                     "pct": round(s["won"] * 100 / s["total"]) if s["total"] else 0} for s in sources],
@@ -920,6 +957,11 @@ async def api_leads_post(request):
     source = clean_text(body.get("source"), 60)
     note = clean_text(body.get("note"), 500)
     branch_id = int(body["branch"]) if body.get("branch") else None
+    scope = await D.admin_branch_scope(db, uid, role)
+    if scope is not None:
+        if branch_id and branch_id != scope:
+            return bad("Faqat o'z filialingiz uchun lid qo'shishingiz mumkin", 403)
+        branch_id = scope
     if branch_id and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch_id,)):
         return bad("Filial topilmadi")
     await db.execute(
@@ -945,6 +987,9 @@ async def api_lead_patch(request):
     r = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
     if not r:
         return bad("Topilmadi", 404)
+    scope = await D.admin_branch_scope(db, uid, role)
+    if scope is not None and r["branch_id"] not in (None, scope):
+        return bad("Bu lid sizning filialingizga tegishli emas", 403)
     status = body.get("status")
     if status:
         if r["status"] not in D.LEAD_NEXT_STATUS or status != D.LEAD_NEXT_STATUS[r["status"]]:
@@ -972,6 +1017,8 @@ async def api_lead_patch(request):
         fields["note"] = clean_text(body.get("note"), 500)
     if "branch" in body:
         branch_id = int(body["branch"]) if body.get("branch") else None
+        if scope is not None and branch_id and branch_id != scope:
+            return bad("Faqat o'z filialingizga o'tkazishingiz mumkin", 403)
         if branch_id and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch_id,)):
             return bad("Filial topilmadi")
         fields["branch_id"] = branch_id
@@ -1001,9 +1048,14 @@ async def api_lead_convert(request):
     r = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
     if not r or r["status"] not in D.LEAD_OPEN_STATUSES:
         return bad("Bu lid allaqachon yopilgan")
+    scope = await D.admin_branch_scope(db, uid, role)
+    if scope is not None and r["branch_id"] not in (None, scope):
+        return bad("Bu lid sizning filialingizga tegishli emas", 403)
     g = await db.fetchone("SELECT id FROM groups WHERE id=? AND archived=0", (gid,))
     if not g:
         return bad("Guruh topilmadi", 404)
+    if not await can_access(db, uid, role, gid):
+        return bad("Bu sizning guruhingiz emas", 403)
     await db.execute("INSERT INTO students(first_name,last_name,grade,phone,group_id) VALUES(?,?,?,?,?)",
                      (r["first_name"], r["last_name"] or "-", r["grade"] or "-", r["phone"], gid))
     student = await db.fetchone(
@@ -1025,6 +1077,9 @@ async def api_lead_decline(request):
     r = await db.fetchone("SELECT * FROM leads WHERE id=?", (lid,))
     if not r or r["status"] not in D.LEAD_OPEN_STATUSES:
         return bad("Bu lid allaqachon yopilgan")
+    scope = await D.admin_branch_scope(db, uid, role)
+    if scope is not None and r["branch_id"] not in (None, scope):
+        return bad("Bu lid sizning filialingizga tegishli emas", 403)
     reason = clean_text(body.get("reason"), 300)
     await db.execute("UPDATE leads SET status='lost', lost_reason=?, decided_at=CURRENT_TIMESTAMP WHERE id=?",
                      (reason, lid))
@@ -1040,8 +1095,12 @@ async def api_lead_delete(request):
         lid = int(request.match_info["lid"])
     except Exception:
         return bad("So'rov noto'g'ri")
-    if not await db.fetchone("SELECT 1 FROM leads WHERE id=?", (lid,)):
+    lr = await db.fetchone("SELECT branch_id FROM leads WHERE id=?", (lid,))
+    if not lr:
         return bad("Topilmadi", 404)
+    scope = await D.admin_branch_scope(db, uid, role)
+    if scope is not None and lr["branch_id"] not in (None, scope):
+        return bad("Bu lid sizning filialingizga tegishli emas", 403)
     await db.execute("DELETE FROM leads WHERE id=?", (lid,))
     return web.json_response({"ok": True})
 
@@ -1495,6 +1554,9 @@ async def api_group_patch(request):
     g = await db.fetchone("SELECT * FROM groups WHERE id=?", (gid,))
     if not g:
         return bad("Topilmadi", 404)
+    scope = await D.admin_branch_scope(db, uid, role)
+    if scope is not None and g["branch_id"] != scope:
+        return bad("Bu guruh sizning filialingizga tegishli emas", 403)
     if "teacher" in body:
         tid = body["teacher"]
         tid = int(tid) if tid else None
@@ -1504,6 +1566,8 @@ async def api_group_patch(request):
     if "branch" in body:
         bid = body["branch"]
         bid = int(bid) if bid else None
+        if scope is not None and bid != scope:
+            return bad("Faqat o'z filialingizga o'tkazishingiz mumkin", 403)
         if bid and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (bid,)):
             return bad("Filial topilmadi")
         await db.execute("UPDATE groups SET branch_id=? WHERE id=?", (bid, gid))
@@ -1541,9 +1605,12 @@ async def api_group_delete(request):
         gid = int(request.match_info["gid"])
     except Exception:
         return bad("So'rov noto'g'ri")
-    g = await db.fetchone("SELECT name FROM groups WHERE id=?", (gid,))
+    g = await db.fetchone("SELECT name, branch_id FROM groups WHERE id=?", (gid,))
     if not g:
         return bad("Topilmadi", 404)
+    scope = await D.admin_branch_scope(db, uid, role)
+    if scope is not None and g["branch_id"] != scope:
+        return bad("Bu guruh sizning filialingizga tegishli emas", 403)
     await D.archive_or_delete_group_students(db, gid)
     await D.archive_or_delete_group(db, gid)
     return web.json_response({"ok": True})
@@ -1555,6 +1622,7 @@ async def api_export(request):
     if role not in ("admin", "director"):
         return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
+    scope = await D.admin_branch_scope(db, uid, role)
     from .extras import _sheet, _students_rows, STUD_HEAD
     from openpyxl import Workbook
     kind = request.query.get("type")
@@ -1562,11 +1630,17 @@ async def api_export(request):
     wb = Workbook()
     if kind in ("debtors", "students"):
         debt = kind == "debtors"
-        _sheet(wb, "Qarzdorlar" if debt else "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, debt), True)
+        _sheet(wb, "Qarzdorlar" if debt else "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, debt, scope), True)
         fname = f"{'qarzdorlar' if debt else 'oquvchilar'}_{mo}.xlsx"
     elif kind == "report":
+        gsql = "SELECT * FROM groups"
+        gargs = ()
+        if scope is not None:
+            gsql += " WHERE branch_id=?"
+            gargs = (scope,)
+        gsql += " ORDER BY name"
         grows = []
-        for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
+        for g in await db.fetchall(gsql, gargs):
             studs = await D.group_students(db, g["id"], mo)
             reg = sum(1 for s in studs if s["is_registry"])
             debtors = sum(1 for s in studs if not s["is_registry"] and not s["paid"])
@@ -1575,13 +1649,18 @@ async def api_export(request):
                        {r["student_id"] for r in pay_rows})
             grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, debtors])
         _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Reyestr", "Qarzdorlar"], grows, True)
+        tsql = "SELECT DISTINCT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id"
+        targs = ()
+        if scope is not None:
+            tsql += " JOIN groups g ON g.teacher_id=u.tg_id WHERE g.branch_id=?"
+            targs = (scope,)
+        tsql += " ORDER BY u.full_name"
         trows = []
-        for t in await db.fetchall("SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
-                                   "ORDER BY u.full_name"):
-            pt, pv, _, total = await D.teacher_salary(db, t["tg_id"], mo)
+        for t in await db.fetchall(tsql, targs):
+            pt, pv, _, total = await D.teacher_salary(db, t["tg_id"], mo, scope)
             trows.append([t["full_name"], "Foiz" if pt == "percent" else "O'quvchi boshiga", pv, round(total)])
         _sheet(wb, "Oyliklar", ["O'qituvchi", "Turi", "Qiymat", "Oylik"], trows)
-        _sheet(wb, "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, False))
+        _sheet(wb, "O'quvchilar", STUD_HEAD, await _students_rows(db, mo, False, scope))
         fname = f"hisobot_{mo}.xlsx"
     else:
         return bad("Noto'g'ri turi")
@@ -1631,9 +1710,15 @@ async def api_notifications(request):
     wd = str(today.isoweekday())
     items = []
 
+    scope = await D.admin_branch_scope(db, uid, role)
     if staff:
-        groups = await db.fetchall("SELECT g.*, u.full_name AS tname FROM groups g "
-                                   "LEFT JOIN users u ON u.tg_id=g.teacher_id WHERE g.archived=0 ORDER BY g.name")
+        gsql = "SELECT g.*, u.full_name AS tname FROM groups g LEFT JOIN users u ON u.tg_id=g.teacher_id WHERE g.archived=0"
+        gargs = ()
+        if scope is not None:
+            gsql += " AND g.branch_id=?"
+            gargs = (scope,)
+        gsql += " ORDER BY g.name"
+        groups = await db.fetchall(gsql, gargs)
     else:
         groups = await db.fetchall("SELECT * FROM groups WHERE teacher_id=? AND archived=0 ORDER BY name", (uid,))
 
@@ -1653,11 +1738,14 @@ async def api_notifications(request):
                          "text": f"{g['name']}: {n} ta qarzdor"})
 
     if staff:
-        for t in await db.fetchall(
-                "SELECT u.full_name, t.tg_id, t.registry_rate, "
-                "(SELECT COUNT(*) FROM students s JOIN groups g ON g.id=s.group_id "
-                " WHERE g.teacher_id=t.tg_id AND g.archived=0 AND s.is_registry=1 AND s.hidden=0) AS n "
-                "FROM teachers t JOIN users u ON u.tg_id=t.tg_id"):
+        cntsql = ("SELECT COUNT(*) FROM students s JOIN groups g ON g.id=s.group_id "
+                 "WHERE g.teacher_id=t.tg_id AND g.archived=0 AND s.is_registry=1 AND s.hidden=0")
+        if scope is not None:
+            cntsql += " AND g.branch_id=?"
+        tsql = (f"SELECT u.full_name, t.tg_id, t.registry_rate, ({cntsql}) AS n "
+               "FROM teachers t JOIN users u ON u.tg_id=t.tg_id")
+        targs = (scope,) if scope is not None else ()
+        for t in await db.fetchall(tsql, targs):
             if t["n"] and not t["registry_rate"]:
                 items.append({"kind": "no_price", "icon": "⚠️", "group": None, "teacher": t["tg_id"],
                              "text": f"{t['full_name']}: reyestr o'quvchilari bor, lekin dars narxi kiritilmagan"})
