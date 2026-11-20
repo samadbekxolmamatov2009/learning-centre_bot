@@ -46,7 +46,7 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - **Qidirish** (hamma): ism/familiya/telefon bo'yicha; o'qituvchi faqat o'z guruhlarida qidiradi.
 - **Excel** (admin, direktor): qarzdorlar, barcha o'quvchilar, oylik hisobot (.xlsx).
 - **Statistika** (direktor): tushum, oylik, o'quvchilar, qarzdorlik va davomat foizi.
-- **Reyestr o'quvchilari** (kam ta'minlangan oila, davlat to'laydi): o'quvchi qo'shishda "🏛 Reyestr" ni tanlash mumkin (admin, direktor va **o'qituvchi** ham - hammasiga so'raladi). Bitta dars narxi **o'qituvchi ma'lumotida** (reyestr narxi) saqlanadi, har o'qituvchida har xil bo'lishi mumkin. Davomatda kelgan har bir dars uchun shu narx (dars paytidagi) o'qituvchi oyligiga **100%** qo'shiladi. Reyestr o'quvchisi qarzdor hisoblanmaydi. "🏛 Reyestr belgilash" - mavjud o'quvchini reyestr/oddiy qilish (faqat admin/direktor, chunki mavjud o'quvchining holatini keyinroq o'zgartirish moliyaviy tarixga ta'sir qiladi).
+- **Reyestr o'quvchilari** (kam ta'minlangan oila, davlat to'laydi): o'quvchi qo'shishda "🏛 Reyestr" ni tanlash mumkin (admin, direktor va **o'qituvchi** ham - hammasiga so'raladi). Bitta dars narxi **o'qituvchi ma'lumotida** (reyestr narxi) saqlanadi, har o'qituvchida har xil bo'lishi mumkin. Davomatda kelgan har bir dars uchun shu narx (dars paytidagi) o'qituvchi oyligiga **100%** qo'shiladi va **o'sha kunga qarab doimiy saqlanadi** - keyinroq o'qituvchining reyestr narxi oshirilsa/tushirilsa ham, o'tgan kunlardagi (allaqachon "keldi" deb belgilangan) yozuvlar narxi o'zgarmaydi, hatto o'sha eski kunning davomati keyinroq boshqa sababda (masalan bitta o'quvchini tuzatish uchun) qayta saqlansa ham. Reyestr o'quvchisi qarzdor hisoblanmaydi. "🏛 Reyestr belgilash" - mavjud o'quvchini reyestr/oddiy qilish (faqat admin/direktor, chunki mavjud o'quvchining holatini keyinroq o'zgartirish moliyaviy tarixga ta'sir qiladi).
 - **Reyestrni yashirish/ochish** (direktor): yashirilgan reyestr o'quvchilar ro'yxat, davomat, qarzdor va hisobda ko'rinmaydi. Yashirin rejimda yangi qo'shilgan reyestr o'quvchilar ham yashirin bo'ladi. Ochilgan kundan hisoblanadi.
 - **O'qituvchini tahrirlash** (direktor): ism, oylik turi/qiymati, reyestr dars narxi.
 - **Fayldan yuklash** (admin, direktor, o'qituvchi - o'z guruhi): guruhni tanlab, Excel (.xlsx) yoki Word (.docx) fayl yuboriladi, o'quvchilar shu guruhga oddiy (reyestrsiz) bo'lib qo'shiladi. Ustunlar: Familiya, Ism, Sinf, Telefon (sarlavhasiz ham bo'ladi). Takrorlar o'tkazib yuboriladi, xatolar ro'yxati beriladi.
@@ -177,7 +177,10 @@ o'qituvchi) Mini App'da ko'rinadi. Bir nechta farzand bo'lsa, hammasi ro'yxatda 
 (muddati tugamaydi), istalgan vaqt qayta yuborilishi mumkin. Har bir farzand kartochkasida
 **"🔓 Ushbu farzand bilan bog'lanishni bekor qilish"** tugmasi bor — bosilsa (tasdiqlagandan keyin) shu
 bog'lanish bazadan butunlay o'chiriladi, ota-ona endi o'sha o'quvchi haqida hech narsa ko'rmaydi (boshqa
-farzandlari bilan bog'lanish, agar bo'lsa, o'zgarmay qoladi; qayta ko'rish uchun markazdan yangi havola kerak bo'ladi).
+farzandlari bilan bog'lanish, agar bo'lsa, o'zgarmay qoladi). Havola doimiy (o'zgarmas) bo'lgani uchun, bekor
+qilingandan keyin **o'sha eski havolani qayta bossa ham endi avtomatik qayta ulanib qolmaydi** — tizim buni
+eslab qoladi va "markazga murojaat qiling" deb javob beradi (boshqa ota-ona, masalan otasi, bu bog'lanishni
+bekor qilgan onasidan mustaqil ravishda hali ham bog'lana oladi).
 Havolani **kim bossa, o'sha ota-ona sifatida bog'lanadi** — tizim bu kishi haqiqiy ota-ona ekanligini tekshirmaydi,
 shuning uchun havolani faqat haqiqiy ota-onaga yuborish kerak. Buning uchun havola yonida **"📤 Telegramda ulashish"**
 (Telegramning o'z ulashish oynasi orqali to'g'ridan-to'g'ri kerakli kishiga yuboriladi) va, agar o'quvchining telefon

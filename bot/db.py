@@ -51,6 +51,10 @@ CREATE TABLE IF NOT EXISTS parent_links(
     id INTEGER PRIMARY KEY AUTOINCREMENT, parent_tg_id INTEGER NOT NULL,
     student_id INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(parent_tg_id, student_id));
+CREATE TABLE IF NOT EXISTS parent_blocks(
+    parent_tg_id INTEGER NOT NULL, student_id INTEGER NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(parent_tg_id, student_id));
 CREATE TABLE IF NOT EXISTS exams(
     id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER NOT NULL,
     title TEXT NOT NULL, max_score INTEGER NOT NULL, day TEXT NOT NULL,
@@ -414,7 +418,8 @@ async def archive_or_delete_group(db, group_id):
     if not g:
         return
     has_history = (await fetchone(db, "SELECT 1 FROM payments WHERE group_id=?", (group_id,)) or
-                   await fetchone(db, "SELECT 1 FROM attendance WHERE group_id=?", (group_id,)))
+                   await fetchone(db, "SELECT 1 FROM attendance WHERE group_id=?", (group_id,)) or
+                   await fetchone(db, "SELECT 1 FROM students WHERE group_id=?", (group_id,)))
     if has_history:
         new_name = f"{g['name']} (arxiv, {today_local().isoformat()})"
         await db.execute("UPDATE groups SET archived=1, name=? WHERE id=?", (new_name, group_id))

@@ -98,7 +98,9 @@ async def save_attendance(db, bot: Bot | None, uid: int, gid: int, day: date, st
             no_price = True
         stmts.append(("INSERT INTO attendance(group_id,day,student_id,present,rate,status) VALUES(?,?,?,?,?,?) "
                       "ON CONFLICT(group_id,day,student_id) DO UPDATE SET "
-                      "present=excluded.present, rate=excluded.rate, status=excluded.status",
+                      "present=excluded.present, status=excluded.status, "
+                      "rate=CASE WHEN attendance.present=excluded.present AND attendance.present=1 "
+                      "AND attendance.rate>0 THEN attendance.rate ELSE excluded.rate END",
                       (gid, iso, s["id"], present, rate, st)))
         name = f"{s['last_name']} {s['first_name']}"
         rows.append((name, s["grade"], s.get("phone") or "", st))

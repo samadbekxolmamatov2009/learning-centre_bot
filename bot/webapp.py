@@ -535,6 +535,8 @@ async def api_student_patch(request):
         new_gid = int(body["group"])
         if not await can_access(db, uid, role, new_gid):
             return bad("Yangi guruhga ruxsat yo'q", 403)
+        if not await db.fetchone("SELECT 1 FROM groups WHERE id=? AND archived=0", (new_gid,)):
+            return bad("Bu guruh arxivlangan, o'quvchi ko'chirib bo'lmaydi")
         sets.append("group_id=?"); args.append(new_gid)
         await db.execute("UPDATE payments SET group_id=? WHERE student_id=? AND month=?",
                          (new_gid, sid, D.current_month()))
@@ -647,13 +649,16 @@ async def api_salary(request):
     for g in await db.fetchall("SELECT * FROM groups WHERE teacher_id=? ORDER BY name", (target,)):
         studs = await D.group_students(db, g["id"], month)
         reg_cnt = sum(1 for s in studs if s["is_registry"])
-        paid = sum(1 for s in studs if s["paid"]) - reg_cnt
+        debtors = sum(1 for s in studs if not s["is_registry"] and not s["paid"])
+        pay_rows = await D.group_payment_rows(db, g["id"], month)
+        paid = len({s["id"] for s in studs if not s["is_registry"] and s["paid"]} |
+                   {r["student_id"] for r in pay_rows})
         income = await D.group_income(db, g["id"], month)
         att = await db.fetchone("SELECT COALESCE(SUM(present),0) p, COUNT(*) n FROM attendance "
                                 "WHERE group_id=? AND day LIKE ?", (g["id"], month + "-%"))
         groups_out.append({
             "name": g["name"], "income": income, "paid": paid, "students": len(studs),
-            "debtors": len(studs) - paid - reg_cnt,
+            "debtors": debtors,
             "att": round(att["p"] * 100 / att["n"]) if att["n"] else None})
 
     return web.json_response({
@@ -903,6 +908,8 @@ async def api_leads_post(request):
     source = clean_text(body.get("source"), 60)
     note = clean_text(body.get("note"), 500)
     branch_id = int(body["branch"]) if body.get("branch") else None
+    if branch_id and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch_id,)):
+        return bad("Filial topilmadi")
     await db.execute(
         "INSERT INTO leads(first_name,last_name,phone,grade,source,branch_id,note) VALUES(?,?,?,?,?,?,?)",
         (first, last, phone, grade, source, branch_id, note))
@@ -952,7 +959,10 @@ async def api_lead_patch(request):
     if "note" in body:
         fields["note"] = clean_text(body.get("note"), 500)
     if "branch" in body:
-        fields["branch_id"] = int(body["branch"]) if body.get("branch") else None
+        branch_id = int(body["branch"]) if body.get("branch") else None
+        if branch_id and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch_id,)):
+            return bad("Filial topilmadi")
+        fields["branch_id"] = branch_id
     if "trial_at" in body:
         val = D.parse_lead_date(body.get("trial_at"))
         if val is None:
@@ -1634,7 +1644,7 @@ async def api_notifications(request):
         for t in await db.fetchall(
                 "SELECT u.full_name, t.tg_id, t.registry_rate, "
                 "(SELECT COUNT(*) FROM students s JOIN groups g ON g.id=s.group_id "
-                " WHERE g.teacher_id=t.tg_id AND s.is_registry=1 AND s.hidden=0) AS n "
+                " WHERE g.teacher_id=t.tg_id AND g.archived=0 AND s.is_registry=1 AND s.hidden=0) AS n "
                 "FROM teachers t JOIN users u ON u.tg_id=t.tg_id"):
             if t["n"] and not t["registry_rate"]:
                 items.append({"kind": "no_price", "icon": "⚠️", "group": None, "teacher": t["tg_id"],
@@ -1669,7 +1679,7 @@ async def api_parent_me(request):
     db = request.app["db"]
     rows = await db.fetchall(
         "SELECT s.*, g.name AS gname, g.id AS gid, u.full_name AS tname FROM parent_links pl "
-        "JOIN students s ON s.id=pl.student_id JOIN groups g ON g.id=s.group_id "
+        "JOIN students s ON s.id=pl.student_id LEFT JOIN groups g ON g.id=s.group_id "
         "LEFT JOIN users u ON u.tg_id=g.teacher_id WHERE pl.parent_tg_id=? ORDER BY s.last_name", (uid,))
     if not rows:
         return web.json_response({"linked": False})
@@ -1686,7 +1696,7 @@ async def api_parent_me(request):
             (s["id"],))
         children.append({
             "id": s["id"], "name": f"{s['last_name']} {s['first_name']}", "grade": s["grade"],
-            "group": s["gname"], "teacher": s["tname"], "is_registry": bool(s["is_registry"]),
+            "group": s["gname"] or "(guruh o'chirilgan)", "teacher": s["tname"], "is_registry": bool(s["is_registry"]),
             "paid": bool(s["is_registry"]) or paid["n"] > 0, "month": mo,
             "history": [{"day": d, "status": mine.get(d, "")} for d in days],
             "exams": [dict(x) for x in exams]})
@@ -1694,14 +1704,19 @@ async def api_parent_me(request):
 
 
 async def api_parent_unlink(request):
-    """Ota-ona o'zini shu o'quvchining ota-onasi ro'yxatidan chiqarib tashlaydi (bazadan o'chiriladi)."""
+    """Ota-ona o'zini shu o'quvchining ota-onasi ro'yxatidan chiqarib tashlaydi (bazadan o'chiriladi).
+    Havola doimiy (parametrsiz, muddatsiz) bo'lgani uchun, shu parent+student juftligi
+    parent_blocks'ga ham yoziladi - aks holda eski /start havolasini qayta bosib, avtomatik
+    qayta ulanib qolishi mumkin edi."""
     uid = await auth_any(request)
     db = request.app["db"]
     try:
         sid = int(request.match_info["sid"])
     except Exception:
         return bad("So'rov noto'g'ri")
-    await db.execute("DELETE FROM parent_links WHERE parent_tg_id=? AND student_id=?", (uid, sid))
+    await db.batch([
+        ("DELETE FROM parent_links WHERE parent_tg_id=? AND student_id=?", (uid, sid)),
+        ("INSERT OR IGNORE INTO parent_blocks(parent_tg_id, student_id) VALUES(?,?)", (uid, sid))])
     return web.json_response({"ok": True})
 
 
