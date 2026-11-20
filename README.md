@@ -143,9 +143,14 @@ O'quv markaz bir nechta filial (shahar/tuman bo'limi) bilan ishlashi mumkin. Dir
 **"🏢 Filiallar"** bo'limi: filial qo'shish/nomini o'zgartirish/o'chirish (faqat direktor huquqi). Guruh
 qo'shish/tahrirlashda (admin/direktor) guruhga filial tanlanadi (ixtiyoriy — filialsiz ham bo'lishi mumkin).
 Yangi o'qituvchi yoki admin qo'shishda ham (Xodimlar bo'limi) filial so'raladi (ixtiyoriy, keyinroq ham
-o'zgartirish/qo'shish mumkin) — bu faqat xodimning qaysi filialga tegishli ekanini ko'rsatish uchun, u olib
-boradigan guruhlar istalgan filialda bo'lishi mumkin, faqat guruh qaysi filialga tegishli ekanligi hisob-kitoblar
-uchun muhim (yuqoridagi filtr). **Panel** sahifasida filial bo'yicha filtr chiplari bor —
+o'zgartirish/qo'shish mumkin). O'qituvchi uchun bu faqat ma'lumot uchun (u olib boradigan guruhlar istalgan
+filialda bo'lishi mumkin). **Admin uchun esa bu haqiqiy cheklov**: agar adminga filial biriktirilgan bo'lsa,
+u **faqat shu filialni** ko'radi va boshqara oladi — guruhlar, o'quvchilar (qidirish ham), Panel, Excel
+hisobotlar, bildirishnomalar va lidlar faqat o'z filiali bo'yicha chiqadi; boshqa filialga guruh/lid
+yaratish, o'zgartirish yoki o'chirish, boshqa filial guruhiga o'quvchi qo'shish rad etiladi. Filialga
+biriktirilmagan (ixtiyoriy, bo'sh qoldirilgan) admin esa avvalgidek hamma filialni ko'radi. Direktorga bu
+cheklov hech qachon qo'llanilmaydi — direktor doim hammasini ko'radi. **Panel** sahifasida filial bo'yicha
+filtr chiplari bor —
 "🏢 Barchasi" yoki aniq bitta filialni tanlab, shu filialning tushumi, qarzdorlari, davomat foizi, 6 oylik grafigi
 va (direktorga) o'sha filialdagi guruhlar uchun hisoblangan o'qituvchilar oyligi alohida ko'rsatiladi. Filial
 o'chirilsa, undagi guruhlar o'chmaydi — faqat filialsiz holatga o'tadi. Filiallar funksiyasi qo'shilishidan oldin

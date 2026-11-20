@@ -279,12 +279,18 @@ async def group_picker(db, prefix, teacher_id=None):
 
 
 async def can_access_group(db, uid, gid) -> bool:
-    """Admin/direktor - hamma guruh, o'qituvchi - faqat o'zining guruhi."""
+    """Admin/direktor - hamma guruh (admin bitta filialga biriktirilgan bo'lsa, faqat o'sha
+    filialdagi guruhlar), o'qituvchi - faqat o'zining guruhi."""
     role = await D.get_role(db, uid)
-    g = await D.fetchone(db, "SELECT teacher_id FROM groups WHERE id=?", (gid,))
+    g = await D.fetchone(db, "SELECT teacher_id, branch_id FROM groups WHERE id=?", (gid,))
     if not g or role is None:
         return False
-    return role in ("admin", "director") or g["teacher_id"] == uid
+    if role == "teacher":
+        return g["teacher_id"] == uid
+    if role not in ("admin", "director"):
+        return False
+    scope = await D.admin_branch_scope(db, uid, role)
+    return scope is None or g["branch_id"] == scope
 
 
 def confirm_kb(yes, no="x:no"):
