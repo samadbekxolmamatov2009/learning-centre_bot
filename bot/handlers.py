@@ -736,13 +736,20 @@ async def _save_payment(msg_obj, db, state: FSMContext, bot: Bot, amt: int, from
     await db.execute("INSERT INTO payments(student_id,group_id,amount,month) VALUES(?,?,?,?)",
                      (sid, s["group_id"], amt, mo))
     await state.clear()
-    await msg_obj.answer(f"✅ {s['last_name']} {s['first_name']}: {money(amt)} qabul qilindi. "
-                         f"Bu oy uchun qarzdor emas.")
     row = await D.fetchone(db, "SELECT id FROM payments WHERE student_id=? AND month=? ORDER BY id DESC LIMIT 1",
                            (sid, mo))
-    if row:
-        from .receipts import send_receipt
-        await send_receipt(bot, db, row["id"], from_user_id)
+    kb_ = (InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+        text="🧾 Chek olish", callback_data=f"recv:{row['id']}")]]) if row else None)
+    await msg_obj.answer(f"✅ {s['last_name']} {s['first_name']}: {money(amt)} qabul qilindi. "
+                         f"Bu oy uchun qarzdor emas.", reply_markup=kb_)
+
+
+@router.callback_query(F.data.startswith("recv:"), STAFF)
+async def recv_receipt(c: CallbackQuery, db, bot: Bot):
+    pid = int(c.data[5:])
+    from .receipts import send_receipt
+    await send_receipt(bot, db, pid, c.from_user.id)
+    await c.answer("🧾 Chek yuborildi")
 
 
 # ---------------- Qarzdorlar / hisob ----------------

@@ -468,7 +468,7 @@ function goStuForm(mode, prefillGroup, student) {
 function goStuDetail(student) {
   S.stu.detailBack = S.stu.view === 'detail' ? S.stu.detailBack : S.stu.view;
   S.stu.detail = student; S.stu.payOpen = false; S.stu.payAmount = ''; S.stu.payCustom = false; S.stu.moveOpen = false; S.stu.moveTo = '';
-  S.stu.payHistOpen = false; S.stu.payHistory = null;
+  S.stu.payHistOpen = false; S.stu.payHistory = null; S.stu.toast = '';
   S.stu.parentOpen = false; S.stu.parentLink = null; S.stu.parentCopied = false;
   S.stu.examHistOpen = false; S.stu.examHistory = null;
   S.stu.view = 'detail';
@@ -508,6 +508,14 @@ async function toggleExamHistory() {
     try { const d = await api(`/api/students/${S.stu.detail.id}/exams`); S.stu.examHistory = d.exams; }
     catch (e) { S.stu.examHistory = []; }
   }
+  render();
+}
+async function sendReceipt(pid) {
+  try {
+    await api(`/api/payments/${pid}/receipt`, {method:'POST'});
+    haptic('medium');
+    S.stu.toast = '🧾 Chek yuborildi';
+  } catch (e) { alert(e.message); }
   render();
 }
 async function cancelPayment(pid) {
@@ -1046,6 +1054,7 @@ function viewStuDetail() {
   const s = S.stu.detail, st = S.stu, staff = S.me.role !== 'teacher';
   const otherGroups = S.stu.groups.filter(g => g.id !== s.group);
   return `<div class="top"><button class="back" data-act="stu-detail-back">‹</button><h1>${esc(s.last)} ${esc(s.first)}</h1></div>
+    ${st.toast ? `<div class="toast">${esc(st.toast)}</div>` : ''}
     <div class="card-detail">
       <div class="nm">${esc(s.last)} ${esc(s.first)}</div>
       <div class="ln">🏫 <b>${esc(s.grade)}-sinf</b> · 📚 <b>${esc(s.group_name || groupName(s.group))}</b></div>
@@ -1132,7 +1141,8 @@ function viewPayHistory(staff) {
   return `<div class="list" style="margin-top:8px">${h.map(p => `<div class="srow-row">
       <div class="who"><div class="name">${money(p.amount)} so'm</div>
         <div class="meta">${esc(p.month)} · ${esc(p.created_at.slice(0, 16))}</div></div>
-      ${staff ? `<button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="stu-pay-cancel" data-pid="${p.id}">🗑</button>` : ''}
+      ${staff ? `<button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="stu-pay-receipt" data-pid="${p.id}">🧾</button>
+      <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="stu-pay-cancel" data-pid="${p.id}">🗑</button>` : ''}
     </div>`).join('')}</div>`;
 }
 
@@ -1905,6 +1915,7 @@ document.addEventListener('click', e => {
   else if (act === 'stu-parent-share') shareParentLink();
   else if (act === 'stu-parent-wa') whatsappParentLink();
   else if (act === 'stu-pay-cancel') cancelPayment(Number(t.dataset.pid));
+  else if (act === 'stu-pay-receipt') sendReceipt(Number(t.dataset.pid));
   else if (act === 'stu-exam-toggle') toggleExamHistory();
   else if (act === 'sal-month') loadSalary(t.dataset.month);
   else if (act === 'exam-open-list') openExamList(S.stu.group.id, S.stu.group.name);
