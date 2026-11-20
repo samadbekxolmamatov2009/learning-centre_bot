@@ -152,7 +152,10 @@ biriktirilmagan (ixtiyoriy, bo'sh qoldirilgan) admin esa avvalgidek hamma filial
 cheklov hech qachon qo'llanilmaydi — direktor doim hammasini ko'radi. **Panel** sahifasida filial bo'yicha
 filtr chiplari bor —
 "🏢 Barchasi" yoki aniq bitta filialni tanlab, shu filialning tushumi, qarzdorlari, davomat foizi, 6 oylik grafigi
-va (direktorga) o'sha filialdagi guruhlar uchun hisoblangan o'qituvchilar oyligi alohida ko'rsatiladi. Filial
+va (direktorga) o'sha filialdagi guruhlar uchun hisoblangan o'qituvchilar oyligi alohida ko'rsatiladi. Panelda
+tanlangan filial **"O'quvchilar" bo'limidagi guruhlar ro'yxatiga ham tegishli** — Panelda masalan "Karmana"ni
+tanlasangiz, O'quvchilar bo'limiga o'tganingizda ham faqat Karmana guruhlari ko'rinadi, boshqa filial guruhlari
+chiqmaydi (qaysi filialni ko'rib tursangiz, hammasi o'sha filialga mos keladi). Filial
 o'chirilsa, undagi guruhlar o'chmaydi — faqat filialsiz holatga o'tadi. Filiallar funksiyasi qo'shilishidan oldin
 yaratilgan barcha guruhlar (hozirgi asosiy markaz) avtomatik "filialsiz" holatda qoladi — hech qaysi filialga
 majburan biriktirilmaydi, "Barchasi" ko'rinishida baribir hisoblanadi. Agar ularni ham bitta filialga (masalan

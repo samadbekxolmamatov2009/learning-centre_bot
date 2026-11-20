@@ -442,11 +442,13 @@ let searchTimer = null;
 
 async function loadStudentsTab() {
   S.tab = 'stu'; S.view = 'stu';
-  if (S.stu.groups.length) { S.stu.view = 'groups'; render(); return; }
+  if (S.stu.groups.length && S.stu.groupsBranch === S.dashBranch) { S.stu.view = 'groups'; render(); return; }
   $app.innerHTML = '<div class="spin"></div>';
   try {
-    const d = await api('/api/groups');
+    const q = S.dashBranch ? `?branch=${S.dashBranch}` : '';
+    const d = await api(`/api/groups${q}`);
     S.stu.groups = d.groups; S.stu.teachers = d.teachers || []; S.stu.branches = d.branches || [];
+    S.stu.groupsBranch = S.dashBranch;
     S.stu.view = 'groups'; render();
   } catch (e) { fail(e); }
 }
