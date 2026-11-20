@@ -142,8 +142,10 @@ yuborilgandan keyin chiqadigan xabarda ko'rsatiladi. Bu funksiya faqat direktorg
 O'quv markaz bir nechta filial (shahar/tuman bo'limi) bilan ishlashi mumkin. Direktorga **"👨‍🏫 Xodimlar"** bo'limida
 **"🏢 Filiallar"** bo'limi: filial qo'shish/nomini o'zgartirish/o'chirish (faqat direktor huquqi). Guruh
 qo'shish/tahrirlashda (admin/direktor) guruhga filial tanlanadi (ixtiyoriy — filialsiz ham bo'lishi mumkin).
-O'qituvchining o'zi filialga biriktirilmaydi — turli filiallardagi guruhlarni bitta o'qituvchi olib borishi mumkin,
-faqat guruh qaysi filialga tegishli ekanligi muhim. **Panel** sahifasida filial bo'yicha filtr chiplari bor —
+Yangi o'qituvchi yoki admin qo'shishda ham (Xodimlar bo'limi) filial so'raladi (ixtiyoriy, keyinroq ham
+o'zgartirish/qo'shish mumkin) — bu faqat xodimning qaysi filialga tegishli ekanini ko'rsatish uchun, u olib
+boradigan guruhlar istalgan filialda bo'lishi mumkin, faqat guruh qaysi filialga tegishli ekanligi hisob-kitoblar
+uchun muhim (yuqoridagi filtr). **Panel** sahifasida filial bo'yicha filtr chiplari bor —
 "🏢 Barchasi" yoki aniq bitta filialni tanlab, shu filialning tushumi, qarzdorlari, davomat foizi, 6 oylik grafigi
 va (direktorga) o'sha filialdagi guruhlar uchun hisoblangan o'qituvchilar oyligi alohida ko'rsatiladi. Filial
 o'chirilsa, undagi guruhlar o'chmaydi — faqat filialsiz holatga o'tadi. Filiallar funksiyasi qo'shilishidan oldin

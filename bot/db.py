@@ -11,7 +11,8 @@ from .config import DB_PATH, DIRECTOR_IDS, TURSO_URL, TURSO_TOKEN, TZ_OFFSET
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users(
     tg_id INTEGER PRIMARY KEY, full_name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('director','admin','teacher')));
+    role TEXT NOT NULL CHECK(role IN ('director','admin','teacher')),
+    branch_id INTEGER REFERENCES branches(id));
 CREATE TABLE IF NOT EXISTS teachers(
     tg_id INTEGER PRIMARY KEY REFERENCES users(tg_id),
     pay_type TEXT NOT NULL CHECK(pay_type IN ('percent','per_student')),
@@ -134,6 +135,9 @@ class Database:
         tcols = [r["name"] for r in await self.fetchall("PRAGMA table_info(teachers)")]
         if "registry_rate" not in tcols:
             await self.execute("ALTER TABLE teachers ADD COLUMN registry_rate INTEGER NOT NULL DEFAULT 0")
+        ucols = [r["name"] for r in await self.fetchall("PRAGMA table_info(users)")]
+        if "branch_id" not in ucols:
+            await self.execute("ALTER TABLE users ADD COLUMN branch_id INTEGER")
         acols = [r["name"] for r in await self.fetchall("PRAGMA table_info(attendance)")]
         if "status" not in acols:
             await self.execute("ALTER TABLE attendance ADD COLUMN status TEXT NOT NULL DEFAULT ''")

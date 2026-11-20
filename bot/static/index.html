@@ -684,14 +684,16 @@ function viewHrHome() {
     <div class="sec">O'qituvchilar</div>
     <div class="list">${h.teachers.map(t => `<div class="srow-row" data-act="hr-teacher-open" data-id="${t.id}">
         <div class="who"><div class="name">${esc(t.name)}</div>
-          <div class="meta">${payHow(t)}${t.registry_rate ? ` · 🏛 ${money(t.registry_rate)}` : ''} · ${t.groups} guruh</div></div>
+          <div class="meta">${payHow(t)}${t.registry_rate ? ` · 🏛 ${money(t.registry_rate)}` : ''} · ${t.groups} guruh
+            ${t.branch_name ? ' · 🏢 ' + esc(t.branch_name) : ''}</div></div>
         <span class="sub">▸</span></div>`).join('') || '<div class="empty">O\'qituvchilar yo\'q</div>'}</div>
     <button class="gcard" data-act="hr-teacher-add" style="border:1.5px dashed var(--line);background:transparent;margin-top:8px">
       <div class="t">➕ Yangi o'qituvchi</div></button>
     <div class="sec">Adminlar</div>
-    <div class="list">${h.admins.map(a => `<div class="srow-row">
-        <div class="who"><div class="name">${esc(a.name)}</div><div class="meta">ID ${a.id}</div></div>
-        <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-admin-del" data-id="${a.id}">🗑</button>
+    <div class="list">${h.admins.map(a => `<div class="srow-row" data-act="hr-admin-open" data-id="${a.id}">
+        <div class="who"><div class="name">${esc(a.name)}</div>
+          <div class="meta">ID ${a.id}${a.branch_name ? ' · 🏢 ' + esc(a.branch_name) : ''}</div></div>
+        <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-admin-del" data-id="${a.id}" data-stop>🗑</button>
       </div>`).join('') || '<div class="empty">Adminlar yo\'q</div>'}</div>
     <button class="gcard" data-act="hr-admin-add" style="border:1.5px dashed var(--line);background:transparent;margin-top:8px">
       <div class="t">➕ Yangi admin</div></button>
@@ -731,20 +733,27 @@ function viewHrTeacherForm() {
       <input class="input" id="t_pvalue" type="number" inputmode="decimal" value="${f.pay_value || ''}" placeholder="masalan 40 yoki 200000"></div>
     <div class="field"><label>Reyestr: bitta dars narxi (so'm)</label>
       <input class="input" id="t_reg" type="number" inputmode="numeric" value="${f.registry_rate || 0}" placeholder="0 - reyestr yo'q"></div>
+    ${S.hr.branches.length ? `<div class="field"><label>Filial</label>
+      <select class="input" id="t_branch"><option value="">— tanlanmagan —</option>${S.hr.branches.map(b =>
+        `<option value="${b.id}" ${b.id == f.branch_id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>` : ''}
     <div class="form-actions"><button class="secondary" data-act="hr-back">Bekor qilish</button>
       <button class="primary" data-act="hr-teacher-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : 'Saqlash'}</button></div>
     ${isEdit ? `<button class="abtn danger" style="width:100%;margin-top:20px" data-act="hr-teacher-del" data-id="${f.id}">🗑 O'qituvchini o'chirish</button>` : ''}`;
 }
 function viewHrAdminForm() {
-  const f = S.hr.aform;
-  return `<div class="top"><button class="back" data-act="hr-back">‹</button><h1>Yangi admin</h1></div>
+  const f = S.hr.aform, isEdit = f.mode === 'edit';
+  return `<div class="top"><button class="back" data-act="hr-back">‹</button><h1>${isEdit ? esc(f.name) : 'Yangi admin'}</h1></div>
     ${S.hr.toast ? `<div class="toast">${esc(S.hr.toast)}</div>` : ''}
-    <div class="field"><label>Telegram ID <span class="req">*</span></label>
-      <input class="input" id="a_id" type="number" inputmode="numeric" placeholder="masalan 123456789" value="${f.id || ''}" autocomplete="off"></div>
+    ${isEdit ? '' : `<div class="field"><label>Telegram ID <span class="req">*</span></label>
+      <input class="input" id="a_id" type="number" inputmode="numeric" placeholder="masalan 123456789" value="${f.id || ''}" autocomplete="off"></div>`}
     <div class="field"><label>Ism familiya <span class="req">*</span></label>
       <input class="input" id="a_name" value="${esc(f.name || '')}" autocomplete="off"></div>
+    ${S.hr.branches.length ? `<div class="field"><label>Filial</label>
+      <select class="input" id="a_branch"><option value="">— tanlanmagan —</option>${S.hr.branches.map(b =>
+        `<option value="${b.id}" ${b.id == f.branch_id ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>` : ''}
     <div class="form-actions"><button class="secondary" data-act="hr-back">Bekor qilish</button>
-      <button class="primary" data-act="hr-admin-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : "Qo'shish"}</button></div>`;
+      <button class="primary" data-act="hr-admin-save" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Saqlanmoqda…' : (isEdit ? 'Saqlash' : "Qo'shish")}</button></div>
+    ${isEdit ? `<button class="abtn danger" style="width:100%;margin-top:20px" data-act="hr-admin-del" data-id="${f.id}">🗑 Admin ro'yxatidan o'chirish</button>` : ''}`;
 }
 function viewHrBranchForm() {
   const f = S.hr.bform, isEdit = f.mode === 'edit';
@@ -829,11 +838,12 @@ const HR_VIEWS = {home: viewHrHome, tform: viewHrTeacherForm, aform: viewHrAdmin
 function hrOpenTeacher(id) {
   const t = S.hr.teachers.find(x => x.id === id);
   if (!t) return;
-  S.hr.tform = {mode:'edit', id, name:t.name, pay_type:t.pay_type, pay_value:t.pay_value, registry_rate:t.registry_rate};
+  S.hr.tform = {mode:'edit', id, name:t.name, pay_type:t.pay_type, pay_value:t.pay_value,
+    registry_rate:t.registry_rate, branch_id:t.branch_id || ''};
   S.hr.toast = ''; S.hr.view = 'tform'; render();
 }
 function hrNewTeacher() {
-  S.hr.tform = {mode:'add', id:null, name:'', pay_type:'percent', pay_value:'', registry_rate:0};
+  S.hr.tform = {mode:'add', id:null, name:'', pay_type:'percent', pay_value:'', registry_rate:0, branch_id:''};
   S.hr.toast = ''; S.hr.view = 'tform'; render();
 }
 async function hrSaveTeacher() {
@@ -842,6 +852,8 @@ async function hrSaveTeacher() {
   f.pay_type = document.getElementById('t_ptype').value;
   f.pay_value = parseFloat(document.getElementById('t_pvalue').value);
   f.registry_rate = parseInt(document.getElementById('t_reg').value || '0', 10);
+  const branchEl = document.getElementById('t_branch');
+  const branch = branchEl ? branchEl.value : '';
   if (f.name.length < 2) return alert('Ism familiyani to\'liq kiriting.');
   if (!f.pay_value || f.pay_value <= 0) return alert('Oylik qiymatini kiriting.');
   if (isNaN(f.registry_rate) || f.registry_rate < 0) return alert('Reyestr narxi noto\'g\'ri.');
@@ -854,10 +866,10 @@ async function hrSaveTeacher() {
   try {
     if (f.mode === 'add') {
       await api('/api/teachers', {method:'POST', body: JSON.stringify(
-        {id:tid, name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate})});
+        {id:tid, name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate, branch})});
     } else {
       await api(`/api/teachers/${tid}`, {method:'PATCH', body: JSON.stringify(
-        {name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate})});
+        {name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate, branch})});
     }
     haptic('medium');
     await refreshStaff();
@@ -879,15 +891,31 @@ async function hrDeleteTeacher(tid) {
   } catch (e) { alert(e.message); }
   S.busy = false; render();
 }
-function hrNewAdmin() { S.hr.aform = {id:'', name:''}; S.hr.toast = ''; S.hr.view = 'aform'; render(); }
+function hrNewAdmin() { S.hr.aform = {mode:'add', id:'', name:'', branch_id:''}; S.hr.toast = ''; S.hr.view = 'aform'; render(); }
+function hrOpenAdmin(id) {
+  const a = S.hr.admins.find(x => x.id === id);
+  if (!a) return;
+  S.hr.aform = {mode:'edit', id, name:a.name, branch_id:a.branch_id || ''};
+  S.hr.toast = ''; S.hr.view = 'aform'; render();
+}
 async function hrSaveAdmin() {
-  const id = parseInt(document.getElementById('a_id').value, 10);
+  const f = S.hr.aform;
   const name = document.getElementById('a_name').value.trim();
-  if (!id) return alert('Telegram ID kiriting.');
+  const branchEl = document.getElementById('a_branch');
+  const branch = branchEl ? branchEl.value : '';
   if (name.length < 2) return alert('Ism familiyani to\'liq kiriting.');
+  let id = f.id;
+  if (f.mode === 'add') {
+    id = parseInt(document.getElementById('a_id').value, 10);
+    if (!id) return alert('Telegram ID kiriting.');
+  }
   S.busy = true; render();
   try {
-    await api('/api/admins', {method:'POST', body: JSON.stringify({id, name})});
+    if (f.mode === 'add') {
+      await api('/api/admins', {method:'POST', body: JSON.stringify({id, name, branch})});
+    } else {
+      await api(`/api/admins/${id}`, {method:'PATCH', body: JSON.stringify({name, branch})});
+    }
     haptic('medium');
     await refreshStaff();
     S.hr.view = 'home';
@@ -1857,8 +1885,9 @@ document.addEventListener('click', e => {
   else if (act === 'hr-teacher-save') hrSaveTeacher();
   else if (act === 'hr-teacher-del') hrDeleteTeacher(Number(t.dataset.id));
   else if (act === 'hr-admin-add') hrNewAdmin();
+  else if (act === 'hr-admin-open') hrOpenAdmin(id);
   else if (act === 'hr-admin-save') hrSaveAdmin();
-  else if (act === 'hr-admin-del') hrDeleteAdmin(id);
+  else if (act === 'hr-admin-del') hrDeleteAdmin(Number(t.dataset.id));
   else if (act === 'hr-reg') hrToggleRegistry(t.dataset.hide === '1');
   else if (act === 'hr-branch-add') hrNewBranch();
   else if (act === 'hr-branch-open') hrOpenBranch(id);
