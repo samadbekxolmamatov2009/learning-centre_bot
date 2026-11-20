@@ -693,7 +693,7 @@ function viewHrHome() {
     <div class="list">${h.admins.map(a => `<div class="srow-row" data-act="hr-admin-open" data-id="${a.id}">
         <div class="who"><div class="name">${esc(a.name)}</div>
           <div class="meta">ID ${a.id}${a.branch_name ? ' · 🏢 ' + esc(a.branch_name) : ''}</div></div>
-        <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-admin-del" data-id="${a.id}" data-stop>🗑</button>
+        <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-admin-del" data-id="${a.id}">🗑</button>
       </div>`).join('') || '<div class="empty">Adminlar yo\'q</div>'}</div>
     <button class="gcard" data-act="hr-admin-add" style="border:1.5px dashed var(--line);background:transparent;margin-top:8px">
       <div class="t">➕ Yangi admin</div></button>
