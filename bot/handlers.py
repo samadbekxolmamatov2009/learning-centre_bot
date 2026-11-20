@@ -190,13 +190,14 @@ async def start_parent(m: Message, db, payload: str):
     sid = verify(payload)
     if sid is None:
         return await m.answer("Havola yaroqsiz. Markazdan yangi havola so'rang.")
-    s = await D.fetchone(db, "SELECT s.*, g.name AS gname FROM students s JOIN groups g ON g.id=s.group_id "
+    s = await D.fetchone(db, "SELECT s.*, g.name AS gname FROM students s LEFT JOIN groups g ON g.id=s.group_id "
                              "WHERE s.id=?", (sid,))
     if not s:
         return await m.answer("O'quvchi topilmadi. Ehtimol o'chirilgan.")
     await db.execute("INSERT OR IGNORE INTO parent_links(parent_tg_id, student_id) VALUES(?,?)",
                      (m.from_user.id, sid))
-    text = f"👪 Siz <b>{s['last_name']} {s['first_name']}</b> ({s['gname']} guruhi) ota-onasi sifatida bog'landingiz."
+    gname = f"{s['gname']} guruhi" if s["gname"] else "guruhi noma'lum"
+    text = f"👪 Siz <b>{s['last_name']} {s['first_name']}</b> ({gname}) ota-onasi sifatida bog'landingiz."
     if WEBAPP_URL:
         await m.answer(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(text="👪 Farzandim haqida", web_app=WebAppInfo(url=f"{WEBAPP_URL}/parent"))]]))

@@ -414,7 +414,8 @@ async def archive_or_delete_group(db, group_id):
     if not g:
         return
     has_history = (await fetchone(db, "SELECT 1 FROM payments WHERE group_id=?", (group_id,)) or
-                   await fetchone(db, "SELECT 1 FROM attendance WHERE group_id=?", (group_id,)))
+                   await fetchone(db, "SELECT 1 FROM attendance WHERE group_id=?", (group_id,)) or
+                   await fetchone(db, "SELECT 1 FROM students WHERE group_id=?", (group_id,)))
     if has_history:
         new_name = f"{g['name']} (arxiv, {today_local().isoformat()})"
         await db.execute("UPDATE groups SET archived=1, name=? WHERE id=?", (new_name, group_id))
