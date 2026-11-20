@@ -306,14 +306,20 @@ async def api_groups(request):
                                    "WHERE g.teacher_id=? AND g.archived=0 ORDER BY g.name", (uid,))
     else:
         scope = await D.admin_branch_scope(db, uid, role)
+        view_filter = scope
+        if view_filter is None and request.query.get("branch"):
+            try:
+                view_filter = int(request.query["branch"])
+            except Exception:
+                return bad("Filial noto'g'ri")
         sql = ("SELECT g.id, g.name, g.teacher_id AS teacherId, u.full_name AS teacher, "
               "g.lesson_days, g.lesson_time, g.branch_id, b.name AS branch_name FROM groups g "
               "LEFT JOIN users u ON u.tg_id=g.teacher_id "
               "LEFT JOIN branches b ON b.id=g.branch_id WHERE g.archived=0")
         args = ()
-        if scope is not None:
+        if view_filter is not None:
             sql += " AND g.branch_id=?"
-            args = (scope,)
+            args = (view_filter,)
         sql += " ORDER BY g.name"
         groups = await db.fetchall(sql, args)
     counts = {r["group_id"]: r["n"] for r in await db.fetchall(
