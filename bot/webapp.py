@@ -1211,7 +1211,8 @@ async def api_student_cert189_post(request):
 # ---------------- Xodimlar (faqat direktor): o'qituvchilar, adminlar, reyestr sozlamasi ----------------
 def teacher_out(t):
     return {"id": t["tg_id"], "name": t["full_name"], "pay_type": t["pay_type"], "pay_value": t["pay_value"],
-            "registry_rate": t["registry_rate"], "groups": t.get("groups", 0)}
+            "registry_rate": t["registry_rate"], "groups": t.get("groups", 0),
+            "branch_id": t.get("branch_id"), "branch_name": t.get("branch_name")}
 
 
 async def api_teachers(request):
@@ -1220,9 +1221,10 @@ async def api_teachers(request):
         return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
     rows = await db.fetchall(
-        "SELECT u.tg_id, u.full_name, t.pay_type, t.pay_value, t.registry_rate, "
+        "SELECT u.tg_id, u.full_name, u.branch_id, b.name AS branch_name, t.pay_type, t.pay_value, t.registry_rate, "
         "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id AND g.archived=0) AS groups "
-        "FROM users u JOIN teachers t ON t.tg_id=u.tg_id ORDER BY u.full_name")
+        "FROM users u JOIN teachers t ON t.tg_id=u.tg_id LEFT JOIN branches b ON b.id=u.branch_id "
+        "ORDER BY u.full_name")
     return web.json_response({"teachers": [teacher_out(r) for r in rows]})
 
 
@@ -1245,8 +1247,11 @@ async def api_teacher_post(request):
         return bad("Ism familiyani to'liq kiriting")
     if await db.fetchone("SELECT 1 FROM users WHERE tg_id=?", (tid,)):
         return bad("Bu ID allaqachon ro'yxatda bor")
+    branch_id = int(body["branch"]) if body.get("branch") else None
+    if branch_id and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch_id,)):
+        return bad("Filial topilmadi")
     await db.batch([
-        ("INSERT INTO users(tg_id,full_name,role) VALUES(?,?,'teacher')", (tid, name)),
+        ("INSERT INTO users(tg_id,full_name,role,branch_id) VALUES(?,?,'teacher',?)", (tid, name, branch_id)),
         ("INSERT INTO teachers(tg_id,pay_type,pay_value,registry_rate) VALUES(?,?,?,?)",
          (tid, pay_type, pay_value, reg_rate))])
     return web.json_response({"ok": True})
@@ -1285,10 +1290,16 @@ async def api_teacher_patch(request):
         except Exception:
             return bad("Reyestr narxi noto'g'ri")
         await db.execute("UPDATE teachers SET registry_rate=? WHERE tg_id=?", (rr, tid))
+    if "branch" in body:
+        branch_id = int(body["branch"]) if body.get("branch") else None
+        if branch_id and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch_id,)):
+            return bad("Filial topilmadi")
+        await db.execute("UPDATE users SET branch_id=? WHERE tg_id=?", (branch_id, tid))
     row = await db.fetchone(
-        "SELECT u.tg_id, u.full_name, t.pay_type, t.pay_value, t.registry_rate, "
+        "SELECT u.tg_id, u.full_name, u.branch_id, b.name AS branch_name, t.pay_type, t.pay_value, t.registry_rate, "
         "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id AND g.archived=0) AS groups "
-        "FROM users u JOIN teachers t ON t.tg_id=u.tg_id WHERE u.tg_id=?", (tid,))
+        "FROM users u JOIN teachers t ON t.tg_id=u.tg_id LEFT JOIN branches b ON b.id=u.branch_id "
+        "WHERE u.tg_id=?", (tid,))
     return web.json_response({"ok": True, "teacher": teacher_out(row)})
 
 
@@ -1310,13 +1321,19 @@ async def api_teacher_delete(request):
     return web.json_response({"ok": True})
 
 
+def admin_out(r):
+    return {"id": r["tg_id"], "name": r["full_name"], "branch_id": r["branch_id"], "branch_name": r["branch_name"]}
+
+
 async def api_admins(request):
     uid, role, _ = await auth(request)
     if role != "director":
         return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
-    rows = await db.fetchall("SELECT tg_id, full_name FROM users WHERE role='admin' ORDER BY full_name")
-    return web.json_response({"admins": [{"id": r["tg_id"], "name": r["full_name"]} for r in rows]})
+    rows = await db.fetchall(
+        "SELECT u.tg_id, u.full_name, u.branch_id, b.name AS branch_name FROM users u "
+        "LEFT JOIN branches b ON b.id=u.branch_id WHERE u.role='admin' ORDER BY u.full_name")
+    return web.json_response({"admins": [admin_out(r) for r in rows]})
 
 
 async def api_admin_post(request):
@@ -1334,8 +1351,41 @@ async def api_admin_post(request):
         return bad("Ism familiyani to'liq kiriting")
     if await db.fetchone("SELECT 1 FROM users WHERE tg_id=?", (aid,)):
         return bad("Bu ID allaqachon ro'yxatda bor")
-    await db.execute("INSERT INTO users(tg_id,full_name,role) VALUES(?,?,'admin')", (aid, name))
+    branch_id = int(body["branch"]) if body.get("branch") else None
+    if branch_id and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch_id,)):
+        return bad("Filial topilmadi")
+    await db.execute("INSERT INTO users(tg_id,full_name,role,branch_id) VALUES(?,?,'admin',?)",
+                     (aid, name, branch_id))
     return web.json_response({"ok": True})
+
+
+async def api_admin_patch(request):
+    uid, role, _ = await auth(request)
+    if role != "director":
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        aid = int(request.match_info["aid"])
+        body = await request.json()
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    a = await db.fetchone("SELECT 1 FROM users WHERE tg_id=? AND role='admin'", (aid,))
+    if not a:
+        return bad("Topilmadi", 404)
+    if "name" in body:
+        name = clean_text(body["name"], 80)
+        if len(name) < 2:
+            return bad("Ism familiyani to'liq kiriting")
+        await db.execute("UPDATE users SET full_name=? WHERE tg_id=?", (name, aid))
+    if "branch" in body:
+        branch_id = int(body["branch"]) if body.get("branch") else None
+        if branch_id and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch_id,)):
+            return bad("Filial topilmadi")
+        await db.execute("UPDATE users SET branch_id=? WHERE tg_id=?", (branch_id, aid))
+    row = await db.fetchone(
+        "SELECT u.tg_id, u.full_name, u.branch_id, b.name AS branch_name FROM users u "
+        "LEFT JOIN branches b ON b.id=u.branch_id WHERE u.tg_id=?", (aid,))
+    return web.json_response({"ok": True, "admin": admin_out(row)})
 
 
 async def api_admin_delete(request):
@@ -1688,6 +1738,7 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_delete("/api/teachers/{tid}", api_teacher_delete)
     app.router.add_get("/api/admins", api_admins)
     app.router.add_post("/api/admins", api_admin_post)
+    app.router.add_patch("/api/admins/{aid}", api_admin_patch)
     app.router.add_delete("/api/admins/{aid}", api_admin_delete)
     app.router.add_get("/api/registry", api_registry_get)
     app.router.add_get("/api/students-orphaned", api_orphan_students_get)
