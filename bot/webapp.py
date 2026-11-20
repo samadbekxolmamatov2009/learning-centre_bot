@@ -649,13 +649,16 @@ async def api_salary(request):
     for g in await db.fetchall("SELECT * FROM groups WHERE teacher_id=? ORDER BY name", (target,)):
         studs = await D.group_students(db, g["id"], month)
         reg_cnt = sum(1 for s in studs if s["is_registry"])
-        paid = sum(1 for s in studs if s["paid"]) - reg_cnt
+        debtors = sum(1 for s in studs if not s["is_registry"] and not s["paid"])
+        pay_rows = await D.group_payment_rows(db, g["id"], month)
+        paid = len({s["id"] for s in studs if not s["is_registry"] and s["paid"]} |
+                   {r["student_id"] for r in pay_rows})
         income = await D.group_income(db, g["id"], month)
         att = await db.fetchone("SELECT COALESCE(SUM(present),0) p, COUNT(*) n FROM attendance "
                                 "WHERE group_id=? AND day LIKE ?", (g["id"], month + "-%"))
         groups_out.append({
             "name": g["name"], "income": income, "paid": paid, "students": len(studs),
-            "debtors": len(studs) - paid - reg_cnt,
+            "debtors": debtors,
             "att": round(att["p"] * 100 / att["n"]) if att["n"] else None})
 
     return web.json_response({
@@ -1701,14 +1704,19 @@ async def api_parent_me(request):
 
 
 async def api_parent_unlink(request):
-    """Ota-ona o'zini shu o'quvchining ota-onasi ro'yxatidan chiqarib tashlaydi (bazadan o'chiriladi)."""
+    """Ota-ona o'zini shu o'quvchining ota-onasi ro'yxatidan chiqarib tashlaydi (bazadan o'chiriladi).
+    Havola doimiy (parametrsiz, muddatsiz) bo'lgani uchun, shu parent+student juftligi
+    parent_blocks'ga ham yoziladi - aks holda eski /start havolasini qayta bosib, avtomatik
+    qayta ulanib qolishi mumkin edi."""
     uid = await auth_any(request)
     db = request.app["db"]
     try:
         sid = int(request.match_info["sid"])
     except Exception:
         return bad("So'rov noto'g'ri")
-    await db.execute("DELETE FROM parent_links WHERE parent_tg_id=? AND student_id=?", (uid, sid))
+    await db.batch([
+        ("DELETE FROM parent_links WHERE parent_tg_id=? AND student_id=?", (uid, sid)),
+        ("INSERT OR IGNORE INTO parent_blocks(parent_tg_id, student_id) VALUES(?,?)", (uid, sid))])
     return web.json_response({"ok": True})
 
 

@@ -194,6 +194,10 @@ async def start_parent(m: Message, db, payload: str):
                              "WHERE s.id=?", (sid,))
     if not s:
         return await m.answer("O'quvchi topilmadi. Ehtimol o'chirilgan.")
+    if await D.fetchone(db, "SELECT 1 FROM parent_blocks WHERE parent_tg_id=? AND student_id=?",
+                        (m.from_user.id, sid)):
+        return await m.answer("Siz avval ushbu o'quvchi bilan aloqani o'zingiz uzgansiz. Agar xato bo'lsa yoki "
+                              "qayta ulanish kerak bo'lsa, o'quv markaziga murojaat qiling.")
     await db.execute("INSERT OR IGNORE INTO parent_links(parent_tg_id, student_id) VALUES(?,?)",
                      (m.from_user.id, sid))
     gname = f"{s['gname']} guruhi" if s["gname"] else "guruhi noma'lum"

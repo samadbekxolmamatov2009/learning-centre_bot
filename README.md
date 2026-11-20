@@ -177,7 +177,10 @@ o'qituvchi) Mini App'da ko'rinadi. Bir nechta farzand bo'lsa, hammasi ro'yxatda 
 (muddati tugamaydi), istalgan vaqt qayta yuborilishi mumkin. Har bir farzand kartochkasida
 **"🔓 Ushbu farzand bilan bog'lanishni bekor qilish"** tugmasi bor — bosilsa (tasdiqlagandan keyin) shu
 bog'lanish bazadan butunlay o'chiriladi, ota-ona endi o'sha o'quvchi haqida hech narsa ko'rmaydi (boshqa
-farzandlari bilan bog'lanish, agar bo'lsa, o'zgarmay qoladi; qayta ko'rish uchun markazdan yangi havola kerak bo'ladi).
+farzandlari bilan bog'lanish, agar bo'lsa, o'zgarmay qoladi). Havola doimiy (o'zgarmas) bo'lgani uchun, bekor
+qilingandan keyin **o'sha eski havolani qayta bossa ham endi avtomatik qayta ulanib qolmaydi** — tizim buni
+eslab qoladi va "markazga murojaat qiling" deb javob beradi (boshqa ota-ona, masalan otasi, bu bog'lanishni
+bekor qilgan onasidan mustaqil ravishda hali ham bog'lana oladi).
 Havolani **kim bossa, o'sha ota-ona sifatida bog'lanadi** — tizim bu kishi haqiqiy ota-ona ekanligini tekshirmaydi,
 shuning uchun havolani faqat haqiqiy ota-onaga yuborish kerak. Buning uchun havola yonida **"📤 Telegramda ulashish"**
 (Telegramning o'z ulashish oynasi orqali to'g'ridan-to'g'ri kerakli kishiga yuboriladi) va, agar o'quvchining telefon

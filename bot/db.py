@@ -51,6 +51,10 @@ CREATE TABLE IF NOT EXISTS parent_links(
     id INTEGER PRIMARY KEY AUTOINCREMENT, parent_tg_id INTEGER NOT NULL,
     student_id INTEGER NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(parent_tg_id, student_id));
+CREATE TABLE IF NOT EXISTS parent_blocks(
+    parent_tg_id INTEGER NOT NULL, student_id INTEGER NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(parent_tg_id, student_id));
 CREATE TABLE IF NOT EXISTS exams(
     id INTEGER PRIMARY KEY AUTOINCREMENT, group_id INTEGER NOT NULL,
     title TEXT NOT NULL, max_score INTEGER NOT NULL, day TEXT NOT NULL,
