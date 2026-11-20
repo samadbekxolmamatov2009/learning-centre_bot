@@ -582,11 +582,23 @@ async def api_payment_post(request):
     mo = D.current_month()
     await db.execute("INSERT INTO payments(student_id,group_id,amount,month) VALUES(?,?,?,?)",
                      (sid, s["group_id"], amount, mo))
-    row = await db.fetchone("SELECT id FROM payments WHERE student_id=? AND month=? ORDER BY id DESC LIMIT 1",
-                            (sid, mo))
-    if row:
-        from .receipts import send_receipt
-        await send_receipt(request.app.get("bot"), db, row["id"], uid)
+    return web.json_response({"ok": True})
+
+
+async def api_payment_receipt(request):
+    """To'lov cheki (PDF) ixtiyoriy ravishda, talab bo'yicha yuboriladi (avtomatik emas)."""
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        pid = int(request.match_info["pid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    if not await db.fetchone("SELECT 1 FROM payments WHERE id=?", (pid,)):
+        return bad("Topilmadi", 404)
+    from .receipts import send_receipt
+    await send_receipt(request.app.get("bot"), db, pid, uid)
     return web.json_response({"ok": True})
 
 
@@ -1745,6 +1757,7 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_post("/api/payments", api_payment_post)
     app.router.add_get("/api/payments", api_payments_get)
     app.router.add_delete("/api/payments/{pid}", api_payment_delete)
+    app.router.add_post("/api/payments/{pid}/receipt", api_payment_receipt)
     app.router.add_get("/api/salary", api_salary)
     app.router.add_get("/api/teacher-ranking", api_teacher_ranking)
     app.router.add_get("/api/teachers", api_teachers)
