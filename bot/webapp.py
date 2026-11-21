@@ -586,6 +586,8 @@ async def api_student_patch(request):
 
 async def api_student_delete(request):
     uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
     try:
         sid = int(request.match_info["sid"])

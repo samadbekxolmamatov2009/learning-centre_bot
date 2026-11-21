@@ -30,7 +30,7 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
   9-sinf: 500 000, 8/7-sinf: 450 000, 6/5-sinf: 400 000 so'm) tavsiya ko'rsatiladi - "✅ ... so'm to'landi"
   tugmasini bossa, programma shu summa to'landi deb hisoblaydi. Agar summa boshqacha bo'lsa, "✏️ Boshqa summa
   kiritish" tugmasi orqali istalgan summa qo'lda kiritiladi. Boshqa sinflar uchun tavsiya ko'rsatilmaydi, to'g'ridan-to'g'ri summa so'raladi. Chat va Mini App'da ham ishlaydi.
-- **O'qituvchi**: o'z guruhiga o'quvchi qo'shish/o'chirish, davomat (PDF adminga), oylik (o'tgan oylar ham), barcha guruhlari qarzdorlari. **To'lov kiritish huquqi yo'q** - faqat admin va direktor to'lov kirita oladi (Mini App'da ham, chatda ham); bu qoida ataylab shunday - o'qituvchi pul yig'ib, o'zi tizimga kiritib qo'yishiga yo'l qo'yilmaydi.
+- **O'qituvchi**: o'z guruhiga o'quvchi qo'shish, davomat (PDF adminga), oylik (o'tgan oylar ham), barcha guruhlari qarzdorlari. **To'lov kiritish huquqi yo'q** - faqat admin va direktor to'lov kirita oladi (Mini App'da ham, chatda ham); bu qoida ataylab shunday - o'qituvchi pul yig'ib, o'zi tizimga kiritib qo'yishiga yo'l qo'yilmaydi. **O'quvchini o'chirish huquqi ham yo'q** - xuddi shu sababda, faqat admin/direktor o'quvchini o'chira oladi (Mini App'da ham, chatda ham).
 - **Oylik hisob-kitobi va hisobotlar doimiy saqlanadi**: agar o'quvchi biror oy uchun to'lov qilgandan keyin
   guruhdan chiqarilsa/o'chirilsa (masalan keyingi oy boshida), o'sha o'tgan oyning o'qituvchi oyligi
   **o'zgarmaydi** — "o'quvchi boshiga" turidagi oylik ham, Excel hisobotlar ham, shu jumladan, to'g'ridan-to'g'ri
