@@ -163,7 +163,7 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, dashBranch
        payHistOpen:false, payHistory:null, parentOpen:false, parentLink:null, parentLoading:false, parentCopied:false,
        examHistOpen:false, examHistory:null,
        form:null, toast:'', gform:null},
-  salary:{loading:false, data:null, month:null},
+  salary:{loading:false, data:null, month:null, teacherId:null, teacherName:''},
   rank:{loading:false, data:null, branch:null},
   xport:{busy:false, error:'', month:null},
   hr:{view:'home', teachers:[], admins:[], branches:[], registry:null, orphans:null, toast:'', tform:null, aform:null, bform:null},
@@ -537,10 +537,15 @@ async function cancelPayment(pid) {
 }
 
 /* ---------- o'qituvchi oyligi ---------- */
-async function loadSalary(month) {
-  S.tab = 'sal'; S.view = 'sal'; S.salary.loading = true; render();
+async function loadSalary(month, teacherId, teacherName) {
+  if (teacherId !== undefined) { S.salary.teacherId = teacherId; S.salary.teacherName = teacherName || ''; }
+  S.view = 'sal'; if (!S.salary.teacherId) S.tab = 'sal';
+  S.salary.loading = true; render();
   try {
-    const d = await api('/api/salary' + (month ? `?month=${month}` : ''));
+    const params = [];
+    if (month) params.push(`month=${month}`);
+    if (S.salary.teacherId) params.push(`teacher=${S.salary.teacherId}`);
+    const d = await api('/api/salary' + (params.length ? '?' + params.join('&') : ''));
     S.salary.data = d; S.salary.month = d.month;
   } catch (e) { S.salary.data = null; fail(e); return; }
   S.salary.loading = false; render();
@@ -550,6 +555,22 @@ function viewSalary() {
   if (S.salary.loading || !d) return '<div class="spin" style="margin:60px auto"></div>';
   const how = d.pay_type === 'percent' ? `${d.pay_value}% (to'lovdan)` : `${money(d.pay_value)} so'm / o'quvchi`;
   const chips = d.months.map(m => `<button class="dchip ${m === d.month ? 'on' : ''}" data-act="sal-month" data-month="${m}">${m}</button>`).join('');
+  if (S.salary.teacherId) {
+    return `<div class="top"><button class="back" data-act="sal-back">‹</button><h1>${esc(S.salary.teacherName)}</h1></div>
+      <div class="sub" style="margin-top:-6px">${esc(d.month)} · ${esc(how)}</div>
+      <div class="strip">${chips}</div>
+      <div class="sec">Guruhlar</div>
+      ${d.groups.map(g => { const dp = g.students ? Math.round(g.debtors * 100 / g.students) : 0;
+        return `<div class="gbox"><div class="hd">${esc(g.name)}<span>${short(g.income)}</span></div>
+        <div class="sub" style="margin-top:2px">${g.students} o'quvchi · to'lagan ${g.paid} ta</div>
+        ${pctBar('Qarzdor', dp, 'var(--no)', g.debtors + ' ta')}
+        ${pctBar('Davomat', g.att, 'var(--ok)', g.att === null ? '—' : g.att + '%')}</div>`; }).join('')
+        || '<div class="empty">Guruh yo\'q</div>'}
+      ${d.registry.length ? `<div class="sec">🏛 Reyestr (100%)</div>
+        ${d.registry.map(r => `<div class="srow-row"><div class="who"><div class="name">${esc(r.group)}</div>
+            <div class="meta">${r.lessons} ta dars</div></div><div class="name">${short(r.total)}</div></div>`).join('')}` : ''}
+      <div class="kpi" style="margin-top:16px"><div class="l">Jami oylik</div><div class="v" style="font-size:26px">${money(d.total)} so'm</div></div>`;
+  }
   const gs = d.groups;
   let best = '';
   if (gs.length > 1) {
@@ -696,6 +717,8 @@ function viewHrHome() {
         <div class="who"><div class="name">${esc(t.name)}</div>
           <div class="meta">${payHow(t)}${t.registry_rate ? ` · 🏛 ${money(t.registry_rate)}` : ''} · ${t.groups} guruh
             ${t.branch_name ? ' · 🏢 ' + esc(t.branch_name) : ''}</div></div>
+        <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-teacher-salary"
+          data-id="${t.id}" data-name="${esc(t.name)}">💰</button>
         <span class="sub">▸</span></div>`).join('') || '<div class="empty">O\'qituvchilar yo\'q</div>'}</div>
     <button class="gcard" data-act="hr-teacher-add" style="border:1.5px dashed var(--line);background:transparent;margin-top:8px">
       <div class="t">➕ Yangi o'qituvchi</div></button>
@@ -1755,7 +1778,7 @@ function render() {
   if (S.view === 'att') html = S.att.done ? viewDone() : (viewAtt() + tabs());
   else if (S.view === 'dash') html = viewDash() + tabs();
   else if (S.view === 'stu') html = STU_VIEWS[S.stu.view]() + (S.stu.view === 'groups' ? tabs() : '');
-  else if (S.view === 'sal') html = viewSalary() + tabs();
+  else if (S.view === 'sal') html = viewSalary() + (S.salary.teacherId ? '' : tabs());
   else if (S.view === 'xport') html = viewExport();
   else if (S.view === 'hr') html = HR_VIEWS[S.hr.view]() + (S.hr.view === 'home' ? tabs() : '');
   else if (S.view === 'notif') html = viewNotif();
@@ -1920,6 +1943,8 @@ document.addEventListener('click', e => {
   else if (act === 'stu-pay-receipt') sendReceipt(Number(t.dataset.pid));
   else if (act === 'stu-exam-toggle') toggleExamHistory();
   else if (act === 'sal-month') loadSalary(t.dataset.month);
+  else if (act === 'sal-back') { S.salary.teacherId = null; S.salary.data = null; S.view = 'hr'; render(); }
+  else if (act === 'hr-teacher-salary') loadSalary(null, id, t.dataset.name);
   else if (act === 'exam-open-list') openExamList(S.stu.group.id, S.stu.group.name);
   else if (act === 'exam-back') examBack();
   else if (act === 'exam-new') { S.exam.form = {title:'', max_score:'', day: S.me.today}; S.exam.toast = ''; S.exam.view = 'form'; render(); }
