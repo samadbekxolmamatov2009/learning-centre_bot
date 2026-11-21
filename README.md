@@ -48,7 +48,9 @@ Turso o'rnatilmasa lokal `DB_PATH` (SQLite) ishlatiladi - Render'da deploydan ke
 - **Statistika** (direktor): tushum, oylik, o'quvchilar, qarzdorlik va davomat foizi.
 - **Reyestr o'quvchilari** (kam ta'minlangan oila, davlat to'laydi): o'quvchi qo'shishda "🏛 Reyestr" ni tanlash mumkin (admin, direktor va **o'qituvchi** ham - hammasiga so'raladi). Bitta dars narxi **o'qituvchi ma'lumotida** (reyestr narxi) saqlanadi, har o'qituvchida har xil bo'lishi mumkin. Davomatda kelgan har bir dars uchun shu narx (dars paytidagi) o'qituvchi oyligiga **100%** qo'shiladi va **o'sha kunga qarab doimiy saqlanadi** - keyinroq o'qituvchining reyestr narxi oshirilsa/tushirilsa ham, o'tgan kunlardagi (allaqachon "keldi" deb belgilangan) yozuvlar narxi o'zgarmaydi, hatto o'sha eski kunning davomati keyinroq boshqa sababda (masalan bitta o'quvchini tuzatish uchun) qayta saqlansa ham. Reyestr o'quvchisi qarzdor hisoblanmaydi. "🏛 Reyestr belgilash" - mavjud o'quvchini reyestr/oddiy qilish (faqat admin/direktor, chunki mavjud o'quvchining holatini keyinroq o'zgartirish moliyaviy tarixga ta'sir qiladi).
 - **Reyestrni yashirish/ochish** (direktor): yashirilgan reyestr o'quvchilar ro'yxat, davomat, qarzdor va hisobda ko'rinmaydi. Yashirin rejimda yangi qo'shilgan reyestr o'quvchilar ham yashirin bo'ladi. Ochilgan kundan hisoblanadi.
-- **O'qituvchini tahrirlash** (direktor): ism, oylik turi/qiymati, reyestr dars narxi.
+- **O'qituvchini tahrirlash** (direktor): ism, oylik turi/qiymati, reyestr dars narxi. Oylik qiymati **0** ham
+  bo'lishi mumkin (masalan markaz boshlig'i o'zi ham bir guruhni olib borsa, lekin oylik olmasa) - bunday
+  o'qituvchining oyligi doim 0 bo'lib hisoblanadi, guruh/o'quvchi soni va boshqa hisob-kitoblarga ta'sir qilmaydi.
 - **Fayldan yuklash** (admin, direktor, o'qituvchi - o'z guruhi): guruhni tanlab, Excel (.xlsx) yoki Word (.docx) fayl yuboriladi, o'quvchilar shu guruhga oddiy (reyestrsiz) bo'lib qo'shiladi. Ustunlar: Familiya, Ism, Sinf, Telefon (sarlavhasiz ham bo'ladi). Takrorlar o'tkazib yuboriladi, xatolar ro'yxati beriladi.
 
 ## Mini App va yangi interfeys

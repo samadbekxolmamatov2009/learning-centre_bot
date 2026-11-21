@@ -488,9 +488,10 @@ async def t_type(m: Message, state: FSMContext):
 async def t_value(m: Message, db, state: FSMContext):
     try:
         v = float(m.text.replace(" ", "").replace(",", "."))
-        assert v > 0
+        assert v >= 0
     except Exception:
-        return await m.answer("Musbat son kiriting.")
+        return await m.answer("0 yoki musbat son kiriting (markaz boshlig'i kabi oylik olmaydigan "
+                              "o'qituvchi uchun 0 yozing).")
     await state.update_data(value=v)
     await state.set_state(AddTeacher.reg_rate)
     await m.answer("Reyestr o'quvchilar uchun bitta dars narxi (so'm) - o'qituvchi reyestr o'quvchisi "
