@@ -581,14 +581,14 @@ async function deleteAdvance(aid) {
 function salaryKpis(d, editable) {
   const advance = d.advance || 0;
   const net = d.net_total !== undefined ? d.net_total : d.total;
-  let html = `<div class="kpi" style="margin-top:16px"><div class="l">${advance ? 'Jami hisoblangan' : 'Jami oylik'}</div>
+  let html = `<div class="kpi" style="margin-top:16px"><div class="l">To'liq oylik</div>
     <div class="v" style="font-size:26px">${money(d.total)} so'm</div></div>`;
   if (advance) {
     html += `<div class="kpi" style="margin-top:8px"><div class="l">Avans olingan (${esc(d.month)})</div>
-      <div class="v" style="font-size:20px;color:var(--no)">-${money(advance)} so'm</div></div>
-      <div class="kpi" style="margin-top:8px"><div class="l">Beriladigan</div>
-      <div class="v" style="font-size:26px${net < 0 ? ';color:var(--no)' : ''}">${money(net)} so'm</div></div>`;
+      <div class="v" style="font-size:20px;color:var(--no)">-${money(advance)} so'm</div></div>`;
   }
+  html += `<div class="kpi" style="margin-top:8px"><div class="l">Qolgan oylik</div>
+    <div class="v" style="font-size:26px${net < 0 ? ';color:var(--no)' : ''}">${money(net)} so'm</div></div>`;
   if (editable) {
     const advs = S.salary.advances || [];
     html += `<div class="sec" style="margin-top:16px">Avanslar (${esc(d.month)})</div>
