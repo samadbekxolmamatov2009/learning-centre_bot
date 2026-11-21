@@ -750,22 +750,44 @@ async function loadStaffTab() {
   if (S.hr.teachers.length || S.hr.admins.length) { S.hr.view = 'home'; render(); return; }
   $app.innerHTML = '<div class="spin"></div>';
   try {
-    const [t, a, r, b, o] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry'),
-      api('/api/branches'), api('/api/students-orphaned')]);
-    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r; S.hr.branches = b.branches; S.hr.orphans = o;
+    if (S.me.role === 'director') {
+      const [t, a, r, b, o] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry'),
+        api('/api/branches'), api('/api/students-orphaned')]);
+      S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r; S.hr.branches = b.branches; S.hr.orphans = o;
+    } else {
+      const t = await api('/api/teachers');
+      S.hr.teachers = t.teachers;
+    }
     S.hr.view = 'home'; render();
   } catch (e) { fail(e); }
 }
 async function refreshStaff() {
   try {
-    const [t, a, r, b, o] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry'),
-      api('/api/branches'), api('/api/students-orphaned')]);
-    S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r; S.hr.branches = b.branches; S.hr.orphans = o;
+    if (S.me.role === 'director') {
+      const [t, a, r, b, o] = await Promise.all([api('/api/teachers'), api('/api/admins'), api('/api/registry'),
+        api('/api/branches'), api('/api/students-orphaned')]);
+      S.hr.teachers = t.teachers; S.hr.admins = a.admins; S.hr.registry = r; S.hr.branches = b.branches; S.hr.orphans = o;
+    } else {
+      const t = await api('/api/teachers');
+      S.hr.teachers = t.teachers;
+    }
   } catch (e) {}
 }
 function viewHrHome() {
-  const h = S.hr, r = h.registry;
+  const h = S.hr, r = h.registry, director = S.me.role === 'director';
   const payHow = t => t.pay_type === 'percent' ? `${t.pay_value}%` : `${money(t.pay_value)} so'm/o'quvchi`;
+  if (!director) {
+    return `<h1>👨‍🏫 Xodimlar</h1>
+      <div class="sub">O'qituvchilar ro'yxati - avans kiritish uchun "💰" tugmasini bosing</div>
+      <div class="sec" style="margin-top:12px">O'qituvchilar</div>
+      <div class="list">${h.teachers.map(t => `<div class="srow-row">
+          <div class="who"><div class="name">${esc(t.name)}</div>
+            <div class="meta">${payHow(t)}${t.registry_rate ? ` · 🏛 ${money(t.registry_rate)}` : ''} · ${t.groups} guruh
+              ${t.branch_name ? ' · 🏢 ' + esc(t.branch_name) : ''}</div></div>
+          <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-teacher-salary"
+            data-id="${t.id}" data-name="${esc(t.name)}">💰</button>
+        </div>`).join('') || '<div class="empty">O\'qituvchilar yo\'q</div>'}</div>`;
+  }
   return `<h1>👨‍🏫 Xodimlar</h1>
     ${h.toast ? `<div class="toast">${esc(h.toast)}</div>` : ''}
     <div class="sec">O'qituvchilar</div>
@@ -1821,7 +1843,7 @@ function tabs() {
     ? `<button class="${S.tab === 'dash' ? 'on' : ''}" data-act="tab" data-tab="dash"><span>📊</span>Panel</button>`
     : `<button class="${S.tab === 'groups' ? 'on' : ''}" data-act="tab" data-tab="groups"><span>📝</span>Davomat</button>`;
   const salTab = staff ? '' : `<button class="${S.tab === 'sal' ? 'on' : ''}" data-act="tab" data-tab="sal"><span>💰</span>Oylik</button>`;
-  const hrTab = S.me.role === 'director' ? `<button class="${S.tab === 'hr' ? 'on' : ''}" data-act="tab" data-tab="hr"><span>👨‍🏫</span>Xodimlar</button>` : '';
+  const hrTab = S.me.role !== 'teacher' ? `<button class="${S.tab === 'hr' ? 'on' : ''}" data-act="tab" data-tab="hr"><span>👨‍🏫</span>Xodimlar</button>` : '';
   const certTab = `<button class="${S.tab === 'cert' ? 'on' : ''}" data-act="tab" data-tab="cert"><span>🎓</span>Sertifikat</button>`;
   const leadsTab = staff ? `<button class="${S.tab === 'leads' ? 'on' : ''}" data-act="tab" data-tab="leads"><span>🧲</span>Lidlar</button>` : '';
   return `<div class="tabs">${first}
