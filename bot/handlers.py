@@ -895,9 +895,10 @@ async def salary_text(db, tid, month):
         out += ["", "🏛 Reyestr o'quvchilari (100%):"]
         out += [f"• {name}: {lessons} ta dars = {money(total_)}" for name, lessons, total_ in reg]
     advance = await D.teacher_advance_total(db, tid, month)
-    out += ["", f"Jami hisoblangan: {money(total)}"]
+    out += ["", f"To'liq oylik: {money(total)}"]
     if advance:
-        out += [f"Avans olingan: -{money(advance)}", f"Beriladigan: {money(total - advance)}"]
+        out.append(f"Avans olingan: -{money(advance)}")
+    out.append(f"Qolgan oylik: {money(total - advance)}")
     return "\n".join(out)
 
 
