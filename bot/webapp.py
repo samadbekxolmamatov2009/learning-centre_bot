@@ -709,10 +709,65 @@ async def api_salary(request):
             "debtors": debtors,
             "att": round(att["p"] * 100 / att["n"]) if att["n"] else None})
 
+    advance = await D.teacher_advance_total(db, target, month)
     return web.json_response({
         "pay_type": pay_type, "pay_value": pay_value, "month": month, "months": list(reversed(months)),
         "groups": groups_out,
-        "registry": [{"group": n, "lessons": l, "total": t} for n, l, t in reg], "total": round(total)})
+        "registry": [{"group": n, "lessons": l, "total": t} for n, l, t in reg], "total": round(total),
+        "advance": round(advance), "net_total": round(total - advance)})
+
+
+# ---------------- Avanslar (admin/direktor) ----------------
+async def api_advances_get(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        tid = int(request.query["teacher"])
+    except Exception:
+        return bad("teacher kerak")
+    month = request.query.get("month") or D.current_month()
+    rows = await db.fetchall("SELECT * FROM advances WHERE teacher_id=? AND month=? ORDER BY created_at DESC",
+                             (tid, month))
+    return web.json_response({"advances": [{"id": r["id"], "amount": r["amount"], "note": r["note"],
+                                            "created_at": str(r["created_at"])} for r in rows]})
+
+
+async def api_advance_post(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        body = await request.json()
+        tid = int(body["teacher"])
+        amount = int(body["amount"])
+        assert amount > 0
+    except Exception:
+        return bad("Ma'lumotlar noto'g'ri")
+    if not await db.fetchone("SELECT 1 FROM teachers WHERE tg_id=?", (tid,)):
+        return bad("O'qituvchi topilmadi", 404)
+    month = clean_text(body.get("month"), 7) or D.current_month()
+    note = clean_text(body.get("note"), 200)
+    await db.execute("INSERT INTO advances(teacher_id,amount,month,note) VALUES(?,?,?,?)",
+                     (tid, amount, month, note))
+    return web.json_response({"ok": True})
+
+
+async def api_advance_delete(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        aid = int(request.match_info["aid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    if not await db.fetchone("SELECT 1 FROM advances WHERE id=?", (aid,)):
+        return bad("Topilmadi", 404)
+    await db.execute("DELETE FROM advances WHERE id=?", (aid,))
+    return web.json_response({"ok": True})
 
 
 async def api_teacher_ranking(request):
@@ -1855,6 +1910,9 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_delete("/api/payments/{pid}", api_payment_delete)
     app.router.add_post("/api/payments/{pid}/receipt", api_payment_receipt)
     app.router.add_get("/api/salary", api_salary)
+    app.router.add_get("/api/advances", api_advances_get)
+    app.router.add_post("/api/advances", api_advance_post)
+    app.router.add_delete("/api/advances/{aid}", api_advance_delete)
     app.router.add_get("/api/teacher-ranking", api_teacher_ranking)
     app.router.add_get("/api/teachers", api_teachers)
     app.router.add_post("/api/teachers", api_teacher_post)

@@ -81,6 +81,11 @@ CREATE TABLE IF NOT EXISTS leads(
     lost_reason TEXT NOT NULL DEFAULT '', trial_at TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP, decided_at TEXT);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+CREATE TABLE IF NOT EXISTS advances(
+    id INTEGER PRIMARY KEY AUTOINCREMENT, teacher_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL, month TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS idx_advances_teacher_month ON advances(teacher_id, month);
 """
 
 LEAD_STATUS_LABELS = {"new": "🆕 Yangi", "contacted": "📞 Bog'lanildi", "trial": "🎓 Sinov darsida",
@@ -503,6 +508,14 @@ async def registry_total(db, month=None):
     month = month or current_month()
     row = await fetchone(db, "SELECT COALESCE(SUM(rate),0) t FROM attendance "
                              "WHERE present=1 AND day LIKE ?", (month + "-%",))
+    return row["t"]
+
+
+async def teacher_advance_total(db, teacher_id, month=None):
+    """O'qituvchi shu oy uchun oldindan olgan avanslari yig'indisi - oylikdan ayrilishi kerak."""
+    month = month or current_month()
+    row = await fetchone(db, "SELECT COALESCE(SUM(amount),0) t FROM advances WHERE teacher_id=? AND month=?",
+                         (teacher_id, month))
     return row["t"]
 
 

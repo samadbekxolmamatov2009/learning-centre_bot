@@ -108,6 +108,21 @@ oylar bo'yicha ham (oxirgi 6 oy) ko'rish mumkin. Avval direktor faqat barcha o'q
 summasini (Panelda "O'qituvchilar oyligi" KPI) yoki Excel hisobotdagi jami raqamlarni ko'rar edi, endi har
 bir o'qituvchining alohida tafsilotini ham to'g'ridan-to'g'ri Mini App'da ko'rish mumkin.
 
+## O'qituvchiga avans berish (admin, direktor)
+Ba'zi o'qituvchilar oyligidan oldin avans olib turishadi - buni tizimga kiritib, keyin oyligi hisoblanganda
+avtomatik ayirib ko'rsatish mumkin. **Avans qaysi oyga kiritilsa, o'sha oyning oyligidan ayiriladi** (masalan
+dekabrda berilgan avans - dekabr oyligidan kamayadi, noyabr oyligiga ta'sir qilmaydi).
+- **Mini App**: Xodimlar bo'limida o'qituvchining "💰" tugmasi orqali ochilgan oylik sahifasida **"➕ Avans
+  kiritish"** tugmasi bor - summasi va ixtiyoriy izoh bilan. Pastda shu oydagi barcha avanslar ro'yxati va
+  har birini o'chirish (xato kiritilgan bo'lsa) imkoniyati ko'rsatiladi.
+- **Chat**: "💰 Moliya" bo'limida **"💸 Avans kiritish"** tugmasi - o'qituvchini tanlab, summa va izoh kiritiladi.
+- Oylik ko'rinishida endi uch qator chiqadi (agar shu oyda avans bo'lsa): **"Jami hisoblangan"** (guruhlar/reyestrdan
+  hisoblangan to'liq summa), **"Avans olingan"** (ayriladigan summa, qizil rangda), **"Beriladigan"** (sof,
+  qo'lga tegadigan summa - agar avans oylikdan ko'p bo'lib ketsa, bu manfiy ham chiqishi mumkin, direktorga
+  o'qituvchi "qarzdor" ekanini bildiradi). Avans bo'lmagan oylarda oddiy "Jami oylik" ko'rinishida qoladi
+  (o'zgarishsiz). O'qituvchining o'zi ham "💰 Oylik" bo'limida (va chatda "💰 Oylikni ko'rish"da) bu uch summani
+  ko'radi, lekin avans kirita/o'chira olmaydi - faqat ko'rish uchun.
+
 ## O'qituvchilar reytingi (faqat direktor)
 Panelda **"🏆"** tugmasi — barcha o'qituvchilarni solishtiruvchi ro'yxat: har biri uchun guruhlar/o'quvchilar soni,
 joriy oy tushumi, qarzdorlar foizi va davomat foizi. Ro'yxat **eng kam qarzdorlikdan eng ko'pigacha** tartiblanadi

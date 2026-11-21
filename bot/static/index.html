@@ -163,7 +163,7 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, dashBranch
        payHistOpen:false, payHistory:null, parentOpen:false, parentLink:null, parentLoading:false, parentCopied:false,
        examHistOpen:false, examHistory:null,
        form:null, toast:'', gform:null},
-  salary:{loading:false, data:null, month:null, teacherId:null, teacherName:''},
+  salary:{loading:false, data:null, month:null, teacherId:null, teacherName:'', advances:null, advanceOpen:false},
   rank:{loading:false, data:null, branch:null},
   xport:{busy:false, error:'', month:null},
   hr:{view:'home', teachers:[], admins:[], branches:[], registry:null, orphans:null, toast:'', tform:null, aform:null, bform:null},
@@ -547,8 +547,64 @@ async function loadSalary(month, teacherId, teacherName) {
     if (S.salary.teacherId) params.push(`teacher=${S.salary.teacherId}`);
     const d = await api('/api/salary' + (params.length ? '?' + params.join('&') : ''));
     S.salary.data = d; S.salary.month = d.month;
+    if (S.salary.teacherId) {
+      const a = await api(`/api/advances?teacher=${S.salary.teacherId}&month=${d.month}`);
+      S.salary.advances = a.advances;
+    }
   } catch (e) { S.salary.data = null; fail(e); return; }
   S.salary.loading = false; render();
+}
+async function addAdvance() {
+  const amt = parseInt(document.getElementById('adv_amt').value, 10);
+  const note = document.getElementById('adv_note').value.trim();
+  if (!amt || amt <= 0) return alert('Summani kiriting.');
+  S.busy = true; render();
+  try {
+    await api('/api/advances', {method: 'POST', body: JSON.stringify(
+      {teacher: S.salary.teacherId, amount: amt, month: S.salary.month, note})});
+    haptic('medium');
+    S.salary.advanceOpen = false;
+    S.busy = false;
+    await loadSalary(S.salary.month);
+  } catch (e) { alert(e.message); S.busy = false; render(); }
+}
+async function deleteAdvance(aid) {
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm("Avans yozuvi o'chirilsinmi?", r))
+                                   : confirm("Avans yozuvi o'chirilsinmi?");
+  if (!ok) return;
+  try {
+    await api(`/api/advances/${aid}`, {method: 'DELETE'});
+    haptic('medium');
+    await loadSalary(S.salary.month);
+  } catch (e) { alert(e.message); }
+}
+function salaryKpis(d, editable) {
+  const advance = d.advance || 0;
+  const net = d.net_total !== undefined ? d.net_total : d.total;
+  let html = `<div class="kpi" style="margin-top:16px"><div class="l">${advance ? 'Jami hisoblangan' : 'Jami oylik'}</div>
+    <div class="v" style="font-size:26px">${money(d.total)} so'm</div></div>`;
+  if (advance) {
+    html += `<div class="kpi" style="margin-top:8px"><div class="l">Avans olingan (${esc(d.month)})</div>
+      <div class="v" style="font-size:20px;color:var(--no)">-${money(advance)} so'm</div></div>
+      <div class="kpi" style="margin-top:8px"><div class="l">Beriladigan</div>
+      <div class="v" style="font-size:26px${net < 0 ? ';color:var(--no)' : ''}">${money(net)} so'm</div></div>`;
+  }
+  if (editable) {
+    const advs = S.salary.advances || [];
+    html += `<div class="sec" style="margin-top:16px">Avanslar (${esc(d.month)})</div>
+      <div class="list">${advs.map(a => `<div class="srow-row">
+          <div class="who"><div class="name">${money(a.amount)} so'm</div>
+            <div class="meta">${esc(a.created_at.slice(0, 16))}${a.note ? ' · ' + esc(a.note) : ''}</div></div>
+          <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="adv-del" data-id="${a.id}">🗑</button>
+        </div>`).join('') || '<div class="empty">Bu oyda avans yo\'q</div>'}</div>
+      <button class="abtn" style="width:100%;margin-top:10px" data-act="adv-add-toggle">➕ Avans kiritish</button>
+      ${S.salary.advanceOpen ? `<div class="inline-form" style="flex-direction:column;align-items:stretch;gap:8px">
+        <input class="input" id="adv_amt" type="number" inputmode="numeric" placeholder="Summa, masalan 500000">
+        <input class="input" id="adv_note" placeholder="Izoh (ixtiyoriy)">
+        <button class="primary" data-act="adv-save" ${S.busy ? 'disabled' : ''}>Saqlash</button>
+      </div>` : ''}`;
+  }
+  return html;
 }
 function viewSalary() {
   const d = S.salary.data;
@@ -569,7 +625,7 @@ function viewSalary() {
       ${d.registry.length ? `<div class="sec">🏛 Reyestr (100%)</div>
         ${d.registry.map(r => `<div class="srow-row"><div class="who"><div class="name">${esc(r.group)}</div>
             <div class="meta">${r.lessons} ta dars</div></div><div class="name">${short(r.total)}</div></div>`).join('')}` : ''}
-      <div class="kpi" style="margin-top:16px"><div class="l">Jami oylik</div><div class="v" style="font-size:26px">${money(d.total)} so'm</div></div>`;
+      ${salaryKpis(d, true)}`;
   }
   const gs = d.groups;
   let best = '';
@@ -595,7 +651,7 @@ function viewSalary() {
     ${d.registry.length ? `<div class="sec">🏛 Reyestr (100%)</div>
       ${d.registry.map(r => `<div class="srow-row"><div class="who"><div class="name">${esc(r.group)}</div>
           <div class="meta">${r.lessons} ta dars</div></div><div class="name">${short(r.total)}</div></div>`).join('')}` : ''}
-    <div class="kpi" style="margin-top:16px"><div class="l">Jami oylik</div><div class="v" style="font-size:26px">${money(d.total)} so'm</div></div>`;
+    ${salaryKpis(d, false)}`;
 }
 
 /* ---------- o'qituvchilar reytingi (faqat direktor) ---------- */
@@ -1943,8 +1999,12 @@ document.addEventListener('click', e => {
   else if (act === 'stu-pay-receipt') sendReceipt(Number(t.dataset.pid));
   else if (act === 'stu-exam-toggle') toggleExamHistory();
   else if (act === 'sal-month') loadSalary(t.dataset.month);
-  else if (act === 'sal-back') { S.salary.teacherId = null; S.salary.data = null; S.view = 'hr'; render(); }
-  else if (act === 'hr-teacher-salary') loadSalary(null, id, t.dataset.name);
+  else if (act === 'sal-back') { S.salary.teacherId = null; S.salary.data = null; S.salary.advances = null;
+    S.salary.advanceOpen = false; S.view = 'hr'; render(); }
+  else if (act === 'adv-add-toggle') { S.salary.advanceOpen = !S.salary.advanceOpen; render(); }
+  else if (act === 'adv-save') addAdvance();
+  else if (act === 'adv-del') deleteAdvance(Number(t.dataset.id));
+  else if (act === 'hr-teacher-salary') { S.salary.advanceOpen = false; S.salary.advances = null; loadSalary(null, id, t.dataset.name); }
   else if (act === 'exam-open-list') openExamList(S.stu.group.id, S.stu.group.name);
   else if (act === 'exam-back') examBack();
   else if (act === 'exam-new') { S.exam.form = {title:'', max_score:'', day: S.me.today}; S.exam.toast = ''; S.exam.view = 'form'; render(); }
