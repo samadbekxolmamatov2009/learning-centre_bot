@@ -111,8 +111,7 @@ def section_menu(role: str, section: str):
             if role == "director":
                 rows.append(["👁 Reyestr yashirish/ochish"])
         else:
-            rows = [["➕ O'quvchi", "📤 Fayldan yuklash"], ["🔎 Qidirish", "📞 Telefonni o'zgartirish"],
-                    ["🗑 O'quvchini o'chirish"]]
+            rows = [["➕ O'quvchi", "📤 Fayldan yuklash"], ["🔎 Qidirish", "📞 Telefonni o'zgartirish"]]
     elif section == "💰 Moliya" and staff:
         rows = [["💵 To'lov kiritish", "↩️ To'lovni bekor qilish"], ["📋 Qarzdorlar", "📊 Guruh hisobi"]]
         if role == "director":
@@ -305,11 +304,10 @@ async def x_no(c: CallbackQuery):
     await c.answer()
 
 
-# ---------------- O'chirish: o'quvchi (hamma), guruh va o'qituvchi (admin/direktor) ----------------
-@router.message(F.text == "🗑 O'quvchini o'chirish", ANYONE)
+# ---------------- O'chirish: o'quvchi, guruh va o'qituvchi (faqat admin/direktor) ----------------
+@router.message(F.text == "🗑 O'quvchini o'chirish", STAFF)
 async def xs_start(m: Message, db):
-    uid = m.from_user.id
-    mk = await group_picker(db, "xg", uid if await D.get_role(db, uid) == "teacher" else None)
+    mk = await group_picker(db, "xg")
     await m.answer("Qaysi guruhdan?", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
 
 

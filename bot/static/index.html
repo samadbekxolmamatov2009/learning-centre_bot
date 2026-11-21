@@ -1091,7 +1091,7 @@ function viewStuDetail() {
         ${staff ? `<button class="abtn" data-act="stu-pay-toggle">💵 To'lov kiritish</button>` : ''}
         <button class="abtn" data-act="stu-edit">✏️ Tahrirlash</button>
         <button class="abtn" data-act="stu-move-toggle">🔀 Ko'chirish</button>
-        <button class="abtn danger" data-act="stu-delete">🗑 O'chirish</button>
+        ${staff ? `<button class="abtn danger" data-act="stu-delete">🗑 O'chirish</button>` : ''}
       </div>
       ${staff && st.payOpen ? viewPayForm(s) : ''}
       ${st.moveOpen ? `<div class="inline-form"><select class="input" id="moveSel">
