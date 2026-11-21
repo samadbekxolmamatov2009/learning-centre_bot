@@ -98,6 +98,14 @@ ro'yxati va soni. **"🗑 Hammasini bittada o'chirish"** tugmasi — ularning ba
 ulardan birortasida sertifikat yoki 189 ball belgisi bo'lsa, u hali ham arxivlanadi, butunlay o'chirilmaydi -
 odatdagi o'chirish qoidasi bilan bir xil). Bunday o'quvchilar yo'q bo'lsa, bu bo'lim umuman ko'rinmaydi.
 
+## O'qituvchi oyligini direktor ko'rishi
+Xodimlar bo'limidagi har bir o'qituvchi qatorida **"💰"** tugmasi bor — bosilsa, o'sha o'qituvchining to'liq
+oylik tafsiloti ochiladi (xuddi o'qituvchining o'zi "💰 Oylik" bo'limida ko'radigani kabi): har bir guruh
+bo'yicha tushum, to'laganlar/qarzdorlar soni, davomat foizi, reyestr hisob-kitobi va jami oylik summasi,
+oylar bo'yicha ham (oxirgi 6 oy) ko'rish mumkin. Avval direktor faqat barcha o'qituvchilarning **yig'indi**
+summasini (Panelda "O'qituvchilar oyligi" KPI) yoki Excel hisobotdagi jami raqamlarni ko'rar edi, endi har
+bir o'qituvchining alohida tafsilotini ham to'g'ridan-to'g'ri Mini App'da ko'rish mumkin.
+
 ## O'qituvchilar reytingi (faqat direktor)
 Panelda **"🏆"** tugmasi — barcha o'qituvchilarni solishtiruvchi ro'yxat: har biri uchun guruhlar/o'quvchilar soni,
 joriy oy tushumi, qarzdorlar foizi va davomat foizi. Ro'yxat **eng kam qarzdorlikdan eng ko'pigacha** tartiblanadi
