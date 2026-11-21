@@ -763,7 +763,7 @@ function viewHrTeacherForm() {
       <select class="input" id="t_ptype"><option value="percent" ${f.pay_type === 'percent' ? 'selected' : ''}>Foiz (%)</option>
         <option value="per_student" ${f.pay_type === 'per_student' ? 'selected' : ''}>O'quvchi boshiga</option></select></div>
     <div class="field"><label>Oylik qiymati</label>
-      <input class="input" id="t_pvalue" type="number" inputmode="decimal" value="${f.pay_value || ''}" placeholder="masalan 40 yoki 200000"></div>
+      <input class="input" id="t_pvalue" type="number" inputmode="decimal" value="${f.pay_value === '' ? '' : f.pay_value}" placeholder="masalan 40 yoki 200000 (markaz boshlig'i kabi oylik olmasa - 0)"></div>
     <div class="field"><label>Reyestr: bitta dars narxi (so'm)</label>
       <input class="input" id="t_reg" type="number" inputmode="numeric" value="${f.registry_rate || 0}" placeholder="0 - reyestr yo'q"></div>
     ${S.hr.branches.length ? `<div class="field"><label>Filial</label>
@@ -888,7 +888,7 @@ async function hrSaveTeacher() {
   const branchEl = document.getElementById('t_branch');
   const branch = branchEl ? branchEl.value : '';
   if (f.name.length < 2) return alert('Ism familiyani to\'liq kiriting.');
-  if (!f.pay_value || f.pay_value <= 0) return alert('Oylik qiymatini kiriting.');
+  if (isNaN(f.pay_value) || f.pay_value < 0) return alert('Oylik qiymatini kiriting (0 ham bo\'lishi mumkin).');
   if (isNaN(f.registry_rate) || f.registry_rate < 0) return alert('Reyestr narxi noto\'g\'ri.');
   let tid = f.id;
   if (f.mode === 'add') {

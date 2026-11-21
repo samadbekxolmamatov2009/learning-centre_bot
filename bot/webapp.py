@@ -1327,7 +1327,7 @@ async def api_teacher_post(request):
         pay_type = body.get("pay_type")
         pay_value = float(body.get("pay_value"))
         reg_rate = int(body.get("registry_rate") or 0)
-        assert pay_type in ("percent", "per_student") and pay_value > 0 and reg_rate >= 0
+        assert pay_type in ("percent", "per_student") and pay_value >= 0 and reg_rate >= 0
     except Exception:
         return bad("Ma'lumotlar noto'g'ri")
     if len(name) < 2:
@@ -1366,7 +1366,7 @@ async def api_teacher_patch(request):
         pt = body.get("pay_type", t["pay_type"])
         try:
             pv = float(body.get("pay_value", t["pay_value"]))
-            assert pt in ("percent", "per_student") and pv > 0
+            assert pt in ("percent", "per_student") and pv >= 0
         except Exception:
             return bad("Oylik qiymati noto'g'ri")
         await db.execute("UPDATE teachers SET pay_type=?, pay_value=? WHERE tg_id=?", (pt, pv, tid))
