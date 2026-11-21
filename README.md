@@ -114,7 +114,10 @@ avtomatik ayirib ko'rsatish mumkin. **Avans qaysi oyga kiritilsa, o'sha oyning o
 dekabrda berilgan avans - dekabr oyligidan kamayadi, noyabr oyligiga ta'sir qilmaydi).
 - **Mini App**: Xodimlar bo'limida o'qituvchining "💰" tugmasi orqali ochilgan oylik sahifasida **"➕ Avans
   kiritish"** tugmasi bor - summasi va ixtiyoriy izoh bilan. Pastda shu oydagi barcha avanslar ro'yxati va
-  har birini o'chirish (xato kiritilgan bo'lsa) imkoniyati ko'rsatiladi.
+  har birini o'chirish (xato kiritilgan bo'lsa) imkoniyati ko'rsatiladi. Admin uchun Xodimlar bo'limi
+  qisqartirilgan ko'rinishda: faqat o'qituvchilar ro'yxati va har birining "💰" tugmasi (avans kiritish uchun)
+  ko'rinadi - o'qituvchi/admin qo'shish-tahrirlash-o'chirish, reyestr va filiallar bo'limlari faqat direktorga xos
+  qolaveradi.
 - **Chat**: "💰 Moliya" bo'limida **"💸 Avans kiritish"** tugmasi - o'qituvchini tanlab, summa va izoh kiritiladi.
 - Oylik ko'rinishida endi uch qator chiqadi (agar shu oyda avans bo'lsa): **"Jami hisoblangan"** (guruhlar/reyestrdan
   hisoblangan to'liq summa), **"Avans olingan"** (ayriladigan summa, qizil rangda), **"Beriladigan"** (sof,

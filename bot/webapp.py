@@ -1360,16 +1360,23 @@ def teacher_out(t):
 
 
 async def api_teachers(request):
+    """O'qituvchilar ro'yxati: to'liq (pay_type/pay_value tahrirlash huquqi bilan) direktorga,
+    faqat ko'rish (masalan avans kiritish uchun, 💰 tugmasi orqali) adminga ham."""
     uid, role, _ = await auth(request)
-    if role != "director":
+    if role not in ("admin", "director"):
         return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
-    rows = await db.fetchall(
-        "SELECT u.tg_id, u.full_name, u.branch_id, b.name AS branch_name, t.pay_type, t.pay_value, t.registry_rate, "
-        "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id AND g.archived=0) AS groups "
-        "FROM users u JOIN teachers t ON t.tg_id=u.tg_id LEFT JOIN branches b ON b.id=u.branch_id "
-        "ORDER BY u.full_name")
-    return web.json_response({"teachers": [teacher_out(r) for r in rows]})
+    scope = await D.admin_branch_scope(db, uid, role)
+    sql = ("SELECT u.tg_id, u.full_name, u.branch_id, b.name AS branch_name, t.pay_type, t.pay_value, t.registry_rate, "
+          "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id AND g.archived=0) AS groups "
+          "FROM users u JOIN teachers t ON t.tg_id=u.tg_id LEFT JOIN branches b ON b.id=u.branch_id")
+    args = ()
+    if scope is not None:
+        sql += " WHERE u.branch_id=?"
+        args = (scope,)
+    sql += " ORDER BY u.full_name"
+    rows = await db.fetchall(sql, args)
+    return web.json_response({"teachers": [teacher_out(r) for r in rows], "editable": role == "director"})
 
 
 async def api_teacher_post(request):
