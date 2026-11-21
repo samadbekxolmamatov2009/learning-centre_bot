@@ -113,7 +113,8 @@ def section_menu(role: str, section: str):
         else:
             rows = [["➕ O'quvchi", "📤 Fayldan yuklash"], ["🔎 Qidirish", "📞 Telefonni o'zgartirish"]]
     elif section == "💰 Moliya" and staff:
-        rows = [["💵 To'lov kiritish", "↩️ To'lovni bekor qilish"], ["📋 Qarzdorlar", "📊 Guruh hisobi"]]
+        rows = [["💵 To'lov kiritish", "↩️ To'lovni bekor qilish"], ["📋 Qarzdorlar", "📊 Guruh hisobi"],
+                ["💸 Avans kiritish"]]
         if role == "director":
             rows.append(["💰 Oyliklar"])
     elif section == "🏫 Guruh boshqaruvi" and staff:
@@ -547,8 +548,63 @@ async def salaries(m: Message, db):
     out = [f"💰 Oyliklar ({D.current_month()}):"]
     for t in await D.fetchall(db, "SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id"):
         res = await D.teacher_salary(db, t["tg_id"])
-        out.append(f"• {t['full_name']}: {money(res[3])}")
+        adv = await D.teacher_advance_total(db, t["tg_id"])
+        line = f"• {t['full_name']}: {money(res[3])}"
+        if adv:
+            line += f" (avans {money(adv)} ayrilib - {money(res[3] - adv)})"
+        out.append(line)
     await m.answer("\n".join(out) if len(out) > 1 else "O'qituvchilar yo'q.")
+
+
+# ---------------- Admin/Director: o'qituvchiga avans kiritish ----------------
+class AddAdvance(StatesGroup):
+    amount = State(); note = State()
+
+
+@router.message(F.text == "💸 Avans kiritish", STAFF)
+async def adv_start(m: Message, db):
+    teachers = await D.fetchall(db, "SELECT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id "
+                                    "ORDER BY u.full_name")
+    if not teachers:
+        return await m.answer("O'qituvchilar yo'q.")
+    b = InlineKeyboardBuilder()
+    for t in teachers:
+        b.button(text=t["full_name"], callback_data=f"advt:{t['tg_id']}")
+    b.adjust(1)
+    await m.answer(f"Qaysi o'qituvchiga avans berildi? ({D.current_month()} oyidan ayriladi)",
+                   reply_markup=b.as_markup())
+
+
+@router.callback_query(F.data.startswith("advt:"), STAFF)
+async def adv_teacher(c: CallbackQuery, state: FSMContext):
+    await state.set_state(AddAdvance.amount)
+    await state.update_data(teacher_id=int(c.data[5:]))
+    await c.message.answer("Avans summasi (so'm):")
+    await c.answer()
+
+
+@router.message(AddAdvance.amount)
+async def adv_amount(m: Message, state: FSMContext):
+    try:
+        amt = int(m.text.replace(" ", ""))
+        assert amt > 0
+    except Exception:
+        return await m.answer("Musbat butun son kiriting.")
+    await state.update_data(amount=amt)
+    await state.set_state(AddAdvance.note)
+    await m.answer("Izoh (ixtiyoriy, bo'lmasa - yuboring):")
+
+
+@router.message(AddAdvance.note)
+async def adv_note(m: Message, db, state: FSMContext):
+    d = await state.get_data()
+    t = m.text.strip()
+    mo = D.current_month()
+    await db.execute("INSERT INTO advances(teacher_id,amount,month,note) VALUES(?,?,?,?)",
+                     (d["teacher_id"], d["amount"], mo, "" if t == "-" else t))
+    tname = (await D.fetchone(db, "SELECT full_name FROM users WHERE tg_id=?", (d["teacher_id"],)))["full_name"]
+    await state.clear()
+    await m.answer(f"✅ {tname} uchun {money(d['amount'])} avans qayd etildi ({mo} oyidan ayriladi).")
 
 
 # ---------------- Admin/Director: guruh ----------------
@@ -838,7 +894,10 @@ async def salary_text(db, tid, month):
     if reg:
         out += ["", "🏛 Reyestr o'quvchilari (100%):"]
         out += [f"• {name}: {lessons} ta dars = {money(total_)}" for name, lessons, total_ in reg]
-    out += ["", f"Jami oylik: {money(total)}"]
+    advance = await D.teacher_advance_total(db, tid, month)
+    out += ["", f"Jami hisoblangan: {money(total)}"]
+    if advance:
+        out += [f"Avans olingan: -{money(advance)}", f"Beriladigan: {money(total - advance)}"]
     return "\n".join(out)
 
 
