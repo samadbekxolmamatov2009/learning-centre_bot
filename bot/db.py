@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS students(
     last_name TEXT NOT NULL, grade TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '',
     is_registry INTEGER NOT NULL DEFAULT 0, reg_rate INTEGER NOT NULL DEFAULT 0,
     hidden INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
-    has_189 INTEGER NOT NULL DEFAULT 0,
+    has_189 INTEGER NOT NULL DEFAULT 0, frozen INTEGER NOT NULL DEFAULT 0,
     group_id INTEGER NOT NULL REFERENCES groups(id));
 CREATE TABLE IF NOT EXISTS payments(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,7 +168,7 @@ class Database:
             await self.execute("ALTER TABLE attendance ADD COLUMN rate INTEGER NOT NULL DEFAULT 0")
         if "phone" not in cols:  # eski bazani yangilash
             await self.execute("ALTER TABLE students ADD COLUMN phone TEXT NOT NULL DEFAULT ''")
-        for col in ("archived", "has_189"):
+        for col in ("archived", "has_189", "frozen"):
             if col not in cols:
                 await self.execute(f"ALTER TABLE students ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
         escols = [r["name"] for r in await self.fetchall("PRAGMA table_info(exam_scores)")]
@@ -350,11 +350,12 @@ async def admin_branch_scope(db, uid, role):
 
 async def group_students(db, group_id, month=None):
     """Guruh o'quvchilari; paid = shu oyda to'lov kiritilganmi (summasi qanday bo'lishidan qat'iy nazar).
-    Reyestr o'quvchilari (davlat to'laydi) hech qachon qarzdor emas, shuning uchun paid=1."""
+    Reyestr o'quvchilari (davlat to'laydi) hech qachon qarzdor emas, shuning uchun paid=1.
+    Muzlatilgan (tanaffusga chiqqan) o'quvchilar ham hech qachon qarzdor hisoblanmaydi."""
     month = month or current_month()
     return await fetchall(db, """
         SELECT s.*, COALESCE(SUM(p.amount),0) AS paid_sum,
-               (COUNT(p.id) > 0 OR s.is_registry = 1) AS paid,
+               (COUNT(p.id) > 0 OR s.is_registry = 1 OR s.frozen = 1) AS paid,
                (SELECT COUNT(*) FROM parent_links pl WHERE pl.student_id = s.id) AS parent_count
         FROM students s LEFT JOIN payments p
              ON p.student_id=s.id AND p.month=?

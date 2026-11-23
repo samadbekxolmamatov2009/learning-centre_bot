@@ -166,6 +166,18 @@ guruhning (demak, o'sha o'qituvchining) qarzdorlariga yuboradi. Reyestr o'quvchi
 hisoblanmagani uchun ularga xabar bormaydi. Ota-onasi hali ulanmagan qarzdorlar bo'lsa, ularning ismlari
 yuborilgandan keyin chiqadigan xabarda ko'rsatiladi. Bu funksiya faqat direktorga ko'rinadi, admin/o'qituvchiga yo'q.
 
+## O'quvchini muzlatish (tanaffusga chiqarish)
+Ba'zi o'quvchilar orada ikki-uch oylab tanaffus qilib, keyin yana kelishni davom ettirishadi. Bunday o'quvchini
+butunlay o'chirib tashlamasdan, **"❄️ Muzlatish"** qilish mumkin (o'quvchi kartochkasida, "✏️ Tahrirlash" tugmasi
+yonida — Mini App'da ham, chatda ham). Muzlatilgan o'quvchi:
+- Hech qachon **qarzdor** hisoblanmaydi (❄️ belgisi bilan ko'rsatiladi, qarzdorlar sonidan chiqarib tashlanadi,
+  qarzdorlarga avtomatik to'lov eslatmasi ham bormaydi).
+- **Davomat** ro'yxatida chiqmaydi - o'qituvchi tanaffusdagi o'quvchiga davomat belgilamaydi.
+- Guruh/o'quvchilar ro'yxatida, qidiruvda va hisobotlarda hali ham ko'rinadi (❄️ belgisi bilan), shuning uchun
+  qaytib kelganda topib, **"♨️ Qayta faollashtirish"** tugmasi bilan oson qaytarish mumkin.
+Muzlatish/qaytarish - admin, direktor va o'qituvchi uchun ham ochiq (kundalik ishda shuni ko'proq o'qituvchi
+payqaydi).
+
 ## Filiallar
 O'quv markaz bir nechta filial (shahar/tuman bo'limi) bilan ishlashi mumkin. Direktorga **"👨‍🏫 Xodimlar"** bo'limida
 **"🏢 Filiallar"** bo'limi: filial qo'shish/nomini o'zgartirish/o'chirish (faqat direktor huquqi). Guruh

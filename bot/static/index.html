@@ -618,7 +618,7 @@ function viewSalary() {
       <div class="sec">Guruhlar</div>
       ${d.groups.map(g => { const dp = g.students ? Math.round(g.debtors * 100 / g.students) : 0;
         return `<div class="gbox"><div class="hd">${esc(g.name)}<span>${short(g.income)}</span></div>
-        <div class="sub" style="margin-top:2px">${g.students} o'quvchi · to'lagan ${g.paid} ta</div>
+        <div class="sub" style="margin-top:2px">${g.students} o'quvchi · to'lagan ${g.paid} ta${g.frozen ? ` · ❄️ ${g.frozen} ta` : ''}</div>
         ${pctBar('Qarzdor', dp, 'var(--no)', g.debtors + ' ta')}
         ${pctBar('Davomat', g.att, 'var(--ok)', g.att === null ? '—' : g.att + '%')}</div>`; }).join('')
         || '<div class="empty">Guruh yo\'q</div>'}
@@ -1084,6 +1084,7 @@ async function doStuSearch(q) {
 
 function payBadge(s) {
   if (s.is_registry) return `<span class="pay-badge reg">🏛 reyestr</span>`;
+  if (s.frozen) return `<span class="pay-badge" style="background:var(--card2);color:var(--hint)">❄️ muzlatilgan</span>`;
   return s.paid ? `<span class="pay-badge ok">✅ to'lagan</span>` : `<span class="pay-badge no">❌ qarzdor</span>`;
 }
 function stuRow(s, showGroup) {
@@ -1178,6 +1179,7 @@ function viewStuDetail() {
         ${staff ? `<button class="abtn" data-act="stu-pay-toggle">💵 To'lov kiritish</button>` : ''}
         <button class="abtn" data-act="stu-edit">✏️ Tahrirlash</button>
         <button class="abtn" data-act="stu-move-toggle">🔀 Ko'chirish</button>
+        <button class="abtn" data-act="stu-freeze-toggle" ${S.busy ? 'disabled' : ''}>${s.frozen ? "♨️ Qayta faollashtirish" : "❄️ Muzlatish"}</button>
         ${staff ? `<button class="abtn danger" data-act="stu-delete">🗑 O'chirish</button>` : ''}
       </div>
       ${staff && st.payOpen ? viewPayForm(s) : ''}
@@ -1331,6 +1333,19 @@ async function sendMove() {
     const r = await api(`/api/students/${S.stu.detail.id}`, {method:'PATCH', body: JSON.stringify({group:+gid})});
     haptic('medium');
     S.stu.detail = r.student; S.stu.moveOpen = false;
+    await refreshStuGroup();
+  } catch (e) { alert(e.message); }
+  S.busy = false; render();
+}
+
+async function stuFreezeToggle() {
+  const s = S.stu.detail;
+  const next = !s.frozen;
+  S.busy = true; render();
+  try {
+    const r = await api(`/api/students/${s.id}`, {method:'PATCH', body: JSON.stringify({frozen: next})});
+    haptic('medium');
+    S.stu.detail = r.student;
     await refreshStuGroup();
   } catch (e) { alert(e.message); }
   S.busy = false; render();
@@ -1982,6 +1997,7 @@ document.addEventListener('click', e => {
   else if (act === 'stu-pay-send') sendPayment();
   else if (act === 'stu-move-send') sendMove();
   else if (act === 'stu-delete') deleteStudent();
+  else if (act === 'stu-freeze-toggle') stuFreezeToggle();
   else if (act === 'stu-gform') { S.stu.gform = {name:'', teacher:'', branch:''}; S.stu.toast = ''; S.stu.view = 'gform'; render(); }
   else if (act === 'stu-gform-back') { S.stu.view = 'groups'; render(); }
   else if (act === 'stu-gform-save') saveGroup();

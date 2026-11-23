@@ -114,8 +114,9 @@ async def group_view(db, uid, gid, page):
                           "LEFT JOIN users u ON u.tg_id=g.teacher_id WHERE g.id=?", (gid,))
     studs = await D.group_students(db, gid)
     reg = sum(1 for s in studs if s["is_registry"])
-    paid = sum(1 for s in studs if s["paid"]) - reg
-    debt = len(studs) - paid - reg
+    frozen = sum(1 for s in studs if s["frozen"] and not s["is_registry"])
+    paid = sum(1 for s in studs if s["paid"]) - reg - frozen
+    debt = len(studs) - paid - reg - frozen
     days, hist = await A.history(db, gid, n=3)
     last = ""
     if days:
@@ -125,12 +126,13 @@ async def group_view(db, uid, gid, page):
     sched = schedule_text(g)
     text = (f"📚 <b>{e(g['name'])}</b>" + (f" · 👨‍🏫 {e(g['tname'])}" if g["tname"] else " · ⚠️ o'qituvchisiz") +
             (f"\n🗓 {sched}" if sched else "") +
-            f"\n👥 {len(studs)} o'quvchi · ✅ {paid} · ❌ {debt}" + (f" · 🏛 {reg}" if reg else "") + last)
+            f"\n👥 {len(studs)} o'quvchi · ✅ {paid} · ❌ {debt}" + (f" · 🏛 {reg}" if reg else "") +
+            (f" · ❄️ {frozen}" if frozen else "") + last)
     pages = max(1, -(-len(studs) // PAGE))
     page = max(0, min(page, pages - 1))
     b = InlineKeyboardBuilder()
     for s in studs[page * PAGE:(page + 1) * PAGE]:
-        mark = "🏛" if s["is_registry"] else ("✅" if s["paid"] else "❌")
+        mark = "❄️" if s["frozen"] else ("🏛" if s["is_registry"] else ("✅" if s["paid"] else "❌"))
         b.button(text=f"{mark} {s['last_name']} {s['first_name']}  {A.marks(days, hist.get(s['id']))}".strip(),
                  callback_data=f"gl:s:{s['id']}:{page}")
     b.adjust(1)
@@ -165,8 +167,8 @@ async def gl_text(c: CallbackQuery, db):
         return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
     g = await db.fetchone("SELECT name FROM groups WHERE id=?", (gid,))
     studs = await D.group_students(db, gid)
-    lines = [f"{i}. {'🏛' if s['is_registry'] else ('✅' if s['paid'] else '❌')} {s['last_name']} {s['first_name']} "
-             f"({s['grade']}-sinf){with_phone(s)}" for i, s in enumerate(studs, 1)]
+    lines = [f"{i}. {'❄️' if s['frozen'] else ('🏛' if s['is_registry'] else ('✅' if s['paid'] else '❌'))} "
+             f"{s['last_name']} {s['first_name']} ({s['grade']}-sinf){with_phone(s)}" for i, s in enumerate(studs, 1)]
     text = f"📚 {g['name']} — {len(studs)} ta o'quvchi\n\n" + "\n".join(lines or ["Guruhda o'quvchi yo'q."])
     for i in range(0, len(text), 4000):
         await c.message.answer(text[i:i + 4000])
@@ -184,7 +186,9 @@ async def student_card(db, uid, sid, page):
     gid, mo = s["group_id"], D.current_month()
     paid = await db.fetchone("SELECT COALESCE(SUM(amount),0) t, COUNT(*) n FROM payments "
                              "WHERE student_id=? AND month=?", (sid, mo))
-    if s["is_registry"]:
+    if s["frozen"]:
+        pay = "❄️ muzlatilgan (tanaffusda, qarzdor hisoblanmaydi)"
+    elif s["is_registry"]:
         pay = "🏛 reyestr (davlat to'laydi)"
     elif paid["n"]:
         pay = f"✅ to'lagan — {money(paid['t'])}"
@@ -207,10 +211,26 @@ async def student_card(db, uid, sid, page):
         rows.append([btn("🔀 Ko'chirish", f"ms2:{sid}"), btn("🗑 O'chirish", f"xs:{sid}")])
     else:
         rows.append([btn("📞 Telefon", f"ph:{sid}"), btn("🗑 O'chirish", f"xs:{sid}")])
+    rows.append([btn("♨️ Qayta faollashtirish" if s["frozen"] else "❄️ Muzlatish (tanaffusga chiqarish)",
+                     f"fz:{sid}:{page}")])
     rows.append([btn("📅 Davomat tarixi", f"gl:h:{sid}:{page}")])
     rows.append([btn("👪 Ota-onaga havola", f"gl:parent:{sid}:{page}")])
     rows.append([btn("⬅️ Guruhga qaytish", f"gl:g:{gid}:{page}")])
     return text, InlineKeyboardMarkup(inline_keyboard=rows), gid
+
+
+@router.callback_query(F.data.startswith("fz:"))
+async def gl_freeze_toggle(c: CallbackQuery, db):
+    parts = c.data.split(":")
+    sid, page = int(parts[1]), int(parts[2]) if len(parts) > 2 else 0
+    s = await db.fetchone("SELECT frozen, group_id FROM students WHERE id=?", (sid,))
+    if not s or not await can_access_group(db, c.from_user.id, s["group_id"]):
+        return await c.answer("Ruxsat yo'q", show_alert=True)
+    new_val = 0 if s["frozen"] else 1
+    await db.execute("UPDATE students SET frozen=? WHERE id=?", (new_val, sid))
+    text, mk, gid = await student_card(db, c.from_user.id, sid, page)
+    await safe_edit(c, text, mk)
+    await c.answer("❄️ Muzlatildi" if new_val else "♨️ Qayta faollashtirildi")
 
 
 @router.callback_query(F.data.startswith("gl:parent:"))

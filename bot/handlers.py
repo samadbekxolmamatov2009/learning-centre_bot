@@ -225,7 +225,7 @@ async def cancel(m: Message, db, state: FSMContext):
 
 PAGE = 10
 PICKER_LABELS = {
-    "ps": lambda s: f"{'🏛' if s['is_registry'] else ('✅' if s['paid'] else '❌')} {s['last_name']} {s['first_name']}",
+    "ps": lambda s: f"{'❄️' if s['frozen'] else ('🏛' if s['is_registry'] else ('✅' if s['paid'] else '❌'))} {s['last_name']} {s['first_name']}",
     "xs": lambda s: f"{s['last_name']} {s['first_name']} ({s['grade']})",
     "ms2": lambda s: f"{s['last_name']} {s['first_name']} ({s['grade']})",
     "cs": lambda s: f"{s['last_name']} {s['first_name']}",
@@ -952,6 +952,8 @@ async def att_markup(db, gid, day, statuses):
     days, hist = await A.history(db, gid, before=day, n=3)
     b = InlineKeyboardBuilder()
     for s in await D.group_students(db, gid):
+        if s["frozen"]:
+            continue
         st = statuses.get(str(s["id"]), "present")
         hm = A.marks(days, hist.get(s["id"]))
         b.button(text=f"{A.STATUSES[st][0]} {s['last_name']} {s['first_name']}  {hm}".strip(),

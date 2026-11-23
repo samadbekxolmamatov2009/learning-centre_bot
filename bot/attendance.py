@@ -88,6 +88,8 @@ async def save_attendance(db, bot: Bot | None, uid: int, gid: int, day: date, st
     stmts, rows, absent_lines, counts, no_price = [], [], [], {k: 0 for k in STATUSES}, False
     notify_students = []  # (student_id, name, status) - ota-onaga xabar boradigan holatlar
     for s in await D.group_students(db, gid):
+        if s["frozen"]:
+            continue
         st = statuses.get(s["id"]) or statuses.get(str(s["id"])) or "present"
         if st not in STATUSES:
             st = "present"

@@ -178,11 +178,13 @@ async def report_text(db, month):
     for g in await db.fetchall("SELECT * FROM groups ORDER BY name"):
         studs = await D.group_students(db, g["id"], month)
         reg = sum(1 for s in studs if s["is_registry"])
-        paid = sum(1 for s in studs if s["paid"]) - reg
+        frozen = sum(1 for s in studs if s["frozen"] and not s["is_registry"])
+        paid = sum(1 for s in studs if s["paid"]) - reg - frozen
         income = await D.group_income(db, g["id"], month)
         total += income
         out.append(f"• {g['name']}: {money(income)} | to'lagan {paid}, "
-                   + (f"reyestr {reg}, " if reg else "") + f"qarzdor {len(studs) - paid - reg}")
+                   + (f"reyestr {reg}, " if reg else "") + (f"muzlatilgan {frozen}, " if frozen else "")
+                   + f"qarzdor {len(studs) - paid - reg - frozen}")
     reg_total = await D.registry_total(db, month)
     out.append(f"Jami tushum: {money(total)}")
     if reg_total:
@@ -376,7 +378,8 @@ async def sr_do(m: Message, db, state: FSMContext):
         return await m.answer("Hech narsa topilmadi.")
     lines = [f"🔎 Topildi: {len(found)} ta" + (" (dastlabki 20 tasi)" if len(found) > 20 else "")]
     for s in found[:20]:
-        mark = "🏛 reyestr" if s["is_registry"] else ("✅" if s["id"] in paid_ids else "❌ qarzdor")
+        mark = ("🏛 reyestr" if s["is_registry"] else "❄️ muzlatilgan" if s["frozen"] else
+                ("✅" if s["id"] in paid_ids else "❌ qarzdor"))
         lines.append(f"• {s['last_name']} {s['first_name']} | {s['grade']}-sinf | {s['gname']} | "
                      f"{mark}{with_phone(s)}")
     await m.answer("\n".join(lines))
@@ -425,9 +428,10 @@ async def _students_rows(db, month, only_debtors, branch_id=None):
         for s in studs:
             if only_debtors and s["paid"]:
                 continue
+            status = ("Reyestr" if s["is_registry"] else "Muzlatilgan" if s["frozen"] else
+                      ("To'lagan" if s["paid"] else "Qarzdor"))
             rows.append([g["name"], s["last_name"], s["first_name"], s["grade"], s["phone"],
-                         "Reyestr" if s["is_registry"] else ("To'lagan" if s["paid"] else "Qarzdor"),
-                         s["paid_sum"]])
+                         status, s["paid_sum"]])
         if only_debtors:
             continue
         for pr in await D.group_payment_rows(db, g["id"], month):
@@ -481,12 +485,13 @@ async def xl_report(c: CallbackQuery, db):
     for g in await db.fetchall(gsql, gargs):
         studs = await D.group_students(db, g["id"], mo)
         reg = sum(1 for s in studs if s["is_registry"])
+        frozen = sum(1 for s in studs if s["frozen"] and not s["is_registry"])
         debtors = sum(1 for s in studs if not s["is_registry"] and not s["paid"])
         pay_rows = await D.group_payment_rows(db, g["id"], mo)
-        paid = len({s["id"] for s in studs if not s["is_registry"] and s["paid"]} |
+        paid = len({s["id"] for s in studs if not s["is_registry"] and not s["frozen"] and s["paid"]} |
                    {r["student_id"] for r in pay_rows})
-        grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, debtors])
-    _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Reyestr", "Qarzdorlar"], grows, True)
+        grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, frozen, debtors])
+    _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Reyestr", "Muzlatilgan", "Qarzdorlar"], grows, True)
     tsql = "SELECT DISTINCT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id"
     targs = ()
     if scope is not None:
@@ -516,7 +521,8 @@ async def stats(m: Message, db):
     n_reg = (await db.fetchone("SELECT COUNT(*) n FROM students WHERE is_registry=1 AND hidden=0"))["n"]
     n_paid = (await db.fetchone(
         "SELECT COUNT(DISTINCT s.id) n FROM students s LEFT JOIN payments p "
-        "ON p.student_id=s.id AND p.month=? WHERE s.hidden=0 AND (p.id IS NOT NULL OR s.is_registry=1)",
+        "ON p.student_id=s.id AND p.month=? WHERE s.hidden=0 "
+        "AND (p.id IS NOT NULL OR s.is_registry=1 OR s.frozen=1)",
         (cur,)))["n"]
     reg_total = await D.registry_total(db, cur)
     salaries = 0
