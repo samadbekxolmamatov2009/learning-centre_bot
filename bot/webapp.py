@@ -97,16 +97,17 @@ async def can_access(db, uid, role, gid) -> bool:
 
 
 async def debtor_counts_by_group(db, paid_ids):
-    """Har guruhdagi qarzdorlar soni (reyestrsiz, to'lamagan). paid_ids bo'sh bo'lsa ham to'g'ri ishlaydi
-    ('NOT IN ()' SQL'da bo'sh ro'yxat bilan ishlamaydi, shuning uchun shart shart emas bo'lsa qo'shilmaydi)."""
+    """Har guruhdagi qarzdorlar soni (reyestrsiz, muzlatilmagan, to'lamagan). paid_ids bo'sh bo'lsa ham
+    to'g'ri ishlaydi ('NOT IN ()' SQL'da bo'sh ro'yxat bilan ishlamaydi, shuning uchun shart emas bo'lsa
+    qo'shilmaydi). Muzlatilgan (tanaffusdagi) o'quvchilar hech qachon qarzdor hisoblanmaydi."""
     if paid_ids:
         ph = ",".join("?" * len(paid_ids))
         rows = await db.fetchall(
-            f"SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 AND is_registry=0 "
+            f"SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 AND is_registry=0 AND frozen=0 "
             f"AND id NOT IN ({ph}) GROUP BY group_id", tuple(paid_ids))
     else:
         rows = await db.fetchall(
-            "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 AND is_registry=0 GROUP BY group_id")
+            "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 AND is_registry=0 AND frozen=0 GROUP BY group_id")
     return {r["group_id"]: r["n"] for r in rows}
 
 
@@ -164,7 +165,7 @@ async def api_attendance_get(request):
     except ValueError:
         return bad("Sana noto'g'ri")
     g = await db.fetchone("SELECT id, name FROM groups WHERE id=?", (gid,))
-    studs = await D.group_students(db, gid)
+    studs = [s for s in await D.group_students(db, gid) if not s["frozen"]]
     days, hist = await A.history(db, gid, before=day.isoformat(), n=20)
     existing = await A.day_statuses(db, gid, day.isoformat())
     recent = await A.lesson_days(db, gid, 8)
@@ -240,7 +241,7 @@ async def api_dashboard(request):
     gcond = " WHERE g.archived=0 AND g.branch_id=?" if branch_id else " WHERE g.archived=0"
     groups = await db.fetchall(f"""
         SELECT g.id, g.name, u.full_name AS teacher, COUNT(s.id) AS n,
-               COALESCE(SUM(CASE WHEN s.is_registry=1 OR EXISTS(
+               COALESCE(SUM(CASE WHEN s.is_registry=1 OR s.frozen=1 OR EXISTS(
                    SELECT 1 FROM payments p WHERE p.student_id=s.id AND p.month=?) THEN 1 ELSE 0 END),0) AS paid
         FROM groups g LEFT JOIN students s ON s.group_id=g.id AND s.hidden=0
         LEFT JOIN users u ON u.tg_id=g.teacher_id{gcond} GROUP BY g.id ORDER BY g.name""",
@@ -281,11 +282,11 @@ STUDENT_FIELDS = ("last", "first", "grade", "phone")
 
 def student_out(s, gname=None, paid=None):
     if paid is None:
-        paid = bool(s["is_registry"]) or bool(s.get("paid"))
+        paid = bool(s["is_registry"]) or bool(s.get("frozen")) or bool(s.get("paid"))
     return {"id": s["id"], "last": s["last_name"], "first": s["first_name"], "grade": s["grade"],
             "phone": s["phone"], "is_registry": bool(s["is_registry"]), "group": s["group_id"],
-            "group_name": gname or s.get("gname"), "hidden": bool(s["hidden"]), "paid": paid,
-            "parent_linked": bool(s.get("parent_count", 0))}
+            "group_name": gname or s.get("gname"), "hidden": bool(s["hidden"]), "frozen": bool(s["frozen"]),
+            "paid": paid, "parent_linked": bool(s.get("parent_count", 0))}
 
 
 PARENT_COUNT_SQL = "(SELECT COUNT(*) FROM parent_links pl WHERE pl.student_id = s.id) AS parent_count"
@@ -498,7 +499,7 @@ async def api_students_get(request):
         names = f"{s['first_name']} {s['last_name']} {s['last_name']} {s['first_name']}".casefold()
         digits = "".join(ch for ch in q if ch.isdigit())
         if q in names or (len(digits) >= 3 and digits in "".join(ch for ch in s["phone"] if ch.isdigit())):
-            found.append(student_out(s, paid=s["id"] in paid_ids or bool(s["is_registry"])))
+            found.append(student_out(s, paid=s["id"] in paid_ids or bool(s["is_registry"]) or bool(s["frozen"])))
     return web.json_response({"students": found[:40]})
 
 
@@ -576,6 +577,8 @@ async def api_student_patch(request):
                          (new_gid, sid, D.current_month()))
     if "is_registry" in body and role in ("admin", "director"):
         sets.append("is_registry=?"); args.append(1 if body["is_registry"] else 0)
+    if "frozen" in body:
+        sets.append("frozen=?"); args.append(1 if body["frozen"] else 0)
     if not sets:
         return bad("O'zgartiriladigan narsa yo'q")
     args.append(sid)
@@ -697,16 +700,17 @@ async def api_salary(request):
     for g in await db.fetchall("SELECT * FROM groups WHERE teacher_id=? ORDER BY name", (target,)):
         studs = await D.group_students(db, g["id"], month)
         reg_cnt = sum(1 for s in studs if s["is_registry"])
+        frozen_cnt = sum(1 for s in studs if s["frozen"] and not s["is_registry"])
         debtors = sum(1 for s in studs if not s["is_registry"] and not s["paid"])
         pay_rows = await D.group_payment_rows(db, g["id"], month)
-        paid = len({s["id"] for s in studs if not s["is_registry"] and s["paid"]} |
+        paid = len({s["id"] for s in studs if not s["is_registry"] and not s["frozen"] and s["paid"]} |
                    {r["student_id"] for r in pay_rows})
         income = await D.group_income(db, g["id"], month)
         att = await db.fetchone("SELECT COALESCE(SUM(present),0) p, COUNT(*) n FROM attendance "
                                 "WHERE group_id=? AND day LIKE ?", (g["id"], month + "-%"))
         groups_out.append({
             "name": g["name"], "income": income, "paid": paid, "students": len(studs),
-            "debtors": debtors,
+            "debtors": debtors, "frozen": frozen_cnt,
             "att": round(att["p"] * 100 / att["n"]) if att["n"] else None})
 
     advance = await D.teacher_advance_total(db, target, month)
@@ -1181,7 +1185,7 @@ async def api_debtors_notify(request):
         body = {}
     mo = D.current_month()
     sql = ("SELECT s.id, s.first_name, s.last_name FROM students s JOIN groups g ON g.id=s.group_id "
-          "WHERE s.hidden=0 AND s.is_registry=0")
+          "WHERE s.hidden=0 AND s.is_registry=0 AND s.frozen=0")
     args = []
     if body.get("group"):
         sql += " AND s.group_id=?"
@@ -1723,12 +1727,13 @@ async def api_export(request):
         for g in await db.fetchall(gsql, gargs):
             studs = await D.group_students(db, g["id"], mo)
             reg = sum(1 for s in studs if s["is_registry"])
+            frozen = sum(1 for s in studs if s["frozen"] and not s["is_registry"])
             debtors = sum(1 for s in studs if not s["is_registry"] and not s["paid"])
             pay_rows = await D.group_payment_rows(db, g["id"], mo)
-            paid = len({s["id"] for s in studs if not s["is_registry"] and s["paid"]} |
+            paid = len({s["id"] for s in studs if not s["is_registry"] and not s["frozen"] and s["paid"]} |
                        {r["student_id"] for r in pay_rows})
-            grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, debtors])
-        _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Reyestr", "Qarzdorlar"], grows, True)
+            grows.append([g["name"], await D.group_income(db, g["id"], mo), paid, reg, frozen, debtors])
+        _sheet(wb, "Guruhlar", ["Guruh", "Tushum", "To'laganlar", "Reyestr", "Muzlatilgan", "Qarzdorlar"], grows, True)
         tsql = "SELECT DISTINCT u.tg_id, u.full_name FROM users u JOIN teachers t ON t.tg_id=u.tg_id"
         targs = ()
         if scope is not None:
