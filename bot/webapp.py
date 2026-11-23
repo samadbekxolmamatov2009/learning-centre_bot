@@ -1355,7 +1355,7 @@ async def api_student_cert189_post(request):
 # ---------------- Xodimlar (faqat direktor): o'qituvchilar, adminlar, reyestr sozlamasi ----------------
 def teacher_out(t):
     return {"id": t["tg_id"], "name": t["full_name"], "pay_type": t["pay_type"], "pay_value": t["pay_value"],
-            "registry_rate": t["registry_rate"], "groups": t.get("groups", 0),
+            "registry_rate": t["registry_rate"], "low_pay_percent": t["low_pay_percent"], "groups": t.get("groups", 0),
             "branch_id": t.get("branch_id"), "branch_name": t.get("branch_name")}
 
 
@@ -1367,7 +1367,8 @@ async def api_teachers(request):
         return bad("Ruxsat yo'q", 403)
     db = request.app["db"]
     scope = await D.admin_branch_scope(db, uid, role)
-    sql = ("SELECT u.tg_id, u.full_name, u.branch_id, b.name AS branch_name, t.pay_type, t.pay_value, t.registry_rate, "
+    sql = ("SELECT u.tg_id, u.full_name, u.branch_id, b.name AS branch_name, t.pay_type, t.pay_value, "
+          "t.registry_rate, t.low_pay_percent, "
           "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id AND g.archived=0) AS groups "
           "FROM users u JOIN teachers t ON t.tg_id=u.tg_id LEFT JOIN branches b ON b.id=u.branch_id")
     args = ()
@@ -1391,7 +1392,8 @@ async def api_teacher_post(request):
         pay_type = body.get("pay_type")
         pay_value = float(body.get("pay_value"))
         reg_rate = int(body.get("registry_rate") or 0)
-        assert pay_type in ("percent", "per_student") and pay_value >= 0 and reg_rate >= 0
+        low_pay_percent = int(body.get("low_pay_percent", D.LOW_PAY_PERCENT))
+        assert pay_type in ("percent", "per_student") and pay_value >= 0 and reg_rate >= 0 and 0 <= low_pay_percent <= 100
     except Exception:
         return bad("Ma'lumotlar noto'g'ri")
     if len(name) < 2:
@@ -1403,8 +1405,8 @@ async def api_teacher_post(request):
         return bad("Filial topilmadi")
     await db.batch([
         ("INSERT INTO users(tg_id,full_name,role,branch_id) VALUES(?,?,'teacher',?)", (tid, name, branch_id)),
-        ("INSERT INTO teachers(tg_id,pay_type,pay_value,registry_rate) VALUES(?,?,?,?)",
-         (tid, pay_type, pay_value, reg_rate))])
+        ("INSERT INTO teachers(tg_id,pay_type,pay_value,registry_rate,low_pay_percent) VALUES(?,?,?,?,?)",
+         (tid, pay_type, pay_value, reg_rate, low_pay_percent))])
     return web.json_response({"ok": True})
 
 
@@ -1441,13 +1443,21 @@ async def api_teacher_patch(request):
         except Exception:
             return bad("Reyestr narxi noto'g'ri")
         await db.execute("UPDATE teachers SET registry_rate=? WHERE tg_id=?", (rr, tid))
+    if "low_pay_percent" in body:
+        try:
+            lp = int(body["low_pay_percent"])
+            assert 0 <= lp <= 100
+        except Exception:
+            return bad("Kam to'lov foizi 0 dan 100 gacha bo'lishi kerak")
+        await db.execute("UPDATE teachers SET low_pay_percent=? WHERE tg_id=?", (lp, tid))
     if "branch" in body:
         branch_id = int(body["branch"]) if body.get("branch") else None
         if branch_id and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch_id,)):
             return bad("Filial topilmadi")
         await db.execute("UPDATE users SET branch_id=? WHERE tg_id=?", (branch_id, tid))
     row = await db.fetchone(
-        "SELECT u.tg_id, u.full_name, u.branch_id, b.name AS branch_name, t.pay_type, t.pay_value, t.registry_rate, "
+        "SELECT u.tg_id, u.full_name, u.branch_id, b.name AS branch_name, t.pay_type, t.pay_value, "
+        "t.registry_rate, t.low_pay_percent, "
         "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id AND g.archived=0) AS groups "
         "FROM users u JOIN teachers t ON t.tg_id=u.tg_id LEFT JOIN branches b ON b.id=u.branch_id "
         "WHERE u.tg_id=?", (tid,))

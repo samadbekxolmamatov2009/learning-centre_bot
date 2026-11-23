@@ -775,7 +775,8 @@ async function refreshStaff() {
 }
 function viewHrHome() {
   const h = S.hr, r = h.registry, director = S.me.role === 'director';
-  const payHow = t => t.pay_type === 'percent' ? `${t.pay_value}%` : `${money(t.pay_value)} so'm/o'quvchi`;
+  const payHow = t => t.pay_type === 'percent' ? `${t.pay_value}%` :
+    `${money(t.pay_value)} so'm/o'quvchi (kam to'lasa ${t.low_pay_percent}%)`;
   if (!director) {
     return `<h1>👨‍🏫 Xodimlar</h1>
       <div class="sub">O'qituvchilar ro'yxati - avans kiritish uchun "💰" tugmasini bosing</div>
@@ -842,6 +843,8 @@ function viewHrTeacherForm() {
         <option value="per_student" ${f.pay_type === 'per_student' ? 'selected' : ''}>O'quvchi boshiga</option></select></div>
     <div class="field"><label>Oylik qiymati</label>
       <input class="input" id="t_pvalue" type="number" inputmode="decimal" value="${f.pay_value === '' ? '' : f.pay_value}" placeholder="masalan 40 yoki 200000 (markaz boshlig'i kabi oylik olmasa - 0)"></div>
+    ${f.pay_type === 'per_student' ? `<div class="field"><label>O'quvchi stavkaning 2 baravaridan kam to'laganda, necha % olinadi</label>
+      <input class="input" id="t_lowpay" type="number" inputmode="numeric" value="${f.low_pay_percent === '' ? '' : f.low_pay_percent}" placeholder="masalan 40"></div>` : ''}
     <div class="field"><label>Reyestr: bitta dars narxi (so'm)</label>
       <input class="input" id="t_reg" type="number" inputmode="numeric" value="${f.registry_rate || 0}" placeholder="0 - reyestr yo'q"></div>
     ${S.hr.branches.length ? `<div class="field"><label>Filial</label>
@@ -950,11 +953,11 @@ function hrOpenTeacher(id) {
   const t = S.hr.teachers.find(x => x.id === id);
   if (!t) return;
   S.hr.tform = {mode:'edit', id, name:t.name, pay_type:t.pay_type, pay_value:t.pay_value,
-    registry_rate:t.registry_rate, branch_id:t.branch_id || ''};
+    registry_rate:t.registry_rate, low_pay_percent:t.low_pay_percent, branch_id:t.branch_id || ''};
   S.hr.toast = ''; S.hr.view = 'tform'; render();
 }
 function hrNewTeacher() {
-  S.hr.tform = {mode:'add', id:null, name:'', pay_type:'percent', pay_value:'', registry_rate:0, branch_id:''};
+  S.hr.tform = {mode:'add', id:null, name:'', pay_type:'percent', pay_value:'', registry_rate:0, low_pay_percent:40, branch_id:''};
   S.hr.toast = ''; S.hr.view = 'tform'; render();
 }
 async function hrSaveTeacher() {
@@ -963,11 +966,15 @@ async function hrSaveTeacher() {
   f.pay_type = document.getElementById('t_ptype').value;
   f.pay_value = parseFloat(document.getElementById('t_pvalue').value);
   f.registry_rate = parseInt(document.getElementById('t_reg').value || '0', 10);
+  const lowpayEl = document.getElementById('t_lowpay');
+  if (lowpayEl) f.low_pay_percent = parseInt(lowpayEl.value, 10);
   const branchEl = document.getElementById('t_branch');
   const branch = branchEl ? branchEl.value : '';
   if (f.name.length < 2) return alert('Ism familiyani to\'liq kiriting.');
   if (isNaN(f.pay_value) || f.pay_value < 0) return alert('Oylik qiymatini kiriting (0 ham bo\'lishi mumkin).');
   if (isNaN(f.registry_rate) || f.registry_rate < 0) return alert('Reyestr narxi noto\'g\'ri.');
+  if (f.pay_type === 'per_student' && (isNaN(f.low_pay_percent) || f.low_pay_percent < 0 || f.low_pay_percent > 100))
+    return alert('Kam to\'lov foizi 0 dan 100 gacha bo\'lishi kerak.');
   let tid = f.id;
   if (f.mode === 'add') {
     tid = parseInt(document.getElementById('t_id').value, 10);
@@ -977,10 +984,12 @@ async function hrSaveTeacher() {
   try {
     if (f.mode === 'add') {
       await api('/api/teachers', {method:'POST', body: JSON.stringify(
-        {id:tid, name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate, branch})});
+        {id:tid, name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate,
+         low_pay_percent:f.low_pay_percent, branch})});
     } else {
       await api(`/api/teachers/${tid}`, {method:'PATCH', body: JSON.stringify(
-        {name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate, branch})});
+        {name:f.name, pay_type:f.pay_type, pay_value:f.pay_value, registry_rate:f.registry_rate,
+         low_pay_percent:f.low_pay_percent, branch})});
     }
     haptic('medium');
     await refreshStaff();
@@ -2082,6 +2091,14 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   if (e.target.dataset && e.target.dataset.act === 'pick' && e.target.value) openGroup(S.att.group.id, e.target.value, S.att.single);
   else if (e.target.dataset && e.target.dataset.examGrade) { S.exam.grades[Number(e.target.dataset.examGrade)] = e.target.value; }
+  else if (e.target.id === 't_ptype') {
+    const f = S.hr.tform;
+    f.name = document.getElementById('t_name').value;
+    f.pay_value = document.getElementById('t_pvalue').value;
+    f.registry_rate = document.getElementById('t_reg').value;
+    f.pay_type = e.target.value;
+    render();
+  }
 });
 document.addEventListener('input', e => {
   if (e.target.dataset && e.target.dataset.examScore) { S.exam.scores[Number(e.target.dataset.examScore)] = e.target.value; return; }
