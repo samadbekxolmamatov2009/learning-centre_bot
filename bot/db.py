@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS teachers(
     tg_id INTEGER PRIMARY KEY REFERENCES users(tg_id),
     pay_type TEXT NOT NULL CHECK(pay_type IN ('percent','per_student')),
     pay_value REAL NOT NULL,
-    registry_rate INTEGER NOT NULL DEFAULT 0);
+    registry_rate INTEGER NOT NULL DEFAULT 0,
+    low_pay_percent INTEGER NOT NULL DEFAULT 40);
 CREATE TABLE IF NOT EXISTS branches(
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -144,6 +145,8 @@ class Database:
         tcols = [r["name"] for r in await self.fetchall("PRAGMA table_info(teachers)")]
         if "registry_rate" not in tcols:
             await self.execute("ALTER TABLE teachers ADD COLUMN registry_rate INTEGER NOT NULL DEFAULT 0")
+        if "low_pay_percent" not in tcols:
+            await self.execute(f"ALTER TABLE teachers ADD COLUMN low_pay_percent INTEGER NOT NULL DEFAULT {LOW_PAY_PERCENT}")
         ucols = [r["name"] for r in await self.fetchall("PRAGMA table_info(users)")]
         if "branch_id" not in ucols:
             await self.execute("ALTER TABLE users ADD COLUMN branch_id INTEGER")
@@ -479,11 +482,12 @@ LOW_PAY_MULT = 2
 LOW_PAY_PERCENT = 40
 
 
-def per_student_pay(rate: float, paid_sum: float) -> float:
+def per_student_pay(rate: float, paid_sum: float, low_pay_percent=None) -> float:
     if paid_sum <= 0:
         return 0.0
+    pct = LOW_PAY_PERCENT if low_pay_percent is None else low_pay_percent
     if paid_sum <= rate * LOW_PAY_MULT:
-        return paid_sum * LOW_PAY_PERCENT / 100
+        return paid_sum * pct / 100
     return float(rate)
 
 
@@ -539,6 +543,6 @@ async def teacher_salary(db, teacher_id, month=None, branch_id=None):
         if t["pay_type"] == "percent":
             total += income * t["pay_value"] / 100
         else:
-            total += sum(per_student_pay(t["pay_value"], r["paid_sum"]) for r in pay_rows)
+            total += sum(per_student_pay(t["pay_value"], r["paid_sum"], t["low_pay_percent"]) for r in pay_rows)
     total += sum(r[2] for r in await registry_rows(db, teacher_id, month, branch_id))  # reyestr: 100%
     return t["pay_type"], t["pay_value"], rows, total

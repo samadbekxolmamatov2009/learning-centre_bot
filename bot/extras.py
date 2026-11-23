@@ -665,7 +665,7 @@ async def rh_list(c: CallbackQuery, db):
 
 # ---------------- O'qituvchi ma'lumotlarini tahrirlash (faqat direktor) ----------------
 class EditTeacher(StatesGroup):
-    name = State(); value = State(); reg = State()
+    name = State(); value = State(); reg = State(); lowpay = State()
 
 
 async def _teacher_card(db, tid):
@@ -675,13 +675,16 @@ async def _teacher_card(db, tid):
         return None, None
     how = (f"{t['pay_value']:g}% (to'lovdan)" if t["pay_type"] == "percent" else
            f"{money(t['pay_value'])} / o'quvchi ({money(t['pay_value'] * D.LOW_PAY_MULT)} gacha to'lasa to'lovning "
-           f"{D.LOW_PAY_PERCENT}%)")
+           f"{t['low_pay_percent']}%)")
     text = (f"👨‍🏫 {t['full_name']} (ID {tid})\n💼 Oylik: {how}\n"
             f"🏛 Reyestr, bitta dars: {money(t['registry_rate']) if t['registry_rate'] else 'kiritilmagan'}")
-    kb_ = InlineKeyboardMarkup(inline_keyboard=[
+    kb_rows = [
         [InlineKeyboardButton(text="👤 Ismni o'zgartirish", callback_data=f"etn:{tid}")],
         [InlineKeyboardButton(text="💼 Oylik turi / qiymati", callback_data=f"etp:{tid}")],
-        [InlineKeyboardButton(text="🏛 Reyestr dars narxi", callback_data=f"etr:{tid}")]])
+        [InlineKeyboardButton(text="🏛 Reyestr dars narxi", callback_data=f"etr:{tid}")]]
+    if t["pay_type"] == "per_student":
+        kb_rows.append([InlineKeyboardButton(text="📉 Kam to'laganda olinadigan foiz", callback_data=f"etlp:{tid}")])
+    kb_ = InlineKeyboardMarkup(inline_keyboard=kb_rows)
     return text, kb_
 
 
@@ -782,6 +785,30 @@ async def et_reg_save(m: Message, db, state: FSMContext):
     await state.clear()
     text, kb_ = await _teacher_card(db, tid)
     await m.answer("✅ Saqlandi. Yangi narx faqat keyingi darslarga ta'sir qiladi.\n" + text, reply_markup=kb_)
+
+
+@router.callback_query(F.data.startswith("etlp:"), DIRECTOR)
+async def et_lowpay(c: CallbackQuery, state: FSMContext):
+    await state.set_state(EditTeacher.lowpay)
+    await state.update_data(tid=int(c.data[5:]))
+    await c.message.answer(f"O'quvchi stavkaning {D.LOW_PAY_MULT} baravaridan kam to'lasa, o'qituvchi "
+                           f"to'lovning necha foizini oladi (odatda {D.LOW_PAY_PERCENT}):")
+    await c.answer()
+
+
+@router.message(EditTeacher.lowpay)
+async def et_lowpay_save(m: Message, db, state: FSMContext):
+    try:
+        v = int((m.text or "").replace(" ", ""))
+        assert 0 <= v <= 100
+    except Exception:
+        return await m.answer("0 dan 100 gacha butun son kiriting.")
+    tid = (await state.get_data())["tid"]
+    await db.execute("UPDATE teachers SET low_pay_percent=? WHERE tg_id=?", (v, tid))
+    await state.clear()
+    text, kb_ = await _teacher_card(db, tid)
+    await m.answer("✅ Saqlandi. Oylik hisobi (o'tgan oylar ham) yangi shartga ko'ra qayta hisoblanadi.\n" + text,
+                   reply_markup=kb_)
 
 
 # ---------------- Excel / Word fayldan o'quvchilarni yuklash (bitta guruhga) ----------------

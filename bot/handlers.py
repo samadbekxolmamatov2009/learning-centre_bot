@@ -884,9 +884,10 @@ def months_markup(prefix):
 
 async def salary_text(db, tid, month):
     pt, pv, rows, total = await D.teacher_salary(db, tid, month)
+    t = await D.fetchone(db, "SELECT low_pay_percent FROM teachers WHERE tg_id=?", (tid,))
     how = (f"{pv:g}% (to'lovdan)" if pt == "percent" else
            f"{money(pv)} / o'quvchi ({money(pv * D.LOW_PAY_MULT)} gacha to'lasa - "
-           f"to'lovning {D.LOW_PAY_PERCENT}%)")
+           f"to'lovning {t['low_pay_percent']}%)")
     out = [f"💰 Oylik ({month})", f"Tizim: {how}", ""]
     for name, income, cnt in rows:
         out.append(f"• {name}: tushum {money(income)}, to'laganlar {cnt} ta")
