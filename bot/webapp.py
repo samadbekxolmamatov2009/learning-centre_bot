@@ -286,7 +286,7 @@ def student_out(s, gname=None, paid=None):
     return {"id": s["id"], "last": s["last_name"], "first": s["first_name"], "grade": s["grade"],
             "phone": s["phone"], "is_registry": bool(s["is_registry"]), "group": s["group_id"],
             "group_name": gname or s.get("gname"), "hidden": bool(s["hidden"]), "frozen": bool(s["frozen"]),
-            "paid": paid, "parent_linked": bool(s.get("parent_count", 0))}
+            "joined_at": s["joined_at"], "paid": paid, "parent_linked": bool(s.get("parent_count", 0))}
 
 
 PARENT_COUNT_SQL = "(SELECT COUNT(*) FROM parent_links pl WHERE pl.student_id = s.id) AS parent_count"
@@ -517,14 +517,20 @@ async def api_students_post(request):
     grade = clean_text(body.get("grade"), 20) or "-"
     if len(last) < 2 or len(first) < 2:
         return bad("Ism va familiyani to'liq kiriting")
-    phone_raw = body.get("phone") or ""
-    phone = normalize_phone(phone_raw) if phone_raw.strip() else ""
-    if phone is None:
+    phone_raw = (body.get("phone") or "").strip()
+    if not phone_raw:
+        return bad("Telefon raqamini kiriting")
+    phone = normalize_phone(phone_raw)
+    if not phone:
         return bad("Telefon raqami noto'g'ri")
+    try:
+        joined_at = date.fromisoformat(clean_text(body.get("joined_at"), 10)).isoformat()
+    except Exception:
+        return bad("O'quvchi qo'shilgan sanani kiriting")
     is_reg = 1 if body.get("is_registry") else 0
     hidden = 1 if (is_reg and await D.get_setting(db, "registry_hidden") == "1") else 0
-    await db.execute("INSERT INTO students(first_name,last_name,grade,phone,is_registry,hidden,group_id) "
-                     "VALUES(?,?,?,?,?,?,?)", (first, last, grade, phone, is_reg, hidden, gid))
+    await db.execute("INSERT INTO students(first_name,last_name,grade,phone,is_registry,hidden,joined_at,group_id) "
+                     "VALUES(?,?,?,?,?,?,?,?)", (first, last, grade, phone, is_reg, hidden, joined_at, gid))
     row = await db.fetchone("SELECT * FROM students WHERE id=(SELECT MAX(id) FROM students WHERE group_id=?)",
                             (gid,))
     return web.json_response({"ok": True, "student": student_out(row)})
