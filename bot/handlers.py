@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command, Filter, StateFilter
@@ -51,6 +51,17 @@ def normalize_phone(text: str):
 
 def with_phone(s) -> str:
     return f" 📞 {s['phone']}" if s.get("phone") else ""
+
+
+def parse_date_input(text: str):
+    """'2026-11-24' yoki '24.11.2026' -> '2026-11-24'. Noto'g'ri bo'lsa None."""
+    t = text.strip()
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(t, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
 
 
 def kb(rows):
@@ -650,7 +661,7 @@ async def g_teacher(c: CallbackQuery, db, state: FSMContext):
 # ---------------- Admin/Director: o'quvchi ----------------
 class AddStudent(StatesGroup):
     first = State(); last = State(); grade = State(); phone = State()
-    registry = State(); group = State()
+    joined = State(); registry = State(); group = State()
 
 
 @router.message(F.text == "➕ O'quvchi", ANYONE)
@@ -677,8 +688,7 @@ async def s_last(m: Message, state: FSMContext):
 async def s_grade(m: Message, state: FSMContext):
     await state.update_data(grade=m.text.strip())
     await state.set_state(AddStudent.phone)
-    await m.answer("Telefon raqami (masalan 90 123 45 67 yoki +998901234567).\n"
-                   "Bilmasangiz - yuboring:")
+    await m.answer("Telefon raqami (masalan 90 123 45 67 yoki +998901234567) - majburiy:")
 
 
 async def ask_group(msg: Message, db, state: FSMContext, uid: int):
@@ -693,15 +703,38 @@ async def ask_group(msg: Message, db, state: FSMContext, uid: int):
 @router.message(AddStudent.phone)
 async def s_phone(m: Message, db, state: FSMContext):
     phone = normalize_phone(m.text or "")
-    if phone is None:
-        return await m.answer("Raqam noto'g'ri. Masalan: 90 123 45 67 (yoki - yuboring).")
+    if not phone:
+        return await m.answer("Telefon raqami majburiy. Masalan: 90 123 45 67.")
     await state.update_data(phone=phone, is_registry=0, reg_rate=0)
-    uid = m.from_user.id
-    await state.set_state(AddStudent.registry)
-    await m.answer("O'quvchi reyestrdami (kam ta'minlangan oila, davlat to'laydi)?",
+    await state.set_state(AddStudent.joined)
+    await m.answer("O'quvchi qo'shilgan sana (masalan 24.11.2026 yoki 2026-11-24):",
                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                       InlineKeyboardButton(text="🏛 Reyestr", callback_data="reg:y"),
-                       InlineKeyboardButton(text="Oddiy o'quvchi", callback_data="reg:n")]]))
+                       InlineKeyboardButton(text="📅 Bugun", callback_data="joined:today")]]))
+
+
+@router.callback_query(AddStudent.joined, F.data == "joined:today")
+async def s_joined_today(c: CallbackQuery, db, state: FSMContext):
+    await state.update_data(joined_at=D.today_local().isoformat())
+    await c.message.edit_text(f"📅 Qo'shilgan sana: {D.today_local().isoformat()}")
+    await c.answer()
+    await s_joined_ask_registry(c.message, db, state)
+
+
+@router.message(AddStudent.joined)
+async def s_joined(m: Message, db, state: FSMContext):
+    joined_at = parse_date_input(m.text or "")
+    if not joined_at:
+        return await m.answer("Sanani to'g'ri kiriting, masalan 24.11.2026 yoki 2026-11-24.")
+    await state.update_data(joined_at=joined_at)
+    await s_joined_ask_registry(m, db, state)
+
+
+async def s_joined_ask_registry(msg: Message, db, state: FSMContext):
+    await state.set_state(AddStudent.registry)
+    await msg.answer("O'quvchi reyestrdami (kam ta'minlangan oila, davlat to'laydi)?",
+                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                         InlineKeyboardButton(text="🏛 Reyestr", callback_data="reg:y"),
+                         InlineKeyboardButton(text="Oddiy o'quvchi", callback_data="reg:n")]]))
 
 
 @router.callback_query(AddStudent.registry, F.data.in_({"reg:y", "reg:n"}))
@@ -722,9 +755,10 @@ async def s_group(c: CallbackQuery, db, state: FSMContext):
         return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
     reg = d.get("is_registry", 0)
     hidden = 1 if (reg and await D.get_setting(db, "registry_hidden") == "1") else 0
-    await db.execute("INSERT INTO students(first_name,last_name,grade,phone,is_registry,hidden,group_id) "
-                     "VALUES(?,?,?,?,?,?,?)",
-                     (d["first"], d["last"], d["grade"], d.get("phone", ""), reg, hidden, int(c.data[3:])))
+    await db.execute("INSERT INTO students(first_name,last_name,grade,phone,is_registry,hidden,joined_at,group_id) "
+                     "VALUES(?,?,?,?,?,?,?,?)",
+                     (d["first"], d["last"], d["grade"], d.get("phone", ""), reg, hidden,
+                      d.get("joined_at", ""), int(c.data[3:])))
     await state.clear()
     extra = (" 🏛 Reyestr." + (" Hozir yashirin, 'Reyestr yashirish/ochish' orqali ochilganda ko'rinadi." if hidden else "")) if reg else ""
     await c.message.answer(f"✅ {d['first']} {d['last']} qo'shildi.{extra}")

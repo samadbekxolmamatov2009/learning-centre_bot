@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS students(
     is_registry INTEGER NOT NULL DEFAULT 0, reg_rate INTEGER NOT NULL DEFAULT 0,
     hidden INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
     has_189 INTEGER NOT NULL DEFAULT 0, frozen INTEGER NOT NULL DEFAULT 0,
+    joined_at TEXT NOT NULL DEFAULT '',
     group_id INTEGER NOT NULL REFERENCES groups(id));
 CREATE TABLE IF NOT EXISTS payments(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -171,6 +172,8 @@ class Database:
         for col in ("archived", "has_189", "frozen"):
             if col not in cols:
                 await self.execute(f"ALTER TABLE students ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+        if "joined_at" not in cols:
+            await self.execute("ALTER TABLE students ADD COLUMN joined_at TEXT NOT NULL DEFAULT ''")
         escols = [r["name"] for r in await self.fetchall("PRAGMA table_info(exam_scores)")]
         if "grade" not in escols:
             await self.execute("ALTER TABLE exam_scores ADD COLUMN grade TEXT NOT NULL DEFAULT ''")

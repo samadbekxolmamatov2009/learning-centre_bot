@@ -166,6 +166,14 @@ guruhning (demak, o'sha o'qituvchining) qarzdorlariga yuboradi. Reyestr o'quvchi
 hisoblanmagani uchun ularga xabar bormaydi. Ota-onasi hali ulanmagan qarzdorlar bo'lsa, ularning ismlari
 yuborilgandan keyin chiqadigan xabarda ko'rsatiladi. Bu funksiya faqat direktorga ko'rinadi, admin/o'qituvchiga yo'q.
 
+## Yangi o'quvchi qo'shishda telefon va sana majburiy
+Yangi o'quvchi qo'shilayotganda (admin, direktor, o'qituvchi - hammasi uchun, Mini App'da ham, chatda ham)
+endi **telefon raqami** va **qo'shilgan sana** majburiy - bo'lmasa saqlanmaydi. Mini App'da sana maydoni
+avtomatik bugungi kun bilan to'ldirilgan holda chiqadi (xohlasa o'zgartirishi mumkin), chatda esa "📅 Bugun"
+tugmasi yoki sanani qo'lda yozish (masalan 24.11.2026) orqali kiritiladi. **Bu qoida faqat yangi qo'shiladigan
+o'quvchilarga tegishli** - bazada avvaldan mavjud, telefon raqami yoki sanasi kiritilmagan o'quvchilar
+o'zgarishsiz qoladi va ularni tahrirlashda bu maydonlar majburiy emas.
+
 ## O'quvchini muzlatish (tanaffusga chiqarish)
 Ba'zi o'quvchilar orada ikki-uch oylab tanaffus qilib, keyin yana kelishni davom ettirishadi. Bunday o'quvchini
 butunlay o'chirib tashlamasdan, **"❄️ Muzlatish"** qilish mumkin (o'quvchi kartochkasida, "✏️ Tahrirlash" tugmasi
