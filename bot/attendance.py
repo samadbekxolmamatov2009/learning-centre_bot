@@ -81,6 +81,10 @@ async def save_attendance(db, bot: Bot | None, uid: int, gid: int, day: date, st
     Ko'rsatilmagan o'quvchi 'keldi' deb olinadi."""
     g = await db.fetchone("SELECT * FROM groups WHERE id=?", (gid,))
     teacher_name = (await db.fetchone("SELECT full_name FROM users WHERE tg_id=?", (uid,)) or {}).get("full_name", "-")
+    branch_name = None
+    if g["branch_id"]:
+        brow = await db.fetchone("SELECT name FROM branches WHERE id=?", (g["branch_id"],))
+        branch_name = brow["name"] if brow else None
     trow = await db.fetchone("SELECT registry_rate FROM teachers WHERE tg_id=?", (g["teacher_id"],)) \
         if g["teacher_id"] else None
     reg_price = trow["registry_rate"] if trow else 0
@@ -130,8 +134,9 @@ async def save_attendance(db, bot: Bot | None, uid: int, gid: int, day: date, st
 
     sent = 0
     if bot is not None:
-        pdf = attendance_pdf(g["name"], teacher_name, f"{day:%d.%m.%Y}", rows)
-        caption = (f"📋 {g['name']} davomati ({teacher_name}) {day:%d.%m.%Y}\n"
+        pdf = attendance_pdf(g["name"], teacher_name, f"{day:%d.%m.%Y}", rows, branch_name)
+        caption = (f"📋 {g['name']} davomati ({teacher_name})" + (f" · 🏢 {branch_name}" if branch_name else "") +
+                   f" {day:%d.%m.%Y}\n"
                    f"Kelmagan: {counts['absent'] + counts['excused']}, kechikkan: {counts['late']}")
         if absent_lines:
             caption = (caption + "\n" + "\n".join(absent_lines))[:900]
