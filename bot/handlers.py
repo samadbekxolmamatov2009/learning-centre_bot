@@ -482,16 +482,22 @@ async def t_id(m: Message, state: FSMContext):
 async def t_name(m: Message, state: FSMContext):
     await state.update_data(name=m.text.strip())
     await state.set_state(AddTeacher.pay_type)
-    await m.answer("Oylik turi:", reply_markup=kb([["Foiz (%)", "O'quvchi boshiga"]]))
+    await m.answer("Oylik turi:", reply_markup=kb([["Foiz (%)", "O'quvchi boshiga"], ["Aniq oylik"]]))
 
 
-@router.message(AddTeacher.pay_type, F.text.in_({"Foiz (%)", "O'quvchi boshiga"}))
+@router.message(AddTeacher.pay_type, F.text.in_({"Foiz (%)", "O'quvchi boshiga", "Aniq oylik"}))
 async def t_type(m: Message, state: FSMContext):
-    pt = "percent" if m.text.startswith("Foiz") else "per_student"
+    pt = "percent" if m.text.startswith("Foiz") else ("fixed" if m.text == "Aniq oylik" else "per_student")
     await state.update_data(pay_type=pt)
     await state.set_state(AddTeacher.value)
-    await m.answer("Foiz (masalan 40):" if pt == "percent" else "Bir o'quvchi uchun summa (so'm).\nMasalan 200000: o'quvchi 400000 gacha to'lasa "
-        "o'qituvchi to'lovning 40% ini oladi, undan ko'p to'lasa 200000.")
+    if pt == "percent":
+        prompt = "Foiz (masalan 40):"
+    elif pt == "fixed":
+        prompt = "Har oylik aniq summa (so'm), masalan 1500000:"
+    else:
+        prompt = ("Bir o'quvchi uchun summa (so'm).\nMasalan 200000: o'quvchi 400000 gacha to'lasa "
+                  "o'qituvchi to'lovning 40% ini oladi, undan ko'p to'lasa 200000.")
+    await m.answer(prompt)
 
 
 @router.message(AddTeacher.value)
@@ -920,6 +926,7 @@ async def salary_text(db, tid, month):
     pt, pv, rows, total = await D.teacher_salary(db, tid, month)
     t = await D.fetchone(db, "SELECT low_pay_percent FROM teachers WHERE tg_id=?", (tid,))
     how = (f"{pv:g}% (to'lovdan)" if pt == "percent" else
+           f"{money(pv)} / oy (aniq oylik)" if pt == "fixed" else
            f"{money(pv)} / o'quvchi ({money(pv * D.LOW_PAY_MULT)} gacha to'lasa - "
            f"to'lovning {t['low_pay_percent']}%)")
     out = [f"💰 Oylik ({month})", f"Tizim: {how}", ""]

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users(
     branch_id INTEGER REFERENCES branches(id));
 CREATE TABLE IF NOT EXISTS teachers(
     tg_id INTEGER PRIMARY KEY REFERENCES users(tg_id),
-    pay_type TEXT NOT NULL CHECK(pay_type IN ('percent','per_student')),
+    pay_type TEXT NOT NULL CHECK(pay_type IN ('percent','per_student','fixed')),
     pay_value REAL NOT NULL,
     registry_rate INTEGER NOT NULL DEFAULT 0,
     low_pay_percent INTEGER NOT NULL DEFAULT 40);
@@ -174,6 +174,18 @@ class Database:
                 await self.execute(f"ALTER TABLE students ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
         if "joined_at" not in cols:
             await self.execute("ALTER TABLE students ADD COLUMN joined_at TEXT NOT NULL DEFAULT ''")
+        trow = await self.fetchone("SELECT sql FROM sqlite_master WHERE type='table' AND name='teachers'")
+        if trow and "'fixed'" not in (trow["sql"] or ""):
+            await self.batch([
+                ("DROP TABLE IF EXISTS teachers_new", ()),
+                ("CREATE TABLE teachers_new(tg_id INTEGER PRIMARY KEY REFERENCES users(tg_id), "
+                 "pay_type TEXT NOT NULL CHECK(pay_type IN ('percent','per_student','fixed')), "
+                 "pay_value REAL NOT NULL, registry_rate INTEGER NOT NULL DEFAULT 0, "
+                 "low_pay_percent INTEGER NOT NULL DEFAULT 40)", ()),
+                ("INSERT INTO teachers_new(tg_id,pay_type,pay_value,registry_rate,low_pay_percent) "
+                 "SELECT tg_id,pay_type,pay_value,registry_rate,low_pay_percent FROM teachers", ()),
+                ("DROP TABLE teachers", ()),
+                ("ALTER TABLE teachers_new RENAME TO teachers", ())])
         escols = [r["name"] for r in await self.fetchall("PRAGMA table_info(exam_scores)")]
         if "grade" not in escols:
             await self.execute("ALTER TABLE exam_scores ADD COLUMN grade TEXT NOT NULL DEFAULT ''")
@@ -540,13 +552,18 @@ async def teacher_salary(db, teacher_id, month=None, branch_id=None):
     if branch_id:
         sql += " AND branch_id=?"
         args.append(branch_id)
-    for g in await fetchall(db, sql, tuple(args)):
+    groups = await fetchall(db, sql, tuple(args))
+    for g in groups:
         income = await group_income(db, g["id"], month)
         pay_rows = await group_payment_rows(db, g["id"], month)
         rows.append((g["name"], income, len(pay_rows)))
         if t["pay_type"] == "percent":
             total += income * t["pay_value"] / 100
-        else:
+        elif t["pay_type"] == "per_student":
             total += sum(per_student_pay(t["pay_value"], r["paid_sum"], t["low_pay_percent"]) for r in pay_rows)
+    if t["pay_type"] == "fixed" and (branch_id is None or groups):
+        # aniq oylik - guruhlar/to'lovlardan qat'i nazar har oy belgilangan summa. Filial bo'yicha
+        # hisoblanganda faqat shu filialda guruhi bo'lsa qo'shiladi (boshqa filialda takrorlanmasin).
+        total += t["pay_value"]
     total += sum(r[2] for r in await registry_rows(db, teacher_id, month, branch_id))  # reyestr: 100%
     return t["pay_type"], t["pay_value"], rows, total
