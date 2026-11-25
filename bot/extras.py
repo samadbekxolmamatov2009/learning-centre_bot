@@ -17,7 +17,7 @@ from . import db as D
 from .config import TZ_OFFSET, REMINDER_HOUR, WEBAPP_URL
 from .importer import parse_file
 from .handlers import (webapp_markup, Role, STAFF, ANYONE, DIRECTOR, prev_months, with_phone, student_pager, group_picker, confirm_kb, money, months_markup, debtors_text,
-                       can_access_group, normalize_phone)
+                       can_access_group, normalize_phone, _teacher_scope)
 
 router = Router()
 log = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ class EditPhone(StatesGroup):
 @router.message(F.text == "📞 Telefonni o'zgartirish", ANYONE)
 async def ph_start(m: Message, db):
     uid = m.from_user.id
-    mk = await group_picker(db, "pg2", uid if await D.get_role(db, uid) == "teacher" else None)
+    mk = await group_picker(db, "pg2", await _teacher_scope(db, uid))
     await m.answer("Qaysi guruh?", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
 
 
@@ -363,7 +363,7 @@ async def sr_do(m: Message, db, state: FSMContext):
     args = ()
     if await D.get_role(db, uid) == "teacher":
         sql += " AND g.teacher_id=?"
-        args = (uid,)
+        args = (await D.effective_teacher_id(db, uid),)
     paid_ids = {r["student_id"] for r in await db.fetchall(
         "SELECT DISTINCT student_id FROM payments WHERE month=?", (D.current_month(),))}
     paid_ids |= {s["id"] for s in await db.fetchall("SELECT id FROM students WHERE is_registry=1 AND hidden=0")}
@@ -843,7 +843,7 @@ UPLOAD_HELP = (
 @router.message(F.text == "📤 Fayldan yuklash", ANYONE)
 async def up_start(m: Message, db):
     uid = m.from_user.id
-    mk = await group_picker(db, "ugp", uid if await D.get_role(db, uid) == "teacher" else None)
+    mk = await group_picker(db, "ugp", await _teacher_scope(db, uid))
     await m.answer("Qaysi guruhga yuklaymiz?", reply_markup=mk) if mk else await m.answer("Guruhlar yo'q.")
 
 
