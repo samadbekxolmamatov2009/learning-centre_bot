@@ -289,15 +289,25 @@ async def group_picker(db, prefix, teacher_id=None):
     return b.as_markup() if groups else None
 
 
+async def _teacher_scope(db, uid):
+    """O'qituvchi (yoki yordamchi o'qituvchi) uchun guruhlarni filtrlash uchun tg_id,
+    boshqa rol uchun None (cheklovsiz)."""
+    if await D.get_role(db, uid) != "teacher":
+        return None
+    return await D.effective_teacher_id(db, uid)
+
+
 async def can_access_group(db, uid, gid) -> bool:
     """Admin/direktor - hamma guruh (admin bitta filialga biriktirilgan bo'lsa, faqat o'sha
-    filialdagi guruhlar), o'qituvchi - faqat o'zining guruhi."""
+    filialdagi guruhlar), o'qituvchi - faqat o'zining guruhi, yordamchi o'qituvchi - yordam
+    beradigan katta o'qituvchining barcha guruhlari."""
     role = await D.get_role(db, uid)
     g = await D.fetchone(db, "SELECT teacher_id, branch_id FROM groups WHERE id=?", (gid,))
     if not g or role is None:
         return False
     if role == "teacher":
-        return g["teacher_id"] == uid
+        tid = await D.effective_teacher_id(db, uid)
+        return tid is not None and g["teacher_id"] == tid
     if role not in ("admin", "director"):
         return False
     scope = await D.admin_branch_scope(db, uid, role)
@@ -698,7 +708,7 @@ async def s_grade(m: Message, state: FSMContext):
 
 
 async def ask_group(msg: Message, db, state: FSMContext, uid: int):
-    mk = await group_picker(db, "sg", uid if await D.get_role(db, uid) == "teacher" else None)
+    mk = await group_picker(db, "sg", await _teacher_scope(db, uid))
     if not mk:
         await state.clear()
         return await msg.answer("Avval guruh yarating.")
@@ -873,7 +883,7 @@ async def staff_debtors(m: Message, db):
 @router.message(F.text == "📋 Qarzdorlarni ko'rish", TEACHER)
 async def teacher_debtors(m: Message, db):
     groups = await D.fetchall(db, "SELECT id FROM groups WHERE teacher_id=? ORDER BY name",
-                              (m.from_user.id,))
+                              (await D.effective_teacher_id(db, m.from_user.id),))
     if not groups:
         return await m.answer("Sizda guruh yo'q.")
     for g in groups:
@@ -883,12 +893,8 @@ async def teacher_debtors(m: Message, db):
 @router.callback_query(F.data.startswith("dg:"))
 async def debtors_cb(c: CallbackQuery, db):
     gid = int(c.data[3:])
-    role = await D.get_role(db, c.from_user.id)
-    g = await D.fetchone(db, "SELECT teacher_id FROM groups WHERE id=?", (gid,))
-    if role == "teacher" and g["teacher_id"] != c.from_user.id:
+    if not await can_access_group(db, c.from_user.id, gid):
         return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
-    if role is None:
-        return await c.answer()
     await c.message.answer(await debtors_text(db, gid))
     await c.answer()
 
@@ -946,12 +952,16 @@ async def salary_text(db, tid, month):
 
 @router.message(F.text == "💰 Oylikni ko'rish", TEACHER)
 async def my_salary(m: Message, db):
+    if await D.is_assistant(db, m.from_user.id):
+        return await m.answer("Yordamchi o'qituvchi sifatida oylik ma'lumoti sizga ko'rinmaydi.")
     await m.answer(await salary_text(db, m.from_user.id, D.current_month()) +
                    "\n\nBoshqa oy:", reply_markup=months_markup("ms"))
 
 
 @router.callback_query(F.data.startswith("ms:"), TEACHER)
 async def my_salary_month(c: CallbackQuery, db):
+    if await D.is_assistant(db, c.from_user.id):
+        return await c.answer("Yordamchi o'qituvchiga bu ko'rinmaydi.", show_alert=True)
     await c.message.edit_text(await salary_text(db, c.from_user.id, c.data[3:]) +
                               "\n\nBoshqa oy:", reply_markup=months_markup("ms"))
     await c.answer()
@@ -977,13 +987,13 @@ async def att_start(m: Message, db):
         kb_ = webapp_markup()
         kb_.inline_keyboard.append([InlineKeyboardButton(text="💬 Chatda belgilash", callback_data="att:chat")])
         return await m.answer("Davomat uchun tugmani bosing 👇", reply_markup=kb_)
-    mk = await group_picker(db, "ag", m.from_user.id)
+    mk = await group_picker(db, "ag", await D.effective_teacher_id(db, m.from_user.id))
     await m.answer("Guruhni tanlang:", reply_markup=mk) if mk else await m.answer("Sizda guruh yo'q.")
 
 
 @router.callback_query(F.data == "att:chat", TEACHER)
 async def att_chat(c: CallbackQuery, db):
-    mk = await group_picker(db, "ag", c.from_user.id)
+    mk = await group_picker(db, "ag", await D.effective_teacher_id(db, c.from_user.id))
     await c.message.answer("Guruhni tanlang:", reply_markup=mk) if mk else await c.message.answer("Sizda guruh yo'q.")
     await c.answer()
 
@@ -1013,9 +1023,9 @@ def att_title(g, day, days_hint=True):
 @router.callback_query(F.data.startswith("ag:"), TEACHER)
 async def att_group(c: CallbackQuery, db, state: FSMContext):
     gid = int(c.data[3:])
-    g = await D.fetchone(db, "SELECT * FROM groups WHERE id=?", (gid,))
-    if g["teacher_id"] != c.from_user.id:
+    if not await can_access_group(db, c.from_user.id, gid):
         return await c.answer("Bu sizning guruhingiz emas", show_alert=True)
+    g = await D.fetchone(db, "SELECT * FROM groups WHERE id=?", (gid,))
     day = D.today_local().isoformat()
     st = {str(k): v for k, v in (await A.day_statuses(db, gid, day)).items()}
     await state.update_data(att_group=gid, day=day, st=st)

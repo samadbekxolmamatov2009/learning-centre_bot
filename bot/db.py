@@ -88,6 +88,11 @@ CREATE TABLE IF NOT EXISTS advances(
     amount INTEGER NOT NULL, month TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS idx_advances_teacher_month ON advances(teacher_id, month);
+CREATE TABLE IF NOT EXISTS assistants(
+    tg_id INTEGER PRIMARY KEY REFERENCES users(tg_id),
+    teacher_id INTEGER NOT NULL REFERENCES users(tg_id),
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS idx_assistants_teacher ON assistants(teacher_id);
 """
 
 LEAD_STATUS_LABELS = {"new": "🆕 Yangi", "contacted": "📞 Bog'lanildi", "trial": "🎓 Sinov darsida",
@@ -380,6 +385,21 @@ async def fetchone(db, sql, args=()):
 async def get_role(db, tg_id):
     row = await fetchone(db, "SELECT role FROM users WHERE tg_id=?", (tg_id,))
     return row["role"] if row else None
+
+
+async def is_assistant(db, uid):
+    """uid yordamchi o'qituvchimi (o'zining guruhlari/oyligi yo'q, katta o'qituvchiga yordam beradi)."""
+    return bool(await fetchone(db, "SELECT 1 FROM assistants WHERE tg_id=?", (uid,)))
+
+
+async def effective_teacher_id(db, uid):
+    """uid haqiqiy o'qituvchi bo'lsa - o'zining tg_id'si, yordamchi o'qituvchi bo'lsa - yordam
+    beradigan katta o'qituvchining tg_id'si qaytadi. Boshqa holatda (hali biriktirilmagan
+    yordamchi, yoki teacher/assistant emas) None."""
+    if await fetchone(db, "SELECT 1 FROM teachers WHERE tg_id=?", (uid,)):
+        return uid
+    row = await fetchone(db, "SELECT teacher_id FROM assistants WHERE tg_id=?", (uid,))
+    return row["teacher_id"] if row else None
 
 
 async def admin_branch_scope(db, uid, role):

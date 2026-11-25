@@ -166,7 +166,8 @@ const S = {me:null, view:'groups', tab:'groups', att:null, dash:null, dashBranch
   salary:{loading:false, data:null, month:null, teacherId:null, teacherName:'', advances:null, advanceOpen:false},
   rank:{loading:false, data:null, branch:null},
   xport:{busy:false, error:'', month:null},
-  hr:{view:'home', teachers:[], admins:[], branches:[], registry:null, orphans:null, toast:'', tform:null, aform:null, bform:null},
+  hr:{view:'home', teachers:[], admins:[], branches:[], registry:null, orphans:null, toast:'', tform:null, aform:null, bform:null,
+      assistTeacherId:null, assistTeacherName:'', assistants:null, assistAddOpen:false},
   notif:{count:0, items:null, loading:false, from:null},
   exam:{view:'list', groupId:null, groupName:'', list:[], loading:false, form:null, detail:null, students:[], scores:{}, grades:{}, gradeOptions:[], toast:'', notLinked:null},
   cert:{view:'groups', groups:[], group:null, students:[], subjects:[], grades:[], detail:null, detailCerts:[],
@@ -579,6 +580,58 @@ async function deleteAdvance(aid) {
     await loadSalary(S.salary.month);
   } catch (e) { alert(e.message); }
 }
+async function loadAssistants(tid, name) {
+  S.hr.assistTeacherId = tid; S.hr.assistTeacherName = name || '';
+  S.hr.assistAddOpen = false; S.hr.view = 'assist'; S.hr.assistants = null; render();
+  try {
+    const d = await api(`/api/teachers/${tid}/assistants`);
+    S.hr.assistants = d.assistants;
+  } catch (e) { alert(e.message); S.hr.view = 'home'; }
+  render();
+}
+async function addAssistant() {
+  const aid = parseInt(document.getElementById('as_id').value, 10);
+  const name = document.getElementById('as_name').value.trim();
+  if (!aid) return alert('Telegram ID kiriting.');
+  if (name.length < 2) return alert('Ism familiyani to\'liq kiriting.');
+  S.busy = true; render();
+  try {
+    await api(`/api/teachers/${S.hr.assistTeacherId}/assistants`, {method: 'POST', body: JSON.stringify({id: aid, name})});
+    haptic('medium');
+    S.hr.assistAddOpen = false;
+    S.busy = false;
+    await loadAssistants(S.hr.assistTeacherId, S.hr.assistTeacherName);
+    await refreshStaff();
+  } catch (e) { alert(e.message); S.busy = false; render(); }
+}
+async function deleteAssistant(aid) {
+  const ok = tg && tg.showConfirm ? await new Promise(r => tg.showConfirm("Yordamchi o'chirilsinmi?", r))
+                                   : confirm("Yordamchi o'chirilsinmi?");
+  if (!ok) return;
+  try {
+    await api(`/api/assistants/${aid}`, {method: 'DELETE'});
+    haptic('medium');
+    await loadAssistants(S.hr.assistTeacherId, S.hr.assistTeacherName);
+    await refreshStaff();
+  } catch (e) { alert(e.message); }
+}
+function viewHrAssistants() {
+  const h = S.hr;
+  if (!h.assistants) return '<div class="spin" style="margin:60px auto"></div>';
+  return `<div class="top"><button class="back" data-act="assist-back">‹</button><h1>${esc(h.assistTeacherName)}</h1></div>
+    <div class="sub" style="margin-top:-6px">👥 Yordamchi o'qituvchilar</div>
+    <div class="sec" style="margin-top:16px">Yordamchilar</div>
+    <div class="list">${h.assistants.map(a => `<div class="srow-row">
+        <div class="who"><div class="name">${esc(a.name)}</div><div class="meta">ID ${a.id}</div></div>
+        <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="assist-del" data-id="${a.id}">🗑</button>
+      </div>`).join('') || '<div class="empty">Yordamchi yo\'q</div>'}</div>
+    <button class="abtn" style="width:100%;margin-top:10px" data-act="assist-add-toggle">➕ Yordamchi qo'shish</button>
+    ${h.assistAddOpen ? `<div class="inline-form" style="flex-direction:column;align-items:stretch;gap:8px">
+      <input class="input" id="as_id" type="number" inputmode="numeric" placeholder="Telegram ID, masalan 123456789">
+      <input class="input" id="as_name" placeholder="Ism familiya">
+      <button class="primary" data-act="assist-save" ${S.busy ? 'disabled' : ''}>Qo'shish</button>
+    </div>` : ''}`;
+}
 function salaryKpis(d, editable) {
   const advance = d.advance || 0;
   const net = d.net_total !== undefined ? d.net_total : d.total;
@@ -787,7 +840,9 @@ function viewHrHome() {
       <div class="list">${h.teachers.map(t => `<div class="srow-row">
           <div class="who"><div class="name">${esc(t.name)}</div>
             <div class="meta">${payHow(t)}${t.registry_rate ? ` · 🏛 ${money(t.registry_rate)}` : ''} · ${t.groups} guruh
-              ${t.branch_name ? ' · 🏢 ' + esc(t.branch_name) : ''}</div></div>
+              ${t.assistants ? ` · 👥 ${t.assistants}` : ''}${t.branch_name ? ' · 🏢 ' + esc(t.branch_name) : ''}</div></div>
+          <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-assist-open"
+            data-id="${t.id}" data-name="${esc(t.name)}">👥</button>
           <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-teacher-salary"
             data-id="${t.id}" data-name="${esc(t.name)}">💰</button>
         </div>`).join('') || '<div class="empty">O\'qituvchilar yo\'q</div>'}</div>`;
@@ -798,7 +853,9 @@ function viewHrHome() {
     <div class="list">${h.teachers.map(t => `<div class="srow-row" data-act="hr-teacher-open" data-id="${t.id}">
         <div class="who"><div class="name">${esc(t.name)}</div>
           <div class="meta">${payHow(t)}${t.registry_rate ? ` · 🏛 ${money(t.registry_rate)}` : ''} · ${t.groups} guruh
-            ${t.branch_name ? ' · 🏢 ' + esc(t.branch_name) : ''}</div></div>
+            ${t.assistants ? ` · 👥 ${t.assistants}` : ''}${t.branch_name ? ' · 🏢 ' + esc(t.branch_name) : ''}</div></div>
+        <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-assist-open"
+          data-id="${t.id}" data-name="${esc(t.name)}">👥</button>
         <button class="iconbtn" style="width:40px;height:40px;font-size:16px" data-act="hr-teacher-salary"
           data-id="${t.id}" data-name="${esc(t.name)}">💰</button>
         <span class="sub">▸</span></div>`).join('') || '<div class="empty">O\'qituvchilar yo\'q</div>'}</div>
@@ -951,7 +1008,7 @@ async function hrDeleteOrphans() {
   } catch (e) { alert(e.message); }
   S.busy = false; render();
 }
-const HR_VIEWS = {home: viewHrHome, tform: viewHrTeacherForm, aform: viewHrAdminForm, bform: viewHrBranchForm};
+const HR_VIEWS = {home: viewHrHome, tform: viewHrTeacherForm, aform: viewHrAdminForm, bform: viewHrBranchForm, assist: viewHrAssistants};
 
 function hrOpenTeacher(id) {
   const t = S.hr.teachers.find(x => x.id === id);
@@ -1879,7 +1936,7 @@ function tabs() {
   const first = staff
     ? `<button class="${S.tab === 'dash' ? 'on' : ''}" data-act="tab" data-tab="dash"><span>📊</span>Panel</button>`
     : `<button class="${S.tab === 'groups' ? 'on' : ''}" data-act="tab" data-tab="groups"><span>📝</span>Davomat</button>`;
-  const salTab = staff ? '' : `<button class="${S.tab === 'sal' ? 'on' : ''}" data-act="tab" data-tab="sal"><span>💰</span>Oylik</button>`;
+  const salTab = (staff || S.me.is_assistant) ? '' : `<button class="${S.tab === 'sal' ? 'on' : ''}" data-act="tab" data-tab="sal"><span>💰</span>Oylik</button>`;
   const hrTab = S.me.role !== 'teacher' ? `<button class="${S.tab === 'hr' ? 'on' : ''}" data-act="tab" data-tab="hr"><span>👨‍🏫</span>Xodimlar</button>` : '';
   const certTab = `<button class="${S.tab === 'cert' ? 'on' : ''}" data-act="tab" data-tab="cert"><span>🎓</span>Sertifikat</button>`;
   const leadsTab = staff ? `<button class="${S.tab === 'leads' ? 'on' : ''}" data-act="tab" data-tab="leads"><span>🧲</span>Lidlar</button>` : '';
@@ -2065,6 +2122,11 @@ document.addEventListener('click', e => {
   else if (act === 'adv-save') addAdvance();
   else if (act === 'adv-del') deleteAdvance(Number(t.dataset.id));
   else if (act === 'hr-teacher-salary') { S.salary.advanceOpen = false; S.salary.advances = null; loadSalary(null, id, t.dataset.name); }
+  else if (act === 'hr-assist-open') loadAssistants(id, t.dataset.name);
+  else if (act === 'assist-back') { S.hr.view = 'home'; render(); }
+  else if (act === 'assist-add-toggle') { S.hr.assistAddOpen = !S.hr.assistAddOpen; render(); }
+  else if (act === 'assist-save') addAssistant();
+  else if (act === 'assist-del') deleteAssistant(id);
   else if (act === 'exam-open-list') openExamList(S.stu.group.id, S.stu.group.name);
   else if (act === 'exam-back') examBack();
   else if (act === 'exam-new') { S.exam.form = {title:'', max_score:'', day: S.me.today}; S.exam.toast = ''; S.exam.view = 'form'; render(); }

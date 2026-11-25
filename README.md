@@ -100,6 +100,17 @@ ro'yxati va soni. **"🗑 Hammasini bittada o'chirish"** tugmasi — ularning ba
 ulardan birortasida sertifikat yoki 189 ball belgisi bo'lsa, u hali ham arxivlanadi, butunlay o'chirilmaydi -
 odatdagi o'chirish qoidasi bilan bir xil). Bunday o'quvchilar yo'q bo'lsa, bu bo'lim umuman ko'rinmaydi.
 
+## Yordamchi o'qituvchi
+Ba'zi o'qituvchilar botni o'zlari emas, yordamchilari orqali yuritishadi. Admin yoki direktor
+Xodimlar bo'limida har bir o'qituvchi qatoridagi **"👥"** tugmasi orqali o'sha o'qituvchiga istalgancha
+yordamchi biriktirishi mumkin (Telegram ID va ism-familiyasi bilan). Yordamchi:
+- Katta o'qituvchining **barcha** guruhlarida xuddi o'qituvchining o'zidek ishlaydi - davomat oladi,
+  guruhlarni ko'radi, o'quvchi qo'shadi va hokazo (teacher rolidagi barcha imkoniyatlar).
+- **O'z oyligi yo'q** - uning ishi to'liq katta o'qituvchining hisobiga yoziladi, shuning uchun
+  "💰 Oylik" bo'limi yordamchiga ko'rinmaydi (na Mini App'da, na chatda).
+- Bir xil odam faqat bitta o'qituvchiga yordamchi bo'la oladi; o'qituvchini o'chirishda uning
+  barcha yordamchilari ham avtomatik o'chiriladi.
+
 ## O'qituvchi oylik turlari
 O'qituvchi qo'shish/tahrirlashda (faqat direktor) uch xil oylik turidan birini tanlash mumkin: **Foiz (%)**
 (guruh tushumidan foiz), **O'quvchi boshiga** (har o'quvchi uchun belgilangan summa, kam to'lasa pastroq foiz

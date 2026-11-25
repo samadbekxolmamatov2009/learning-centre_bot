@@ -70,7 +70,7 @@ async def teachers_markup(db):
 
 @router.message(F.text == "📚 Guruhlarim", TEACHER_ONLY)
 async def my_groups(m: Message, db):
-    mk, n = await groups_markup(db, m.from_user.id)
+    mk, n = await groups_markup(db, await D.effective_teacher_id(db, m.from_user.id))
     await m.answer("📚 <b>Guruhlaringiz</b>\nGuruhni tanlang 👇" if n else "Sizda hali guruh yo'q.",
                    reply_markup=mk if n else None, parse_mode="HTML")
 
@@ -89,7 +89,7 @@ async def gl_back(c: CallbackQuery, db):
 
 @router.callback_query(F.data == "gl:mine", TEACHER_ONLY)
 async def gl_mine(c: CallbackQuery, db):
-    mk, n = await groups_markup(db, c.from_user.id)
+    mk, n = await groups_markup(db, await D.effective_teacher_id(db, c.from_user.id))
     await safe_edit(c, "📚 <b>Guruhlaringiz</b>\nGuruhni tanlang 👇", mk)
     await c.answer()
 

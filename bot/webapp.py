@@ -135,7 +135,8 @@ async def api_me(request):
     today = D.today_local().isoformat()
     if role == "teacher":
         groups = await db.fetchall("SELECT id, name, lesson_days, lesson_time FROM groups "
-                                   "WHERE teacher_id=? AND archived=0 ORDER BY name", (uid,))
+                                   "WHERE teacher_id=? AND archived=0 ORDER BY name",
+                                   (await D.effective_teacher_id(db, uid),))
     else:
         groups = await db.fetchall("SELECT g.id, g.name, g.lesson_days, g.lesson_time FROM groups g "
                                    "WHERE g.archived=0 ORDER BY g.name")
@@ -145,6 +146,7 @@ async def api_me(request):
         "SELECT DISTINCT group_id FROM attendance WHERE day=?", (today,))}
     return web.json_response({
         "role": role, "name": name, "today": today,
+        "is_assistant": role == "teacher" and await D.is_assistant(db, uid),
         "groups": [{"id": g["id"], "name": g["name"], "students": counts.get(g["id"], 0),
                     "taken_today": g["id"] in taken, "days": g["lesson_days"], "time": g["lesson_time"]}
                    for g in groups]})
@@ -304,7 +306,8 @@ async def api_groups(request):
     if role == "teacher":
         groups = await db.fetchall("SELECT g.id, g.name, g.lesson_days, g.lesson_time, g.branch_id, "
                                    "b.name AS branch_name FROM groups g LEFT JOIN branches b ON b.id=g.branch_id "
-                                   "WHERE g.teacher_id=? AND g.archived=0 ORDER BY g.name", (uid,))
+                                   "WHERE g.teacher_id=? AND g.archived=0 ORDER BY g.name",
+                                   (await D.effective_teacher_id(db, uid),))
     else:
         scope = await D.admin_branch_scope(db, uid, role)
         view_filter = scope
@@ -486,7 +489,7 @@ async def api_students_get(request):
     args = []
     if role == "teacher":
         sql += " AND g.teacher_id=?"
-        args.append(uid)
+        args.append(await D.effective_teacher_id(db, uid))
     else:
         scope = await D.admin_branch_scope(db, uid, role)
         if scope is not None:
@@ -1291,7 +1294,7 @@ async def api_certificates_graduated(request):
     args = []
     if role == "teacher":
         sql += " AND s.group_id IN (SELECT id FROM groups WHERE teacher_id=?)"
-        args.append(uid)
+        args.append(await D.effective_teacher_id(db, uid))
     sql += " ORDER BY s.last_name, s.first_name"
     studs = await db.fetchall(sql, tuple(args))
     out = []
@@ -1366,7 +1369,8 @@ async def api_student_cert189_post(request):
 def teacher_out(t):
     return {"id": t["tg_id"], "name": t["full_name"], "pay_type": t["pay_type"], "pay_value": t["pay_value"],
             "registry_rate": t["registry_rate"], "low_pay_percent": t["low_pay_percent"], "groups": t.get("groups", 0),
-            "branch_id": t.get("branch_id"), "branch_name": t.get("branch_name")}
+            "branch_id": t.get("branch_id"), "branch_name": t.get("branch_name"),
+            "assistants": t.get("assistants", 0)}
 
 
 async def api_teachers(request):
@@ -1379,7 +1383,8 @@ async def api_teachers(request):
     scope = await D.admin_branch_scope(db, uid, role)
     sql = ("SELECT u.tg_id, u.full_name, u.branch_id, b.name AS branch_name, t.pay_type, t.pay_value, "
           "t.registry_rate, t.low_pay_percent, "
-          "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id AND g.archived=0) AS groups "
+          "(SELECT COUNT(*) FROM groups g WHERE g.teacher_id=u.tg_id AND g.archived=0) AS groups, "
+          "(SELECT COUNT(*) FROM assistants a WHERE a.teacher_id=u.tg_id) AS assistants "
           "FROM users u JOIN teachers t ON t.tg_id=u.tg_id LEFT JOIN branches b ON b.id=u.branch_id")
     args = ()
     if scope is not None:
@@ -1487,9 +1492,79 @@ async def api_teacher_delete(request):
     t = await db.fetchone("SELECT full_name FROM users WHERE tg_id=? AND role='teacher'", (tid,))
     if not t:
         return bad("Topilmadi", 404)
+    assistants = await db.fetchall("SELECT tg_id FROM assistants WHERE teacher_id=?", (tid,))
     await db.batch([("UPDATE groups SET teacher_id=NULL WHERE teacher_id=?", (tid,)),
                     ("DELETE FROM teachers WHERE tg_id=?", (tid,)),
-                    ("DELETE FROM users WHERE tg_id=?", (tid,))])
+                    ("DELETE FROM assistants WHERE teacher_id=?", (tid,)),
+                    ("DELETE FROM users WHERE tg_id=?", (tid,))] +
+                   [("DELETE FROM users WHERE tg_id=?", (a["tg_id"],)) for a in assistants])
+    return web.json_response({"ok": True})
+
+
+async def _assistant_teacher_access(db, uid, role, tid):
+    """Admin/direktor shu o'qituvchining yordamchilarini boshqarishi mumkinmi (filial cheklovi bilan)."""
+    t = await db.fetchone("SELECT u.branch_id FROM users u JOIN teachers t ON t.tg_id=u.tg_id WHERE u.tg_id=?", (tid,))
+    if not t:
+        return False
+    scope = await D.admin_branch_scope(db, uid, role)
+    return scope is None or t["branch_id"] == scope
+
+
+async def api_assistants_get(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        tid = int(request.match_info["tid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    if not await _assistant_teacher_access(db, uid, role, tid):
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    rows = await db.fetchall(
+        "SELECT a.tg_id, u.full_name FROM assistants a JOIN users u ON u.tg_id=a.tg_id "
+        "WHERE a.teacher_id=? ORDER BY u.full_name", (tid,))
+    return web.json_response({"assistants": [{"id": r["tg_id"], "name": r["full_name"]} for r in rows]})
+
+
+async def api_assistant_post(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        tid = int(request.match_info["tid"])
+        body = await request.json()
+        aid = int(body["id"])
+        name = clean_text(body.get("name"), 80)
+    except Exception:
+        return bad("Ma'lumotlar noto'g'ri")
+    if len(name) < 2:
+        return bad("Ism familiyani to'liq kiriting")
+    if not await _assistant_teacher_access(db, uid, role, tid):
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    if await db.fetchone("SELECT 1 FROM users WHERE tg_id=?", (aid,)):
+        return bad("Bu ID allaqachon ro'yxatda bor")
+    await db.batch([
+        ("INSERT INTO users(tg_id,full_name,role) VALUES(?,?,'teacher')", (aid, name)),
+        ("INSERT INTO assistants(tg_id,teacher_id) VALUES(?,?)", (aid, tid))])
+    return web.json_response({"ok": True})
+
+
+async def api_assistant_delete(request):
+    uid, role, _ = await auth(request)
+    if role not in ("admin", "director"):
+        return bad("Ruxsat yo'q", 403)
+    db = request.app["db"]
+    try:
+        aid = int(request.match_info["aid"])
+    except Exception:
+        return bad("So'rov noto'g'ri")
+    a = await db.fetchone("SELECT teacher_id FROM assistants WHERE tg_id=?", (aid,))
+    if not a or not await _assistant_teacher_access(db, uid, role, a["teacher_id"]):
+        return bad("Topilmadi yoki ruxsat yo'q", 404)
+    await db.batch([("DELETE FROM assistants WHERE tg_id=?", (aid,)),
+                    ("DELETE FROM users WHERE tg_id=?", (aid,))])
     return web.json_response({"ok": True})
 
 
@@ -1812,7 +1887,8 @@ async def api_notifications(request):
         gsql += " ORDER BY g.name"
         groups = await db.fetchall(gsql, gargs)
     else:
-        groups = await db.fetchall("SELECT * FROM groups WHERE teacher_id=? AND archived=0 ORDER BY name", (uid,))
+        groups = await db.fetchall("SELECT * FROM groups WHERE teacher_id=? AND archived=0 ORDER BY name",
+                                   (await D.effective_teacher_id(db, uid),))
 
     taken_today = {r["group_id"] for r in await db.fetchall(
         "SELECT DISTINCT group_id FROM attendance WHERE day=?", (today_iso,))}
@@ -1947,6 +2023,9 @@ def create_app(db, bot=None) -> web.Application:
     app.router.add_post("/api/teachers", api_teacher_post)
     app.router.add_patch("/api/teachers/{tid}", api_teacher_patch)
     app.router.add_delete("/api/teachers/{tid}", api_teacher_delete)
+    app.router.add_get("/api/teachers/{tid}/assistants", api_assistants_get)
+    app.router.add_post("/api/teachers/{tid}/assistants", api_assistant_post)
+    app.router.add_delete("/api/assistants/{aid}", api_assistant_delete)
     app.router.add_get("/api/admins", api_admins)
     app.router.add_post("/api/admins", api_admin_post)
     app.router.add_patch("/api/admins/{aid}", api_admin_patch)
