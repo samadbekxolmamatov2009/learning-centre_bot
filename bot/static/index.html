@@ -610,7 +610,8 @@ function salaryKpis(d, editable) {
 function viewSalary() {
   const d = S.salary.data;
   if (S.salary.loading || !d) return '<div class="spin" style="margin:60px auto"></div>';
-  const how = d.pay_type === 'percent' ? `${d.pay_value}% (to'lovdan)` : `${money(d.pay_value)} so'm / o'quvchi`;
+  const how = d.pay_type === 'percent' ? `${d.pay_value}% (to'lovdan)` :
+    d.pay_type === 'fixed' ? `${money(d.pay_value)} so'm / oy (aniq oylik)` : `${money(d.pay_value)} so'm / o'quvchi`;
   const chips = d.months.map(m => `<button class="dchip ${m === d.month ? 'on' : ''}" data-act="sal-month" data-month="${m}">${m}</button>`).join('');
   if (S.salary.teacherId) {
     return `<div class="top"><button class="back" data-act="sal-back">‹</button><h1>${esc(S.salary.teacherName)}</h1></div>
@@ -777,6 +778,7 @@ async function refreshStaff() {
 function viewHrHome() {
   const h = S.hr, r = h.registry, director = S.me.role === 'director';
   const payHow = t => t.pay_type === 'percent' ? `${t.pay_value}%` :
+    t.pay_type === 'fixed' ? `${money(t.pay_value)} so'm/oy (aniq)` :
     `${money(t.pay_value)} so'm/o'quvchi (kam to'lasa ${t.low_pay_percent}%)`;
   if (!director) {
     return `<h1>👨‍🏫 Xodimlar</h1>
@@ -841,9 +843,10 @@ function viewHrTeacherForm() {
       <input class="input" id="t_name" value="${esc(f.name)}" autocomplete="off"></div>
     <div class="field"><label>Oylik turi</label>
       <select class="input" id="t_ptype"><option value="percent" ${f.pay_type === 'percent' ? 'selected' : ''}>Foiz (%)</option>
-        <option value="per_student" ${f.pay_type === 'per_student' ? 'selected' : ''}>O'quvchi boshiga</option></select></div>
+        <option value="per_student" ${f.pay_type === 'per_student' ? 'selected' : ''}>O'quvchi boshiga</option>
+        <option value="fixed" ${f.pay_type === 'fixed' ? 'selected' : ''}>Aniq oylik</option></select></div>
     <div class="field"><label>Oylik qiymati</label>
-      <input class="input" id="t_pvalue" type="number" inputmode="decimal" value="${f.pay_value === '' ? '' : f.pay_value}" placeholder="masalan 40 yoki 200000 (markaz boshlig'i kabi oylik olmasa - 0)"></div>
+      <input class="input" id="t_pvalue" type="number" inputmode="decimal" value="${f.pay_value === '' ? '' : f.pay_value}" placeholder="${f.pay_type === 'fixed' ? "masalan 1500000 (har oy shuncha, markaz boshlig'i kabi oylik olmasa - 0)" : "masalan 40 yoki 200000 (markaz boshlig'i kabi oylik olmasa - 0)"}"></div>
     ${f.pay_type === 'per_student' ? `<div class="field"><label>O'quvchi stavkaning 2 baravaridan kam to'laganda, necha % olinadi</label>
       <input class="input" id="t_lowpay" type="number" inputmode="numeric" value="${f.low_pay_percent === '' ? '' : f.low_pay_percent}" placeholder="masalan 40"></div>` : ''}
     <div class="field"><label>Reyestr: bitta dars narxi (so'm)</label>

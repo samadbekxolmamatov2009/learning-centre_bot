@@ -100,6 +100,13 @@ ro'yxati va soni. **"🗑 Hammasini bittada o'chirish"** tugmasi — ularning ba
 ulardan birortasida sertifikat yoki 189 ball belgisi bo'lsa, u hali ham arxivlanadi, butunlay o'chirilmaydi -
 odatdagi o'chirish qoidasi bilan bir xil). Bunday o'quvchilar yo'q bo'lsa, bu bo'lim umuman ko'rinmaydi.
 
+## O'qituvchi oylik turlari
+O'qituvchi qo'shish/tahrirlashda (faqat direktor) uch xil oylik turidan birini tanlash mumkin: **Foiz (%)**
+(guruh tushumidan foiz), **O'quvchi boshiga** (har o'quvchi uchun belgilangan summa, kam to'lasa pastroq foiz
+bilan), va **Aniq oylik** — masalan 1 500 000 so'm/oy — bu holda guruhlardagi o'quvchilar soni, tushum yoki
+to'lovlardan qat'i nazar, o'qituvchi har oy aynan shu summani oladi (reyestr darslari bo'lsa, ular ustiga
+qo'shiladi, chunki bu alohida davlat to'lovi).
+
 ## O'qituvchi oyligini direktor ko'rishi
 Xodimlar bo'limidagi har bir o'qituvchi qatorida **"💰"** tugmasi bor — bosilsa, o'sha o'qituvchining to'liq
 oylik tafsiloti ochiladi (xuddi o'qituvchining o'zi "💰 Oylik" bo'limida ko'radigani kabi): har bir guruh

@@ -680,6 +680,7 @@ async def _teacher_card(db, tid):
     if not t:
         return None, None
     how = (f"{t['pay_value']:g}% (to'lovdan)" if t["pay_type"] == "percent" else
+           f"{money(t['pay_value'])} / oy (aniq oylik)" if t["pay_type"] == "fixed" else
            f"{money(t['pay_value'])} / o'quvchi ({money(t['pay_value'] * D.LOW_PAY_MULT)} gacha to'lasa to'lovning "
            f"{t['low_pay_percent']}%)")
     text = (f"👨‍🏫 {t['full_name']} (ID {tid})\n💼 Oylik: {how}\n"
@@ -741,7 +742,8 @@ async def et_pay(c: CallbackQuery):
     tid = c.data[4:]
     await c.message.answer("Oylik turi:", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="Foiz (%)", callback_data=f"etpt:{tid}:percent"),
-        InlineKeyboardButton(text="O'quvchi boshiga", callback_data=f"etpt:{tid}:per_student")]]))
+        InlineKeyboardButton(text="O'quvchi boshiga", callback_data=f"etpt:{tid}:per_student")],
+        [InlineKeyboardButton(text="Aniq oylik", callback_data=f"etpt:{tid}:fixed")]]))
     await c.answer()
 
 
@@ -750,8 +752,13 @@ async def et_pay_type(c: CallbackQuery, state: FSMContext):
     _, tid, pt = c.data.split(":")
     await state.set_state(EditTeacher.value)
     await state.update_data(tid=int(tid), pay_type=pt)
-    await c.message.answer("Foiz (masalan 40):" if pt == "percent" else
-                           "Bir o'quvchi uchun summa (so'm), masalan 200000:")
+    if pt == "percent":
+        prompt = "Foiz (masalan 40):"
+    elif pt == "fixed":
+        prompt = "Har oylik aniq summa (so'm), masalan 1500000:"
+    else:
+        prompt = "Bir o'quvchi uchun summa (so'm), masalan 200000:"
+    await c.message.answer(prompt)
     await c.answer()
 
 
