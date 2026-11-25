@@ -19,7 +19,7 @@ for p in ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         break
 
 
-def attendance_pdf(group_name, teacher_name, day, rows) -> bytes:
+def attendance_pdf(group_name, teacher_name, day, rows, branch_name=None) -> bytes:
     """rows: [(full_name, grade, phone, status)]  status: present|absent|late|excused"""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4)
@@ -41,6 +41,7 @@ def attendance_pdf(group_name, teacher_name, day, rows) -> bytes:
     doc.build([
         Paragraph(f"Davomat: {group_name}", st), Paragraph(f"Sana: {day}", st),
         Paragraph(f"O'qituvchi: {teacher_name}", st),
+        Paragraph(f"Filial: {branch_name}", st) if branch_name else Spacer(1, 0),
         Paragraph(f"Jami: {len(rows)}, kelgan: {len(rows) - absent}, kelmagan: {absent}", st),
         Spacer(1, 12), tbl])
     return buf.getvalue()
