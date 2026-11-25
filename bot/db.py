@@ -118,6 +118,12 @@ class Database:
         """Bir nechta so'rovni bitta tranzaksiyada bajaradi (xato bo'lsa hammasi bekor)."""
         raise NotImplementedError
 
+    async def ddl_without_fk(self, stmts):
+        """batch() kabi, lekin FOREIGN KEY tekshiruvini vaqtincha o'chirib bajaradi - boshqa jadval
+        tomonidan REFERENCES qilingan jadvalni DROP/RENAME qilish uchun kerak (masalan 'teachers':
+        groups.teacher_id unga ishora qiladi, FK yoqilgan holda DROP TABLE uni bekor qiladi)."""
+        raise NotImplementedError
+
     async def commit(self):  # eski chaqiruvlar bilan moslik; har so'rov o'zi saqlanadi
         pass
 
@@ -176,7 +182,9 @@ class Database:
             await self.execute("ALTER TABLE students ADD COLUMN joined_at TEXT NOT NULL DEFAULT ''")
         trow = await self.fetchone("SELECT sql FROM sqlite_master WHERE type='table' AND name='teachers'")
         if trow and "'fixed'" not in (trow["sql"] or ""):
-            await self.batch([
+            # groups.teacher_id -> teachers(tg_id) FK bor, shuning uchun oddiy batch() bilan DROP TABLE
+            # qilinsa "FOREIGN KEY constraint failed" chiqadi - FK vaqtincha o'chirilishi kerak.
+            await self.ddl_without_fk([
                 ("DROP TABLE IF EXISTS teachers_new", ()),
                 ("CREATE TABLE teachers_new(tg_id INTEGER PRIMARY KEY REFERENCES users(tg_id), "
                  "pay_type TEXT NOT NULL CHECK(pay_type IN ('percent','per_student','fixed')), "
@@ -219,6 +227,19 @@ class SqliteDB(Database):
             except Exception:
                 await self.conn.rollback()
                 raise
+
+    async def ddl_without_fk(self, stmts):
+        async with self.lock:
+            await self.conn.execute("PRAGMA foreign_keys=OFF")
+            try:
+                for sql, args in stmts:
+                    await self.conn.execute(sql, tuple(args))
+                await self.conn.commit()
+            except Exception:
+                await self.conn.rollback()
+                raise
+            finally:
+                await self.conn.execute("PRAGMA foreign_keys=ON")
 
     async def close(self):
         await self.conn.close()
@@ -299,6 +320,14 @@ class TursoDB(Database):
         reqs = [self._stmt("BEGIN", ())] + [self._stmt(s, a) for s, a in stmts] + \
                [self._stmt("COMMIT", ())]
         await self._pipeline(reqs)  # xatoda stream yopiladi -> tranzaksiya bekor
+
+    async def ddl_without_fk(self, stmts):
+        # PRAGMA foreign_keys faqat tranzaksiyadan tashqarida o'zgaradi, shuning uchun BEGIN'dan
+        # oldin/COMMIT'dan keyin, bitta pipeline (bitta ulanish) ichida yuboriladi.
+        reqs = ([self._stmt("PRAGMA foreign_keys=OFF", ())] + [self._stmt("BEGIN", ())] +
+                [self._stmt(s, a) for s, a in stmts] + [self._stmt("COMMIT", ())] +
+                [self._stmt("PRAGMA foreign_keys=ON", ())])
+        await self._pipeline(reqs)
 
     async def close(self):
         await self.session.close()
