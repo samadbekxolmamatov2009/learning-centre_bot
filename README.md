@@ -118,6 +118,13 @@ bilan), va **Aniq oylik** — masalan 1 500 000 so'm/oy — bu holda guruhlardag
 to'lovlardan qat'i nazar, o'qituvchi har oy aynan shu summani oladi (reyestr darslari bo'lsa, ular ustiga
 qo'shiladi, chunki bu alohida davlat to'lovi).
 
+**Direktor (yoki admin) ham dars bersa:** "➕ Yangi o'qituvchi" formasida o'zining Telegram ID'sini kiritsa
+ham bo'ladi - bu holda uning roli ("direktor"/"admin") va hisobi butunlay saqlanib qoladi, faqat shu
+guruh(lar) uchun oylik hisoblanishi uchun qo'shimcha yozuv qo'shiladi. U Xodimlar bo'limidagi
+"O'qituvchilar" ro'yxatida ham ko'rinadi, guruh yaratish/tahrirlashda o'qituvchi sifatida tanlanishi
+mumkin, oyligi ham normal hisoblanadi - lekin bu uning direktor/admin sifatidagi hech qanday huquqiga
+(Panel, barcha guruhlarni ko'rish va h.k.) ta'sir qilmaydi.
+
 ## O'qituvchi oyligini direktor ko'rishi
 Xodimlar bo'limidagi har bir o'qituvchi qatorida **"💰"** tugmasi bor — bosilsa, o'sha o'qituvchining to'liq
 oylik tafsiloti ochiladi (xuddi o'qituvchining o'zi "💰 Oylik" bo'limida ko'radigani kabi): har bir guruh

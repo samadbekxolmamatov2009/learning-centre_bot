@@ -1412,10 +1412,20 @@ async def api_teacher_post(request):
                 and 0 <= low_pay_percent <= 100)
     except Exception:
         return bad("Ma'lumotlar noto'g'ri")
+    if await db.fetchone("SELECT 1 FROM teachers WHERE tg_id=?", (tid,)):
+        return bad("Bu ID uchun allaqachon oylik sozlamasi mavjud")
+    existing = await db.fetchone("SELECT role FROM users WHERE tg_id=?", (tid,))
+    if existing:
+        if existing["role"] not in ("admin", "director"):
+            return bad("Bu ID allaqachon ro'yxatda bor")
+        # Admin/direktor ham ba'zan o'zi dars beradi - rolini/ismini o'zgartirmasdan,
+        # faqat shu guruhlar uchun oylik hisoblanishi uchun teachers'ga yozuv qo'shamiz.
+        await db.execute(
+            "INSERT INTO teachers(tg_id,pay_type,pay_value,registry_rate,low_pay_percent) VALUES(?,?,?,?,?)",
+            (tid, pay_type, pay_value, reg_rate, low_pay_percent))
+        return web.json_response({"ok": True})
     if len(name) < 2:
         return bad("Ism familiyani to'liq kiriting")
-    if await db.fetchone("SELECT 1 FROM users WHERE tg_id=?", (tid,)):
-        return bad("Bu ID allaqachon ro'yxatda bor")
     branch_id = int(body["branch"]) if body.get("branch") else None
     if branch_id and not await db.fetchone("SELECT 1 FROM branches WHERE id=?", (branch_id,)):
         return bad("Filial topilmadi")
@@ -1489,9 +1499,15 @@ async def api_teacher_delete(request):
         tid = int(request.match_info["tid"])
     except Exception:
         return bad("So'rov noto'g'ri")
-    t = await db.fetchone("SELECT full_name FROM users WHERE tg_id=? AND role='teacher'", (tid,))
-    if not t:
+    t = await db.fetchone("SELECT full_name, role FROM users WHERE tg_id=?", (tid,))
+    if not t or not await db.fetchone("SELECT 1 FROM teachers WHERE tg_id=?", (tid,)):
         return bad("Topilmadi", 404)
+    if t["role"] in ("admin", "director"):
+        # Admin/direktor o'zi ham dars bergan - faqat oylik sozlamasini va guruh bog'lanishini
+        # o'chiramiz, o'zining hisobi (roli) butunlay saqlanib qoladi.
+        await db.batch([("UPDATE groups SET teacher_id=NULL WHERE teacher_id=?", (tid,)),
+                        ("DELETE FROM teachers WHERE tg_id=?", (tid,))])
+        return web.json_response({"ok": True})
     assistants = await db.fetchall("SELECT tg_id FROM assistants WHERE teacher_id=?", (tid,))
     await db.batch([("UPDATE groups SET teacher_id=NULL WHERE teacher_id=?", (tid,)),
                     ("DELETE FROM teachers WHERE tg_id=?", (tid,)),
