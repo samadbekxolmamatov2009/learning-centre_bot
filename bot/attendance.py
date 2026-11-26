@@ -142,7 +142,11 @@ async def save_attendance(db, bot: Bot | None, uid: int, gid: int, day: date, st
             caption = (caption + "\n" + "\n".join(absent_lines))[:900]
         if no_price:
             caption += "\n⚠️ Reyestr o'quvchilar bor, lekin o'qituvchiga reyestr narxi kiritilmagan (0)."
-        for a in await db.fetchall("SELECT tg_id FROM users WHERE role IN ('admin','director')"):
+        for a in await db.fetchall("SELECT tg_id, role, branch_id FROM users WHERE role IN ('admin','director')"):
+            # Filialga biriktirilgan admin faqat o'z filialidagi guruhlar davomatini oladi.
+            # Direktor va filialga biriktirilmagan (cheklovsiz) admin - hammasini oladi.
+            if a["role"] == "admin" and a["branch_id"] and a["branch_id"] != g["branch_id"]:
+                continue
             try:
                 await bot.send_document(a["tg_id"], BufferedInputFile(pdf, f"davomat_{g['name']}_{iso}.pdf"),
                                         caption=caption)
