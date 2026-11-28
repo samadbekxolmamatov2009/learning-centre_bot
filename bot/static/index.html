@@ -1164,16 +1164,23 @@ function debtChip() {
 function viewStuGroups() {
   const st = S.stu, staff = S.me.role !== 'teacher';
   const header = `<h1>👥 O'quvchilar</h1>
-    <div class="srow"><input class="input" id="stuq" placeholder="Qidirish: ism, familiya, telefon..." value="${esc(st.q)}" autocomplete="off">
+    <div class="srow"><input class="input" id="stuq" placeholder="Qidirish: ism, familiya, telefon, guruh..." value="${esc(st.q)}" autocomplete="off">
       <button class="iconbtn" data-act="stu-add-any" title="Yangi o'quvchi">➕</button></div>`;
   if (st.q.trim().length >= 2) {
+    const q = st.q.trim().toLowerCase();
+    const groupMatches = st.groups.filter(g => g.name.toLowerCase().includes(q));
+    const groupsBody = groupMatches.length ? `<div class="sec" style="margin-top:12px">Guruhlar</div>
+      <div class="cards">${groupMatches.map(g => `<div class="gcard" data-act="stu-group" data-id="${g.id}" style="cursor:pointer">
+        <div style="flex:1;min-width:0"><div class="t">${esc(g.name)}</div><div class="sub">${g.students} ta o'quvchi${g.teacher ? ' · 👨‍🏫 ' + esc(g.teacher) : ''}
+          ${g.branch_name ? ' · 🏢 ' + esc(g.branch_name) : ''}</div></div><span class="sub">▸</span></div>`).join('')}</div>` : '';
     const res = st.searchResults;
     const list = res && st.debtOnly ? res.filter(s => !s.paid) : res;
-    const body = st.searching && !res ? '<div class="spin" style="margin:40px auto"></div>'
-      : (res ? `<div class="strip">${debtChip()}</div>
+    const studentsBody = st.searching && !res ? '<div class="spin" style="margin:40px auto"></div>'
+      : (res ? `${groupMatches.length ? '<div class="sec" style="margin-top:16px">O\'quvchilar</div>' : ''}
+         <div class="strip">${debtChip()}</div>
          ${list.length ? `<div class="list" style="margin-top:4px">${list.map(s => stuRow(s, true)).join('')}</div>`
-                        : '<div class="empty">Topilmadi</div>'}` : '');
-    return header + body;
+                        : (groupMatches.length ? '' : '<div class="empty">Topilmadi</div>')}` : '');
+    return header + groupsBody + studentsBody;
   }
   const groups = st.groups;
   const cards = groups.map(g => `<div class="gcard" data-act="stu-group" data-id="${g.id}" style="cursor:pointer">
