@@ -144,12 +144,23 @@ async def api_me(request):
         "SELECT group_id, COUNT(*) n FROM students WHERE hidden=0 GROUP BY group_id")}
     taken = {r["group_id"] for r in await db.fetchall(
         "SELECT DISTINCT group_id FROM attendance WHERE day=?", (today,))}
+
+    def group_out(g):
+        return {"id": g["id"], "name": g["name"], "students": counts.get(g["id"], 0),
+                "taken_today": g["id"] in taken, "days": g["lesson_days"], "time": g["lesson_time"]}
+
+    also_teaches = False
+    teaching_groups = []
+    if role != "teacher" and await db.fetchone("SELECT 1 FROM teachers WHERE tg_id=?", (uid,)):
+        also_teaches = True
+        tg_rows = await db.fetchall("SELECT id, name, lesson_days, lesson_time FROM groups "
+                                    "WHERE teacher_id=? AND archived=0 ORDER BY name", (uid,))
+        teaching_groups = [group_out(g) for g in tg_rows]
     return web.json_response({
         "role": role, "name": name, "today": today,
         "is_assistant": role == "teacher" and await D.is_assistant(db, uid),
-        "groups": [{"id": g["id"], "name": g["name"], "students": counts.get(g["id"], 0),
-                    "taken_today": g["id"] in taken, "days": g["lesson_days"], "time": g["lesson_time"]}
-                   for g in groups]})
+        "also_teaches": also_teaches, "teaching_groups": teaching_groups,
+        "groups": [group_out(g) for g in groups]})
 
 
 async def api_attendance_get(request):

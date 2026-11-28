@@ -266,22 +266,24 @@ function notifGo(i) {
 }
 
 /* ---------- guruhlar ro'yxati ---------- */
-function viewGroups() {
-  const g = S.me.groups;
-  if (!g.length) return `<div class="top"><h1 style="padding-top:0">Guruhlar</h1>${notifBell()}</div><div class="empty">Guruh yo'q</div>`;
-  return `<div class="top"><h1 style="padding-top:0">Guruhni tanlang</h1>${notifBell()}</div>
+function viewGroupsList(g, title) {
+  if (!g.length) return `<div class="top"><h1 style="padding-top:0">${esc(title)}</h1>${notifBell()}</div><div class="empty">Guruh yo'q</div>`;
+  return `<div class="top"><h1 style="padding-top:0">${esc(title)}</h1>${notifBell()}</div>
     <div class="sub" style="margin-top:-6px">Bugun: ${fmtDay(S.me.today)}.${S.me.today.slice(0,4)}</div><div class="cards">` +
     g.map(x => `<button class="gcard" data-act="open" data-id="${x.id}">
       <div><div class="t">${esc(x.name)}</div><div class="sub">${x.students} ta o'quvchi${x.time ? ' · ' + esc(x.time) : ''}</div></div>
       <span class="badge ${x.taken_today ? 'done' : ''}">${x.taken_today ? 'Bugun olingan' : 'Olinmagan'}</span></button>`).join('') + '</div>';
 }
+function viewGroups() { return viewGroupsList(S.me.groups, 'Guruhni tanlang'); }
+function viewMyGroups() { return viewGroupsList(S.me.teaching_groups, "Mening guruhlarim"); }
 
 /* ---------- davomat ---------- */
 async function openGroup(id, day, single=false) {
+  const fromTab = (S.view === 'att' && S.att.fromTab) ? S.att.fromTab : S.tab;
   $app.innerHTML = '<div class="spin"></div>';
   try {
     const d = await api(`/api/attendance?group=${id}` + (day ? `&day=${day}` : ''));
-    S.att = {...d, single, statuses: Object.fromEntries(d.students.map(s => [s.id, s.status])), done:null};
+    S.att = {...d, single, statuses: Object.fromEntries(d.students.map(s => [s.id, s.status])), done:null, fromTab};
     S.view = 'att'; S.q = ''; S.open = new Set();
     render();
   } catch (e) { fail(e); }
@@ -1936,11 +1938,13 @@ function tabs() {
   const first = staff
     ? `<button class="${S.tab === 'dash' ? 'on' : ''}" data-act="tab" data-tab="dash"><span>📊</span>Panel</button>`
     : `<button class="${S.tab === 'groups' ? 'on' : ''}" data-act="tab" data-tab="groups"><span>📝</span>Davomat</button>`;
+  const myGroupsTab = (staff && S.me.also_teaches)
+    ? `<button class="${S.tab === 'mygroups' ? 'on' : ''}" data-act="tab" data-tab="mygroups"><span>📝</span>Mening darslarim</button>` : '';
   const salTab = (staff || S.me.is_assistant) ? '' : `<button class="${S.tab === 'sal' ? 'on' : ''}" data-act="tab" data-tab="sal"><span>💰</span>Oylik</button>`;
   const hrTab = S.me.role !== 'teacher' ? `<button class="${S.tab === 'hr' ? 'on' : ''}" data-act="tab" data-tab="hr"><span>👨‍🏫</span>Xodimlar</button>` : '';
   const certTab = `<button class="${S.tab === 'cert' ? 'on' : ''}" data-act="tab" data-tab="cert"><span>🎓</span>Sertifikat</button>`;
   const leadsTab = staff ? `<button class="${S.tab === 'leads' ? 'on' : ''}" data-act="tab" data-tab="leads"><span>🧲</span>Lidlar</button>` : '';
-  return `<div class="tabs">${first}
+  return `<div class="tabs">${first}${myGroupsTab}
     <button class="${S.tab === 'stu' ? 'on' : ''}" data-act="tab" data-tab="stu"><span>👥</span>O'quvchilar</button>${certTab}${salTab}${leadsTab}${hrTab}</div>`;
 }
 const STU_VIEWS = {groups: viewStuGroups, list: viewStuList, form: viewStuForm, detail: viewStuDetail, gform: viewStuGroupForm, gedit: viewGroupEdit};
@@ -1958,6 +1962,7 @@ function render() {
   else if (S.view === 'cert') html = CERT_VIEWS[S.cert.view]() + (S.cert.view === 'groups' ? tabs() : '');
   else if (S.view === 'rank') html = viewRanking();
   else if (S.view === 'leads') html = LEADS_VIEWS[S.leads.view]() + (S.leads.view === 'list' ? tabs() : '');
+  else if (S.view === 'mygroups') html = viewMyGroups() + tabs();
   else html = viewGroups() + tabs();
   const focusEl = document.activeElement;
   const focusId = focusEl && focusEl.id;
@@ -1987,7 +1992,7 @@ if (tg && tg.BackButton) tg.BackButton.onClick(() => {
   else if (S.view === 'cert') certBack();
   else if (S.view === 'rank') rankBack();
 });
-function backToGroups() { S.view = 'groups'; S.tab = 'groups'; render(); }
+function backToGroups() { S.tab = S.view = S.att.fromTab || 'groups'; render(); }
 function stuBack() {
   const v = S.stu.view;
   if (v === 'list' || v === 'gform' || v === 'gedit') S.stu.view = 'groups';
@@ -2028,6 +2033,7 @@ document.addEventListener('click', e => {
     else if (t.dataset.tab === 'hr') loadStaffTab();
     else if (t.dataset.tab === 'cert') loadCertTab();
     else if (t.dataset.tab === 'leads') loadLeadsTab();
+    else if (t.dataset.tab === 'mygroups') { S.view = 'mygroups'; render(); }
     else { S.view = 'groups'; render(); }
   }
   else if (act === 'cycle') {
