@@ -123,7 +123,10 @@ ham bo'ladi - bu holda uning roli ("direktor"/"admin") va hisobi butunlay saqlan
 guruh(lar) uchun oylik hisoblanishi uchun qo'shimcha yozuv qo'shiladi. U Xodimlar bo'limidagi
 "O'qituvchilar" ro'yxatida ham ko'rinadi, guruh yaratish/tahrirlashda o'qituvchi sifatida tanlanishi
 mumkin, oyligi ham normal hisoblanadi - lekin bu uning direktor/admin sifatidagi hech qanday huquqiga
-(Panel, barcha guruhlarni ko'rish va h.k.) ta'sir qilmaydi.
+(Panel, barcha guruhlarni ko'rish va h.k.) ta'sir qilmaydi. Shuningdek, pastki menyuda qo'shimcha
+**"📝 Mening darslarim"** tabi paydo bo'ladi - bu yerda faqat o'ziga biriktirilgan guruh(lar) ko'rinadi
+va xuddi oddiy o'qituvchidek davomat olish mumkin (davomat PDF'i ham boshqa guruhlardagidek admin/
+direktorlarga yuboriladi).
 
 ## O'qituvchi oyligini direktor ko'rishi
 Xodimlar bo'limidagi har bir o'qituvchi qatorida **"💰"** tugmasi bor — bosilsa, o'sha o'qituvchining to'liq
